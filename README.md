@@ -40,20 +40,10 @@ cd astra-sim
 bash ./install.sh
 
 ## Test Chakra and AstraSim
-cd astra-sim/extern/graph_frontend/chakra/
-
-chakra_converter Text \
-    --input ../../../examples/text_converter/text_workloads/Resnet50_DataParallel.txt \
-    --output ../../../examples/text_converter/text_workloads/Resnet50_DataParallel \
-    --num-npus 8 \
-    --num-passes 1
+chakra_converter Text  --input ./examples/text_converter/text_workloads/Resnet50_DataParallel.txt  --output ./examples/text_converter/text_workloads/Resnet50_DataParallel  --num-npus 8  --num-passes 1
 
 
-../../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware \
-  --workload-configuration=./examples/text_converter/text_workloads/Resnet50_DataParallel \
-  --system-configuration=./examples/text_converter/system.json \
-  --network-configuration=./examples/text_converter/network.yml \
-  --remote-memory-configuration=./examples/text_converter/remote_memory.json
+./build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware --workload-configuration=./examples/text_converter/text_workloads/Resnet50_DataParallel  --system-configuration=./examples/text_converter/system.json  --network-configuration=./examples/text_converter/network.yml --remote-memory-configuration=./examples/text_converter/remote_memory.json
 
 
 ## Contact Us
