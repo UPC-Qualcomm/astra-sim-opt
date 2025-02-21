@@ -14,6 +14,75 @@ ASTRA-sim accepts Chakra Execution Traces as workload-layer inputs. For details,
 
 We appreciate your interest and support in ASTRA-sim!
 
+## Installation Instructions
+Install the dependencies:
+
+sudo apt -y update
+
+sudo apt -y install coreutils wget vim git
+
+sudo apt -y install gcc-11 g++-11 make cmake 
+
+sudo apt -y install clang-format 
+
+sudo apt -y install libboost-dev libboost-program-options-dev
+
+sudo apt -y install libprotobuf-dev protobuf-compiler
+
+sudo apt -y install openmpi-bin openmpi-doc libopenmpi-dev
+
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
+
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
+
+cd astra-sim
+
+python -m venv astraenv
+
+source astraenv/bin/activate
+
+pip3 install --upgrade pip
+
+pip3 install protobuf==5.29.0
+
+pip3 install graphviz pydot
+
+cd ..
+
+ASTRA_SIM=$(realpath ./astra-sim)
+
+cd ${ASTRA_SIM}
+
+git submodule update --init --recursive
+
+./build/astra_analytical/build.sh
+
+ASTRA_SIM_BIN=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware
+
+./build/astra_ns3/build.sh -c
+
+cd ./extern/graph_frontend/chakra/
+
+pip3 install .
+
+
+## Test Chakra and AstraSim
+cd astra-sim/extern/graph_frontend/chakra/
+
+chakra_converter Text \
+    --input ../../../examples/text_converter/text_workloads/Resnet50_DataParallel.txt \
+    --output ../../../examples/text_converter/text_workloads/Resnet50_DataParallel \
+    --num-npus 8 \
+    --num-passes 1
+
+
+../../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware \
+  --workload-configuration=./examples/text_converter/text_workloads/Resnet50_DataParallel \
+  --system-configuration=./examples/text_converter/system.json \
+  --network-configuration=./examples/text_converter/network.yml \
+  --remote-memory-configuration=./examples/text_converter/remote_memory.json
+
+
 ## Contact Us
 For any questions about using ASTRA-sim, you can email the ASTRA-sim User Mailing List: astrasim-users@googlegroups.com
 

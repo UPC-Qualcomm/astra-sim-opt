@@ -27,3 +27,6 @@ build/astra_garnet/result/
 
 # runs
 runs
+
+#env
+astraenv/

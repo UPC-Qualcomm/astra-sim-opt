@@ -16,3 +16,12 @@
 [submodule "extern/network_backend/ns-3"]
 	path = extern/network_backend/ns-3
 	url = https://github.com/astra-sim/astra-network-ns3.git
+[submodule "extern/graph_frontend/param"]
+	path = extern/graph_frontend/param
+	url = git@github.com:facebookresearch/param.git
+[submodule "extern/graph_frontend/HolisticTraceAnalysis"]
+	path = extern/graph_frontend/HolisticTraceAnalysis
+	url = git@github.com:facebookresearch/HolisticTraceAnalysis.git
+[submodule "extern/symbolic_tensor_graph"]
+	path = extern/symbolic_tensor_graph
+	url = git@github.com:astra-sim/symbolic_tensor_graph.git
