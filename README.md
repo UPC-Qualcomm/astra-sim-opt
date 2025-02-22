@@ -40,6 +40,8 @@ cd astra-sim
 bash ./install.sh
 
 ## Test Chakra and AstraSim
+source astra-sim/astraenv/bin/activate
+
 chakra_converter Text  --input ./examples/text_converter/text_workloads/Resnet50_DataParallel.txt  --output ./examples/text_converter/text_workloads/Resnet50_DataParallel  --num-npus 8  --num-passes 1
 
 
