@@ -19,25 +19,17 @@ Install the dependencies:
 
 ```
 sudo apt -y update
-
 sudo apt -y install coreutils wget vim git
-
 sudo apt -y install gcc-11 g++-11 make cmake 
-
 sudo apt -y install clang-format 
-
 sudo apt -y install libboost-dev libboost-program-options-dev
-
 sudo apt -y install libprotobuf-dev protobuf-compiler
-
 sudo apt -y install openmpi-bin openmpi-doc libopenmpi-dev
-
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
-
 sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
-
+```
+```
 cd astra-sim
-
 bash ./install.sh
 ```
 ## Test Chakra and AstraSim
