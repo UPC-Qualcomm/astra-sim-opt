@@ -30,3 +30,8 @@ runs
 
 #env
 astraenv/
+
+
+upc/output/
+upc/workload/
+upc/log/
