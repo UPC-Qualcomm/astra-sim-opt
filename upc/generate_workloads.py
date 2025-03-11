@@ -138,9 +138,9 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
     run_command(cmd, cwd)
 
 
-from functools import partial
-
 if __name__ == "__main__":
+    from functools import partial
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model",
