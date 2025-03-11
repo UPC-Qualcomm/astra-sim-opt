@@ -59,6 +59,8 @@ def gather_runtimes(root):
         runtimes = pool.map(extract_runtime, logs)
     runtimes_dict = dict()
     for dp, mp, sp, pp, sharded, exec_cycles, comm_cycles in runtimes:
+        if exec_cycles == -1 or comm_cycles == -1:
+            continue
         runtimes_dict[(dp, mp, sp, pp, sharded)] = [exec_cycles, comm_cycles]
     return runtimes_dict
 
@@ -135,14 +137,15 @@ def topk(runtimes, k=10):
         print(f"{key}: {value}")
     return top_k_items
 
-import argparse
+import argparse, csv
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--result_dir", type=str, help="The output file path", required=True)
+    parser.add_argument("--sim_logfiles_dir", type=str, help="The output file path", required=True)
+    parser.add_argument("--output_filename", type=str, help="The results file name", required=True)
     args = parser.parse_args()
-    runtimes = gather_runtimes(args.result_dir)
-    hook = 0
+    runtimes = gather_runtimes(args.sim_logfiles_dir)
+    #hook = 0
     #for sp in range(7):
     #    plt1 = visualize1(runtimes, sp, 0)
     #    plt.savefig(f"dpvsmp_{sp}_ns.png")
@@ -152,10 +155,22 @@ if __name__ == '__main__':
     #plt.savefig(f"all_ns.png")
     #plt1 = visualize2(runtimes, 1)
     #plt.savefig(f"all_s.png")
-
-    serialize_results(runtimes, "./results.json")
+    file_dir = os.path.split(os.path.abspath(__file__))[0]
+    os.makedirs(os.path.join(file_dir, os.path.dirname(args.output_filename)), exist_ok=True)
+    serialize_results(runtimes, args.output_filename)
     
+    with open( args.output_filename, mode="w", newline="") as file:
+        writer = csv.writer(file)
+    
+        # Write header
+        writer.writerow(["dp_mp_sp_pp_sharded", "dp", "mp", "sp", "pp", "sharded", "exec_cycles", "comm_cycles"])
+        
+        # Write data rows
+        for (dp, mp, sp, pp, sharded), (exec_cycles, comm_cycles) in runtimes.items():
+            writer.writerow([f"{dp}_{mp}_{sp}_{pp}_{sharded}",dp, mp, sp, pp, sharded, exec_cycles, comm_cycles])
+
+
     print("top20:")
     topk(runtimes, k=20)
-    print("\n\n\nfail cases")
-    get_fails(runtimes)
+    #print("\n\n\nfail cases")
+    #get_fails(runtimes)

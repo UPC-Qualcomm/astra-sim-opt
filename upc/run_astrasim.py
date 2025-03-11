@@ -39,11 +39,11 @@ from functools import partial
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--workload_dir", type=str, help="The folder containing the workload", required=True, default="Default")
-    parser.add_argument("--system", type=str, help="The folder containing the workload", required=True, default="Default")
-    parser.add_argument("--network", type=str, help="The folder containing the workload", required=True, default="Default")
-    parser.add_argument("--memory", type=str, help="The folder containing the workload", required=True, default="Default")
-    parser.add_argument("--output_dir", type=str, help="The folder containing the workload", required=True, default="Default")
+    parser.add_argument("--workload_dir", type=str, help="The folder containing the workload", required=True)
+    parser.add_argument("--system", type=str, help="The folder containing the workload", required=True)
+    parser.add_argument("--network", type=str, help="The folder containing the workload", required=True)
+    parser.add_argument("--memory", type=str, help="The folder containing the workload", required=True)
+    parser.add_argument("--output_dir", type=str, help="The folder containing the workload", required=True)
     args = parser.parse_args()
 
     design_space = list_workloads(str(args.workload_dir))
