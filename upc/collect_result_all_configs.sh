@@ -23,5 +23,3 @@ python gather_results.py --sim_logfiles_dir ./output/GPT3/Ring --output_filename
 
 #Switch
 python gather_results.py --sim_logfiles_dir ./output/GPT3/Switch --output_filename ./results/GPT3/Switch.csv
-
-

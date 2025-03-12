@@ -1,5 +1,7 @@
 #!/usr/bin/python3
-import os, subprocess, multiprocessing
+import os
+import subprocess
+import multiprocessing
 import argparse
 from enum import Enum
 
@@ -10,13 +12,20 @@ def run_command(command, cwd=None):
         print(f"run fail! {command}")
     return True
 
-def get_design_space(num_npus = 64, dp = {1, 2, 4, 8, 16}, mp = {1, 2, 4, 8, 16}, pp = {1, 2, 4, 8, 16}, sharded = {True, False}):
+
+def get_design_space(
+    num_npus=64,
+    dp={1, 2, 4, 8, 16},
+    mp={1, 2, 4, 8, 16},
+    pp={1, 2, 4, 8, 16},
+    sharded={True, False},
+):
     num_npus = 64
     dp = {1, 2, 4, 8, 16}
     mp = {1, 2, 4, 8, 16}
     pp = {1, 2, 4, 8, 16}
     sharded = {True, False}
-    
+
     design_space = list()
 
     for ddp in dp:
@@ -28,6 +37,7 @@ def get_design_space(num_npus = 64, dp = {1, 2, 4, 8, 16}, mp = {1, 2, 4, 8, 16}
                         continue
                     design_space.append((ddp, mmp, ssp, ppp, ssharded))
     return design_space
+
 
 class Model(Enum):
     T5_Small = 0
@@ -47,7 +57,9 @@ class Model(Enum):
 
     @staticmethod
     def get_model_params(model):
-        """Returns parameters as [din, dout, dmodel, dff, batch, seq, head, num_stacks]"""
+        """Returns parameters as
+        [din, dout, dmodel, dff, batch, seq, head, num_stacks]
+        """
         match model:
             case Model.T5_Small:
                 return [32128, 512, 512, 2048, 64, 512, 8, 6]
@@ -76,9 +88,9 @@ class Model(Enum):
             case Model.GPT_4_Estimated_over_1T:
                 return [50257, 20480, 20480, 81920, 1, 8192, 128, 128]
             case _:
-                return [51200, 25600, 25600, 25600*4, 1024, 1024, 1024, 32]
-            
-    #def get_model_params(model):
+                return [51200, 25600, 25600, 25600 * 4, 1024, 1024, 1024, 32]
+
+    # def get_model_params(model):
     #    din = 51200
     #    dout=25600
     #    dmodel=25600
@@ -89,14 +101,13 @@ class Model(Enum):
     #    num_stacks=32
     #    return [din, dout, dmodel, dff, batch, seq, head, num_stacks]
 
-def generate_instance(design_point, model = Model.Default, folder_name = "default"):
+
+def generate_instance(design_point, model=Model.Default, folder_name="default"):
     root = os.path.join(
-            os.path.split(
-                os.path.abspath(__file__)
-            )[0], "workload" ,folder_name
-        )
+        os.path.split(os.path.abspath(__file__))[0], "workload", folder_name
+    )
     dp, mp, ssp, pp, sharded = design_point
-    
+
     din, dout, dmodel, dff, batch, seq, head, num_stacks = Model.get_model_params(model)
 
     cmd = (
@@ -119,20 +130,33 @@ def generate_instance(design_point, model = Model.Default, folder_name = "defaul
         f"--chakra_schema_version v0.0.4"
     )
     cwd = os.path.join(
-            os.path.split(
-                os.path.abspath(__file__)
-            )[0], "..", "extern", "symbolic_tensor_graph"
-            )
+        os.path.split(os.path.abspath(__file__))[0],
+        "..",
+        "extern",
+        "symbolic_tensor_graph",
+    )
     run_command(cmd, cwd)
 
-from functools import partial
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    from functools import partial
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=int, help="The model to explore", required=False, default=Model.Default)
-    parser.add_argument("--folder_name", type=str, help="The folder to dump generated files", required=False, default="Default")
+    parser.add_argument(
+        "--model",
+        type=int,
+        help="The model to explore",
+        required=False,
+        default=Model.Default,
+    )
+    parser.add_argument(
+        "--folder_name",
+        type=str,
+        help="The folder to dump generated files",
+        required=False,
+        default="Default",
+    )
     args = parser.parse_args()
-
 
     num_npus = 64
     dp = {1, 2, 4, 8, 16}
@@ -145,6 +169,5 @@ if __name__ == '__main__':
     design_space = get_design_space(num_npus, dp, mp, pp, sharded)
     func = partial(generate_instance, model=model, folder_name=folder_name)
 
-    with multiprocessing.Pool(int(multiprocessing.cpu_count()*0.95)) as pool:
+    with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:
         pool.map(func, design_space)
-    
