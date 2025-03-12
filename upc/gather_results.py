@@ -177,7 +177,7 @@ if __name__ == "__main__":
     os.makedirs(
         os.path.join(file_dir, os.path.dirname(args.output_filename)), exist_ok=True
     )
-    serialize_results(runtimes, args.output_filename)
+    #serialize_results(runtimes, args.output_filename)
 
     with open(args.output_filename, mode="w", newline="") as file:
         writer = csv.writer(file)
