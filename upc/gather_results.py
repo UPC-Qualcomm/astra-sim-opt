@@ -5,7 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import re
-
+import argparse
+import csv
 
 def list_logs(root):
     files = os.listdir(root)
@@ -125,18 +126,18 @@ def visualize2(runtimes, sharded):
     return plt
 
 
-def serialize_results(runtimes, json_filename):
-    def get_jsonable_dict(dict_):
-        ret = dict()
-        for key in dict_.keys():
-            ret[str(key)] = dict_[key]
-        return ret
-
-    import json
-
-    f = open(json_filename, "w")
-    json.dump(get_jsonable_dict(runtimes), f, indent=4)
-    f.close()
+#def serialize_results(runtimes, json_filename):
+#    def get_jsonable_dict(dict_):
+#        ret = dict()
+#        for key in dict_.keys():
+#            ret[str(key)] = dict_[key]
+#        return ret
+#
+#    import json
+#
+#    f = open(json_filename, "w")
+#    json.dump(get_jsonable_dict(runtimes), f, indent=4)
+#    f.close()
 
 
 def topk(runtimes, k=10):
@@ -150,8 +151,6 @@ def topk(runtimes, k=10):
     return top_k_items
 
 
-import argparse
-import csv
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
