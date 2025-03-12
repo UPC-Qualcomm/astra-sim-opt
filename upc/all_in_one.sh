@@ -1,8 +1,13 @@
 #!/bin/bash
 
-workload_configuration="./workload/GPT3"
+#generate workloads
+python generate_workloads.py --model 8 --folder_name OPT_13B
+
+workload_configuration="./workload/OPT_13B"
 memory_config="./configuration/RemoteMemory.json"
+
 output="./output/OPT_13B/"
+result="./results/OPT_13B/"
 
 #2D_Torus
 python run_astrasim.py \
@@ -67,3 +72,29 @@ python run_astrasim.py \
     --network ./configuration/Switch.yml \
     --memory $memory_config  \
     --output_dir ${output}Switch
+
+
+#Collect results
+#2D_Torus
+python gather_results.py --sim_logfiles_dir ${output}2D_Torus --output_filename ${result}2D_Torus.csv
+
+#3D_Torus
+python gather_results.py --sim_logfiles_dir ${output}3D_Torus --output_filename ${result}3D_Torus.csv
+
+#DGX_H100
+python gather_results.py --sim_logfiles_dir ${output}DGX_H100 --output_filename ${result}DGX_H100.csv
+
+#DGX1
+python gather_results.py --sim_logfiles_dir ${output}DGX1 --output_filename ${result}DGX1.csv
+
+#Dragonfly
+python gather_results.py --sim_logfiles_dir ${output}Dragonfly --output_filename ${result}Dragonfly.csv
+
+#FullyConnected
+python gather_results.py --sim_logfiles_dir ${output}FullyConnected --output_filename ${result}FullyConnected.csv
+
+#Ring
+python gather_results.py --sim_logfiles_dir ${output}Ring --output_filename ${result}Ring.csv
+
+#Switch
+python gather_results.py --sim_logfiles_dir ${output}Switch --output_filename ${result}Switch.csv

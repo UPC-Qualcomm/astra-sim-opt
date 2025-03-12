@@ -20,12 +20,6 @@ def get_design_space(
     pp={1, 2, 4, 8, 16},
     sharded={True, False},
 ):
-    num_npus = 64
-    dp = {1, 2, 4, 8, 16}
-    mp = {1, 2, 4, 8, 16}
-    pp = {1, 2, 4, 8, 16}
-    sharded = {True, False}
-
     design_space = list()
 
     for ddp in dp:
@@ -158,7 +152,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    num_npus = 64
+    num_npus = 8
     dp = {1, 2, 4, 8, 16}
     mp = {1, 2, 4, 8, 16}
     pp = {1, 2, 4, 8, 16}
