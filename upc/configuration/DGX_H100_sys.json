@@ -9,5 +9,7 @@
     "all-to-all-implementation": ["halvingDoubling","halvingDoubling"],
     "collective-optimization": "localBWAware",
     "local-mem-bw": 50,
-    "boost-mode": 0
+    "boost-mode": 0,
+    "peak-perf": 2000,
+    "roofline-enabled": 1
 }

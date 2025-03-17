@@ -32,6 +32,23 @@ def get_design_space(
                     design_space.append((ddp, mmp, ssp, ppp, ssharded))
     return design_space
 
+def get_design_space_no_sp(
+    num_npus=64,
+    dp={1, 2, 4, 8, 16},
+    mp={1, 2, 4, 8, 16},
+    pp={1, 2, 4, 8, 16},
+    sharded={True, False},
+):
+    design_space = list()
+    ssp=1
+    for ddp in dp:
+        for mmp in mp:
+            for ssharded in sharded:
+                for ppp in pp:
+                    if num_npus != (ddp * mmp * ppp):
+                        continue
+                    design_space.append((ddp, mmp, ssp, ppp, ssharded))
+    return design_space
 
 class Model(Enum):
     T5_Small = 0
@@ -152,7 +169,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    num_npus = 8
+    num_npus = 64
     dp = {1, 2, 4, 8, 16}
     mp = {1, 2, 4, 8, 16}
     pp = {1, 2, 4, 8, 16}
@@ -161,6 +178,7 @@ if __name__ == "__main__":
     folder_name = args.folder_name
 
     design_space = get_design_space(num_npus, dp, mp, pp, sharded)
+    #design_space = get_design_space_no_sp(num_npus, dp, mp, pp, sharded)
     func = partial(generate_instance, model=model, folder_name=folder_name)
 
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:

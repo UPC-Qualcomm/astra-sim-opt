@@ -1,8 +1,16 @@
 #!/bin/bash
 
-workload_configuration="./workload/GPT3"
+model_name = "GPT_3_175B"
+workload_configuration="./workload/"${model_name}
 memory_config="./configuration/RemoteMemory.json"
-output="./output/OPT_13B/"
+output="./output/"${model_name}"/"
+
+#python run_astrasim.py \
+#    --workload_dir ./workload/GPT_3_175B_512 \
+#    --system ./configuration/4d_Ring_sys_1.json \
+#    --network ./configuration/4d_Ring_1.yml \
+#    --memory ./configuration/RemoteMemory.json \
+#    --output_dir ./output/4d_Ring_1/
 
 #2D_Torus
 python run_astrasim.py \

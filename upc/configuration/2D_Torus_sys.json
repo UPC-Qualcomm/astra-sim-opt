@@ -8,6 +8,10 @@
     "reduce-scatter-implementation": ["ring", "ring"],
     "all-to-all-implementation": ["ring", "ring"],
     "collective-optimization": "localBWAware",
-    "local-mem-bw": 50,
-    "boost-mode": 0
+    "local-mem-bw": 50, 
+    "boost-mode": 0,
+    "peak-perf": 2000,
+    "roofline-enabled": 1
+
+
 }

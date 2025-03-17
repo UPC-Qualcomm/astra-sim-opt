@@ -1,13 +1,22 @@
 #!/bin/bash
 
 #generate workloads
-python generate_workloads.py --model 8 --folder_name OPT_13B
 
-workload_configuration="./workload/OPT_13B"
+
+model_name="GPT_3_175B"
+model_num=5
+workload_configuration="./workload/"${model_name}
 memory_config="./configuration/RemoteMemory.json"
 
-output="./output/OPT_13B/"
-result="./results/OPT_13B/"
+output="./output/"${model_name}"/"
+result="./results/"${model_name}"/"
+
+rm -rf $output
+rm -rf $result
+rm -rf $workload_configuration
+#
+#
+python generate_workloads.py --model $model_num --folder_name $model_name
 
 #2D_Torus
 python run_astrasim.py \

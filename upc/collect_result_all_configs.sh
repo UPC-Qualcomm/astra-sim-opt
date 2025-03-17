@@ -1,9 +1,13 @@
 #!/bin/bash
 
 
-output="./output/GPT3/"
-result="./results/GPT3/"
+model_name="GPT_3_1300M"
 
+output="./output/"${model_name}"/"
+result="./results/"${model_name}"/"
+
+#python gather_results.py --sim_logfiles_dir ./output/4d_Ring_1 --output_filename ./results1/4D_Ring_1.csv
+#python gather_results.py --sim_logfiles_dir ./output/4d_Ring_2 --output_filename ./results1/4D_Ring_2.csv
 #2D_Torus
 python gather_results.py --sim_logfiles_dir ${output}2D_Torus --output_filename ${result}2D_Torus.csv
 
