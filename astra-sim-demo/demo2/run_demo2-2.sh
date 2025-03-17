@@ -3,7 +3,7 @@ set -e
 
 # Path
 SCRIPT_DIR=$(dirname "$(realpath $0)")
-ASTRA_SIM=${SCRIPT_DIR}/../../astra-sim/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware
+ASTRA_SIM=${SCRIPT_DIR}/../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware
 
 # Run ASTRA-sim
 (
