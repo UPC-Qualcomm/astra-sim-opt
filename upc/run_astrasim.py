@@ -20,7 +20,8 @@ def list_workloads(root):
 
 
 def run_astrasim(workload_path, system, network, memory, output_dir):
-    astrasim_root = "/home/mohammad/spain/experiments/astra-sim"
+    # astrasim_root = "/home/mohammad/spain/experiments/astra-sim"
+    astrasim_root = "/home/tomas/repositories/upc/astra-sim"
     if astrasim_root is None:
         raise Exception(
             f"please specify astrasim folder path at variable astrasim_root at "
