@@ -4,6 +4,7 @@ import subprocess
 import multiprocessing
 import argparse
 from enum import Enum
+from tqdm import tqdm
 
 
 def run_command(command, cwd=None):
@@ -182,4 +183,5 @@ if __name__ == "__main__":
     func = partial(generate_instance, model=model, folder_name=folder_name)
 
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:
-        pool.map(func, design_space)
+        results = list(tqdm(pool.imap_unordered(func, design_space), total=len(design_space)))
+
