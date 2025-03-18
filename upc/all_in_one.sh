@@ -3,7 +3,7 @@
 #generate workloads
 
 
-model_name="GPT_3_175B"
+model_name="GPT_3_1300M"
 model_num=5
 workload_configuration="./workload/"${model_name}
 memory_config="./configuration/RemoteMemory.json"
