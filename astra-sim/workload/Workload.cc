@@ -125,8 +125,7 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
         if ((node->type() == ChakraNodeType::MEM_LOAD_NODE) ||
             (node->type() == ChakraNodeType::MEM_STORE_NODE)) {
             if (sys->trace_enabled) {
-                logger->debug("issue,sys->id={}, tick={}, node->id={}, "
-                              "node->name={}, node->type={}",
+                logger->info("issue, {}, {}, {}, {}, {}",
                               sys->id, Sys::boostedTick(), node->id(),
                               node->name(),
                               static_cast<uint64_t>(node->type()));
@@ -139,8 +138,7 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
                 skip_invalid(node);
             } else {
                 if (sys->trace_enabled) {
-                    logger->debug("issue,sys->id={}, tick={}, node->id={}, "
-                                  "node->name={}, node->type={}",
+                    logger->info("issue, {}, {}, {}, {}, {}",
                                   sys->id, Sys::boostedTick(), node->id(),
                                   node->name(),
                                   static_cast<uint64_t>(node->type()));
@@ -153,8 +151,7 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
                     (node->type() == ChakraNodeType::COMM_RECV_NODE))) {
             if (sys->trace_enabled) {
                 if (sys->trace_enabled) {
-                    logger->debug("issue,sys->id={}, tick={}, node->id={}, "
-                                  "node->name={}, node->type={}",
+                    logger->info("issue, {}, {}, {}, {}, {}",
                                   sys->id, Sys::boostedTick(), node->id(),
                                   node->name(),
                                   static_cast<uint64_t>(node->type()));
@@ -358,8 +355,7 @@ void Workload::call(EventType event, CallData* data) {
 
         if (sys->trace_enabled) {
             LoggerFactory::get_logger("workload")
-                ->debug("callback,sys->id={}, tick={}, node->id={}, "
-                        "node->name={}, node->type={}",
+                ->info("callback, {}, {}, {}, {}, {}",
                         sys->id, Sys::boostedTick(), node->id(), node->name(),
                         static_cast<uint64_t>(node->type()));
         }
@@ -386,8 +382,7 @@ void Workload::call(EventType event, CallData* data) {
 
             if (sys->trace_enabled) {
                 LoggerFactory::get_logger("workload")
-                    ->debug("callback,sys->id={}, tick={}, node->id={}, "
-                            "node->name={}, node->type={}",
+                    ->info("callback, {}, {}, {}, {}, {}",
                             sys->id, Sys::boostedTick(), node->id(),
                             node->name(), static_cast<uint64_t>(node->type()));
             }
@@ -414,6 +409,10 @@ void Workload::call(EventType event, CallData* data) {
 }
 
 void Workload::fire() {
+    if (sys->id == 0) {
+        LoggerFactory::get_logger("workload")
+            ->info("action, sys_id, tick, node_id, node_name, node_type");
+    }
     call(EventType::General, NULL);
 }
 
