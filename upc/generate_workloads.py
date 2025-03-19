@@ -149,7 +149,6 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
     )
     run_command(cmd, cwd)
 
-
 if __name__ == "__main__":
     from functools import partial
 
@@ -180,7 +179,7 @@ if __name__ == "__main__":
 
     design_space = get_design_space(num_npus, dp, mp, pp, sharded)
     #design_space = get_design_space_no_sp(num_npus, dp, mp, pp, sharded)
-    func = partial(generate_instance, model=model, folder_name=folder_name)
+    func = partial(generate_instance, model=Model(int(model)), folder_name=folder_name)
 
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:
         results = list(tqdm(pool.imap_unordered(func, design_space), total=len(design_space)))

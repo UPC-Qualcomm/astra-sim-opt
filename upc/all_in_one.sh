@@ -3,20 +3,20 @@
 #generate workloads
 
 
-model_name="GPT_3_1300M"
+folder_name="GPT_3_1300M"
 model_num=5
-workload_configuration="./workload/"${model_name}
+workload_configuration="./workload/"${folder_name}
 memory_config="./configuration/RemoteMemory.json"
 
-output="./output/"${model_name}"/"
-result="./results/"${model_name}"/"
+output="./output/"${folder_name}"/"
+result="./results/"${folder_name}"/"
 
 rm -rf $output
 rm -rf $result
 rm -rf $workload_configuration
 #
 #
-python generate_workloads.py --model $model_num --folder_name $model_name
+python generate_workloads.py --model $model_num --folder_name $folder_name
 
 #2D_Torus
 python run_astrasim.py \
