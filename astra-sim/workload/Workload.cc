@@ -410,8 +410,10 @@ void Workload::call(EventType event, CallData* data) {
 
 void Workload::fire() {
     if (sys->id == 0) {
-        LoggerFactory::get_logger("workload")
-            ->info("action, sys_id, tick, node_id, node_name, node_type");
+        if (sys->trace_enabled) {
+            LoggerFactory::get_logger("workload")
+                ->info("action, sys_id, tick, node_id, node_name, node_type");
+        }
     }
     call(EventType::General, NULL);
 }
