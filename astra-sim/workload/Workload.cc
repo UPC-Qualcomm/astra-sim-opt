@@ -102,6 +102,7 @@ void Workload::issue_dep_free_nodes() {
     shared_ptr<Chakra::ETFeederNode> node = et_feeder->getNextIssuableNode();
     while (node != nullptr) {
         if (hw_resource->is_available(node)) {
+            sys->loca_memory->update_consumed_memory(node);
             issue(node);
         } else {
             push_back_queue.push(node);
@@ -125,10 +126,9 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
         if ((node->type() == ChakraNodeType::MEM_LOAD_NODE) ||
             (node->type() == ChakraNodeType::MEM_STORE_NODE)) {
             if (sys->trace_enabled) {
-                logger->info("issue, {}, {}, {}, {}, {}",
-                              sys->id, Sys::boostedTick(), node->id(),
-                              node->name(),
-                              static_cast<uint64_t>(node->type()));
+                logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                             Sys::boostedTick(), node->id(), node->name(),
+                             static_cast<uint64_t>(node->type()));
             }
             issue_remote_mem(node);
         } else if (node->is_cpu_op() ||
@@ -138,10 +138,9 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
                 skip_invalid(node);
             } else {
                 if (sys->trace_enabled) {
-                    logger->info("issue, {}, {}, {}, {}, {}",
-                                  sys->id, Sys::boostedTick(), node->id(),
-                                  node->name(),
-                                  static_cast<uint64_t>(node->type()));
+                    logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                                 Sys::boostedTick(), node->id(), node->name(),
+                                 static_cast<uint64_t>(node->type()));
                 }
                 issue_comp(node);
             }
@@ -151,10 +150,9 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
                     (node->type() == ChakraNodeType::COMM_RECV_NODE))) {
             if (sys->trace_enabled) {
                 if (sys->trace_enabled) {
-                    logger->info("issue, {}, {}, {}, {}, {}",
-                                  sys->id, Sys::boostedTick(), node->id(),
-                                  node->name(),
-                                  static_cast<uint64_t>(node->type()));
+                    logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                                 Sys::boostedTick(), node->id(), node->name(),
+                                 static_cast<uint64_t>(node->type()));
                 }
             }
             issue_comm(node);
@@ -242,13 +240,14 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
         }
     } else {
         // involved_dim does not exist in ETFeeder.
-        // Assume involved_dim = [1,1,1,1,1] which we could simulate 5-Dimension.
-	// Could use Process Group to build involved_dim later. 
-	// Once process group is implemented, you should get
+        // Assume involved_dim = [1,1,1,1,1] which we could simulate
+        // 5-Dimension. Could use Process Group to build involved_dim later.
+        // Once process group is implemented, you should get
         // that with node->pg_name()
-	
-	for(int i = 0; i < 4; i++)
+
+        for (int i = 0; i < 4; i++) {
             involved_dim.push_back(true);
+        }
     }
 
     if (!node->is_cpu_op() &&
@@ -355,19 +354,19 @@ void Workload::call(EventType event, CallData* data) {
 
         if (sys->trace_enabled) {
             LoggerFactory::get_logger("workload")
-                ->info("callback, {}, {}, {}, {}, {}",
-                        sys->id, Sys::boostedTick(), node->id(), node->name(),
-                        static_cast<uint64_t>(node->type()));
+                ->info("callback, {}, {}, {}, {}, {}", sys->id,
+                       Sys::boostedTick(), node->id(), node->name(),
+                       static_cast<uint64_t>(node->type()));
         }
 
+        //sys->loca_memory->update_consumed_memory(node);
         hw_resource->release(node);
-
         et_feeder->freeChildrenNodes(node_id);
 
         issue_dep_free_nodes();
-      
-        // The Dataset class provides statistics that should be used later to dump
-        // more statistics in the workload layer
+
+        // The Dataset class provides statistics that should be used later to
+        // dump more statistics in the workload layer
         delete collective_comm_wrapper_map[int_data->data];
         collective_comm_wrapper_map.erase(int_data->data);
         et_feeder->removeNode(node_id);
@@ -382,13 +381,13 @@ void Workload::call(EventType event, CallData* data) {
 
             if (sys->trace_enabled) {
                 LoggerFactory::get_logger("workload")
-                    ->info("callback, {}, {}, {}, {}, {}",
-                            sys->id, Sys::boostedTick(), node->id(),
-                            node->name(), static_cast<uint64_t>(node->type()));
+                    ->info("callback, {}, {}, {}, {}, {}", sys->id,
+                           Sys::boostedTick(), node->id(), node->name(),
+                           static_cast<uint64_t>(node->type()));
             }
 
+            //sys->loca_memory->update_consumed_memory(node);
             hw_resource->release(node);
-
             et_feeder->freeChildrenNodes(node->id());
 
             issue_dep_free_nodes();
@@ -416,11 +415,29 @@ void Workload::fire() {
         }
     }
     call(EventType::General, NULL);
+    // Add to the local memory object to the Sys.
+    // Call update memory method passing the node.
+    // The update memory method will check if the node is fwd or bwd and
+    // increase the memory. The method would throw and excpetion when the memory
+    // size is exceeded. The method will divide the total memory into,
+    // activation, parameter, gradients and optimizer. The activations are freed
+    // after the forward pass. The gradient are freed at the end of bwd pass.
+    // The optimizer state meory is estimated based on Adam.
+    // The class records the max memory used for each type of memory.
+    // Communication nodes need to be considered to make sure we can store the
+    // recieved information. The local memory class should have max size class.
 }
 
 void Workload::report() {
     Tick curr_tick = Sys::boostedTick();
     LoggerFactory::get_logger("workload")
-        ->info("sys[{}] finished, {} cycles, exposed communication {} cycles.",
-               sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops);
+        ->info("sys[{}] finished, {} cycles, exposed communication {} cycles, "
+               "memory {}, activation {}, gradient {}, parameter {}, optimizer "
+               "{}.",
+               sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops,
+               sys->loca_memory->get_consumed_memory(),
+               sys->loca_memory->get_activation_memory(),
+               sys->loca_memory->get_gradient_memory(),
+               sys->loca_memory->get_parameter_memory(),
+               sys->loca_memory->get_optimizer_memory());
 }

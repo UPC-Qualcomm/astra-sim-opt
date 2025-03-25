@@ -165,6 +165,8 @@ Sys::Sys(int id,
     this->remote_mem->set_sys(id, this);
     this->local_mem_bw = 0;
 
+    this->loca_memory = new LocalMemory();
+    
     this->memBus = nullptr;
     this->inp_L = 0;
     this->inp_o = 0;
@@ -472,6 +474,11 @@ bool Sys::initialize_sys(string name) {
     if (j.contains("local-mem-bw")) {
         local_mem_bw = j["local-mem-bw"];
         local_mem_bw = local_mem_bw * 1000000000;  // GB/sec
+    }
+    if (j.contains("local-mem-size")) {
+        auto mem_size = j["local-mem-size"].get<long long>();
+        mem_size = mem_size * 1000000000;
+        this->loca_memory->set_memory_size(mem_size);
     }
     if (j.contains("roofline-enabled")) {
         if (j["roofline-enabled"] != 0) {
