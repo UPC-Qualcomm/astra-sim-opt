@@ -254,6 +254,7 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
     if (!node->is_cpu_op() &&
         (node->type() == ChakraNodeType::COMM_COLL_NODE)) {
         if (node->comm_type() == ChakraCollectiveCommType::ALL_REDUCE) {
+            sys->comm_NI->log_network(std::to_string(node->id()) + ",All_Reduce,,,,,,,,");
             DataSet* fp =
                 sys->generate_all_reduce(node->comm_size(), involved_dim,
                                          comm_group, node->comm_priority());
@@ -262,6 +263,7 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
             fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
 
         } else if (node->comm_type() == ChakraCollectiveCommType::ALL_TO_ALL) {
+            sys->comm_NI->log_network(std::to_string(node->id()) + ",ALL_TO_ALL,,,,,,,,"); 
             DataSet* fp =
                 sys->generate_all_to_all(node->comm_size(), involved_dim,
                                          comm_group, node->comm_priority());
@@ -270,6 +272,7 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
             fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
 
         } else if (node->comm_type() == ChakraCollectiveCommType::ALL_GATHER) {
+            sys->comm_NI->log_network(std::to_string(node->id()) + ",ALL_GATHER,,,,,,,,"); 
             DataSet* fp =
                 sys->generate_all_gather(node->comm_size(), involved_dim,
                                          comm_group, node->comm_priority());
@@ -279,6 +282,7 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
 
         } else if (node->comm_type() ==
                    ChakraCollectiveCommType::REDUCE_SCATTER) {
+            sys->comm_NI->log_network(std::to_string(node->id()) + ",REDUCE_SCATTER,,,,,,,,"); 
             DataSet* fp =
                 sys->generate_reduce_scatter(node->comm_size(), involved_dim,
                                              comm_group, node->comm_priority());
@@ -287,6 +291,7 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
             fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
 
         } else if (node->comm_type() == ChakraCollectiveCommType::BROADCAST) {
+            sys->comm_NI->log_network(std::to_string(node->id()) + ",BROADCAST,,,,,,,,"); 
             // broadcast colelctive has not been implemented in ASTRA-SIM yet.
             // So, we just use its real system mesurements
             uint64_t runtime = 1ul;
@@ -306,6 +311,7 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
             fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
         }
     } else if (node->type() == ChakraNodeType::COMM_SEND_NODE) {
+        sys->comm_NI->log_network(std::to_string(node->id()) + ",COMM_SEND_NODE,,,,,,,,"); 
         sim_request snd_req;
         snd_req.srcRank = node->comm_src();
         snd_req.dstRank = node->comm_dst();
@@ -320,6 +326,7 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
                                 Sys::FrontEndSendRecvType::NATIVE,
                                 &Sys::handleEvent, sehd);
     } else if (node->type() == ChakraNodeType::COMM_RECV_NODE) {
+        sys->comm_NI->log_network(std::to_string(node->id()) + ",COMM_RECV_NODE,,,,,,,,"); 
         sim_request rcv_req;
         RecvPacketEventHandlerData* rcehd = new RecvPacketEventHandlerData;
         rcehd->wlhd = new WorkloadLayerHandlerData;
