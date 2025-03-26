@@ -36,5 +36,6 @@ upc/output/
 upc/workload/
 upc/log/
 upc/results/
+upc/network_log/
 
 *.ipynb_checkpoints/
