@@ -9,6 +9,7 @@ LICENSE file in the root directory of this source tree.
 #include <astra-network-analytical/common/Type.h>
 #include <astra-network-analytical/congestion_unaware/Topology.h>
 #include <vector>
+#include <string>
 
 using namespace AstraSim;
 using namespace AstraSimAnalytical;
@@ -48,7 +49,9 @@ class CongestionUnawareNetworkApi final : public CommonNetworkApi {
                  sim_request* request,
                  void (*msg_handler)(void* fun_arg),
                  void* fun_arg) override;
-
+    
+    void log_network(std::string str);
+    void init_logger(std::string str);
   private:
     /// topology
     static std::shared_ptr<Topology> topology;

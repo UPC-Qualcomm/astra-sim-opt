@@ -39,3 +39,6 @@ upc/results/
 upc/network_log/
 
 *.ipynb_checkpoints/
+
+our_examples/
+stg_generated_examples/
