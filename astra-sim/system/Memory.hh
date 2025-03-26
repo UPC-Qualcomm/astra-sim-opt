@@ -1,5 +1,5 @@
-#ifndef __LOCAL_MEMORY_HH__
-#define __LOCAL_MEMORY_HH__
+#ifndef __MEMORY_HH__
+#define __MEMORY_HH__
 
 #include <iostream>
 #include <sstream>
@@ -16,7 +16,7 @@
 
 namespace AstraSim {
 
-class LocalMemory {
+class Memory {
   public:
 
     enum LayerTypes : int {
@@ -25,7 +25,7 @@ class LocalMemory {
       FFA
     };
     
-    LocalMemory();
+    Memory();
     void set_memory_size(long long size);
     long long get_memory_size();
     long long get_consumed_memory();
@@ -39,11 +39,11 @@ class LocalMemory {
 
     int get_curr_stack(std::string node_name);
     std::string layer_type_to_str(LayerTypes type);
-    LocalMemory::LayerTypes str_to_layer_type(std::string node_name);
+    Memory::LayerTypes str_to_layer_type(std::string node_name);
     void update_consumed_memory(
         const std::shared_ptr<Chakra::ETFeederNode> node);
     
-    ~LocalMemory();
+    ~Memory();
 
     long long memory_size;
     long long consumed_memory;
@@ -62,4 +62,4 @@ class LocalMemory {
 
 }  // namespace AstraSim
 
-#endif /* __LOCAL_MEMORY_HH__ */
+#endif /* __MEMORY_HH__ */

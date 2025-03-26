@@ -102,7 +102,7 @@ void Workload::issue_dep_free_nodes() {
     shared_ptr<Chakra::ETFeederNode> node = et_feeder->getNextIssuableNode();
     while (node != nullptr) {
         if (hw_resource->is_available(node)) {
-            sys->loca_memory->update_consumed_memory(node);
+            sys->memory->update_consumed_memory(node);
             issue(node);
         } else {
             push_back_queue.push(node);
@@ -359,7 +359,7 @@ void Workload::call(EventType event, CallData* data) {
                        static_cast<uint64_t>(node->type()));
         }
 
-        //sys->loca_memory->update_consumed_memory(node);
+        //sys->memory->update_consumed_memory(node);
         hw_resource->release(node);
         et_feeder->freeChildrenNodes(node_id);
 
@@ -386,7 +386,7 @@ void Workload::call(EventType event, CallData* data) {
                            static_cast<uint64_t>(node->type()));
             }
 
-            //sys->loca_memory->update_consumed_memory(node);
+            //sys->memory->update_consumed_memory(node);
             hw_resource->release(node);
             et_feeder->freeChildrenNodes(node->id());
 
@@ -435,9 +435,9 @@ void Workload::report() {
                "memory {}, activation {}, gradient {}, parameter {}, optimizer "
                "{}.",
                sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops,
-               sys->loca_memory->get_consumed_memory(),
-               sys->loca_memory->get_activation_memory(),
-               sys->loca_memory->get_gradient_memory(),
-               sys->loca_memory->get_parameter_memory(),
-               sys->loca_memory->get_optimizer_memory());
+               sys->memory->get_consumed_memory(),
+               sys->memory->get_activation_memory(),
+               sys->memory->get_gradient_memory(),
+               sys->memory->get_parameter_memory(),
+               sys->memory->get_optimizer_memory());
 }

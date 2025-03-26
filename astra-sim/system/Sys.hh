@@ -17,7 +17,7 @@ LICENSE file in the root directory of this source tree.
 #include "astra-sim/system/Roofline.hh"
 #include "astra-sim/system/UsageTracker.hh"
 #include "astra-sim/system/topology/RingTopology.hh"
-#include "astra-sim/system/LocalMemory.hh"
+#include "astra-sim/system/Memory.hh"
 #include "astra-sim/workload/Workload.hh"
 
 namespace AstraSim {
@@ -329,7 +329,7 @@ class Sys : public Callable {
     bool replay_only;
 
     // local memory
-    LocalMemory* loca_memory;
+    Memory* memory;
 };
 
 }  // namespace AstraSim

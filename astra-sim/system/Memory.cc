@@ -1,4 +1,4 @@
-#include "astra-sim/system/LocalMemory.hh"
+#include "astra-sim/system/Memory.hh"
 
 #include "astra-sim/system/LogGP.hh"
 #include "astra-sim/system/Sys.hh"
@@ -7,8 +7,9 @@ using namespace std;
 using namespace AstraSim;
 
 typedef ChakraProtoMsg::NodeType ChakraNodeType;
+typedef ChakraProtoMsg::CollectiveCommType ChakraCollectiveCommType;
 
-LocalMemory::LocalMemory() {
+Memory::Memory() {
     this->memory_size = 0;
     this->consumed_memory = 0;
     this->parameter_memory = 0;
@@ -16,20 +17,20 @@ LocalMemory::LocalMemory() {
     this->tmp_activation_memory = 0;
     this->tmp_gradient_memory = 0;
     this->is_forward_pass = true;
-    this->layer_type_prev = LocalMemory::LayerTypes::EMB;
+    this->layer_type_prev = Memory::LayerTypes::EMB;
     this->stop_recording_memory = false;
     this->prev_stack_number = 0;
 }
 
-void LocalMemory::set_memory_size(long long size) {
+void Memory::set_memory_size(long long size) {
     this->memory_size = size;
 }
 
-long long LocalMemory::get_memory_size() {
+long long Memory::get_memory_size() {
     return this->memory_size;
 }
 
-long long LocalMemory::get_consumed_memory() {
+long long Memory::get_consumed_memory() {
     this->consumed_memory =
         this->get_activation_memory() + this->get_gradient_memory() +
         this->get_parameter_memory() + this->get_optimizer_memory();
@@ -37,43 +38,43 @@ long long LocalMemory::get_consumed_memory() {
     return this->consumed_memory;
 }
 
-long long LocalMemory::get_activation_memory() {
+long long Memory::get_activation_memory() {
     return this->tmp_activation_memory;
 }
 
-long long LocalMemory::get_gradient_memory() {
+long long Memory::get_gradient_memory() {
     return this->tmp_gradient_memory;
 }
 
-long long LocalMemory::get_parameter_memory() {
+long long Memory::get_parameter_memory() {
     return this->parameter_memory;
 }
 
-long long LocalMemory::get_optimizer_memory() {
+long long Memory::get_optimizer_memory() {
     return this->parameter_memory * 3;
 }
 
-long long LocalMemory::get_free_memory() {
+long long Memory::get_free_memory() {
     return this->memory_size - this->get_consumed_memory();
 }
 
-void LocalMemory::release_activation() {
+void Memory::release_activation() {
     // Remove the activations of the layers that we have already calculated
     // their gradients.
 }
 
-void LocalMemory::release_gradient() {
+void Memory::release_gradient() {
     // Remove the gradients after the parameters of the model are updated Or the
     // bwd pass is finished.
 }
 
-std::string LocalMemory::layer_type_to_str(LocalMemory::LayerTypes type) {
+std::string Memory::layer_type_to_str(Memory::LayerTypes type) {
     switch (type) {
-    case LocalMemory::LayerTypes::EMB:
+    case Memory::LayerTypes::EMB:
         return "emb";
-    case LocalMemory::LayerTypes::MHA:
+    case Memory::LayerTypes::MHA:
         return "mha";
-    case LocalMemory::LayerTypes::FFA:
+    case Memory::LayerTypes::FFA:
         return "ffn";
     default:
         std::ostringstream oss;
@@ -81,22 +82,22 @@ std::string LocalMemory::layer_type_to_str(LocalMemory::LayerTypes type) {
         throw std::logic_error(oss.str());
     }
 }
-LocalMemory::LayerTypes LocalMemory::str_to_layer_type(std::string name) {
+Memory::LayerTypes Memory::str_to_layer_type(std::string name) {
     if (name.find("emb") != std::string::npos) {
-        return LocalMemory::LayerTypes::EMB;
+        return Memory::LayerTypes::EMB;
     }
     if (name.find("mha") != std::string::npos) {
-        return LocalMemory::LayerTypes::MHA;
+        return Memory::LayerTypes::MHA;
     }
     if (name.find("ffn") != std::string::npos) {
-        return LocalMemory::LayerTypes::FFA;
+        return Memory::LayerTypes::FFA;
     }
     std::ostringstream oss;
     oss << "Error: Layer type is unknown: " << name;
     throw std::logic_error(oss.str());
 }
 
-int LocalMemory::get_curr_stack(std::string name) {
+int Memory::get_curr_stack(std::string name) {
     std::regex pattern(R"(stack_(\d+)_)");
     std::smatch match;
     if (std::regex_search(name, match, pattern)) {
@@ -105,7 +106,7 @@ int LocalMemory::get_curr_stack(std::string name) {
     return -1;
 }
 
-void LocalMemory::update_consumed_memory(
+void Memory::update_consumed_memory(
     const std::shared_ptr<Chakra::ETFeederNode> node) {
     if (this->get_free_memory() + node->tensor_size() < 0) {
         std::ostringstream oss;
@@ -148,12 +149,12 @@ void LocalMemory::update_consumed_memory(
             }*/
 
             this->layer_type_prev = this->str_to_layer_type(node->name());
-        } else if (node->type() == ChakraNodeType::COMM_COLL_NODE ||
-                   node->type() == ChakraNodeType::COMM_SEND_NODE ||
+        } else if (node->type() == ChakraNodeType::COMM_COLL_NODE || // node->type() == ChakraNodeType::COMM_SEND_NODE (This will not affect the memory size)
                    node->type() == ChakraNodeType::COMM_RECV_NODE) {
 
             int64_t comm_size = 0;
             int64_t y_tensor_size = 0;
+
 
             comm_size = node->comm_size();
             for (auto attr : node->getChakraNode()->attr()) {
@@ -162,6 +163,14 @@ void LocalMemory::update_consumed_memory(
                 }
             }
 
+            // TODO: Consider the special case of each communication type.
+            /*if (node->comm_type() == ChakraCollectiveCommType::ALL_GATHER ||
+                node->comm_type() == ChakraCollectiveCommType::GATHER ||
+                node->comm_type() == ChakraCollectiveCommType::ALL_TO_ALL ||
+                node->comm_type() == ChakraCollectiveCommType::ALL_REDUCE ||
+                node->comm_type() == ChakraCollectiveCommType::REDUCE_SCATTER||
+                node->comm_type() == ChakraCollectiveCommType::REDUCE){*/
+                
             if (this->is_forward_pass) {
                 this->tmp_activation_memory += y_tensor_size;
                 //this->communication_memory += comm_size;
@@ -170,8 +179,9 @@ void LocalMemory::update_consumed_memory(
                 this->parameter_memory += y_tensor_size;
                 //this->communication_memory += comm_size;
             }
+        //}
         }
     }
 }
 
-LocalMemory::~LocalMemory() {}
+Memory::~Memory() {}

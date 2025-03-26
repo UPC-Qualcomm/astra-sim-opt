@@ -6,11 +6,11 @@ memory_config="./configuration/RemoteMemory.json"
 output="./output/"${model_name}"/"
 
 #python run_astrasim.py \
-#    --workload_dir ./workload/GPT_3_175B_512 \
-#    --system ./configuration/4d_Ring_sys_1.json \
-#    --network ./configuration/4d_Ring_1.yml \
+#    --workload_dir ./workload/GPT_3_1300M \
+#    --system ./configuration/Ring_sys.json \
+#    --network ./configuration/Ring.yml \
 #    --memory ./configuration/RemoteMemory.json \
-#    --output_dir ./output/4d_Ring_1/
+#    --output_dir ./output/Ring_test/
 
 #2D_Torus
 python run_astrasim.py \
