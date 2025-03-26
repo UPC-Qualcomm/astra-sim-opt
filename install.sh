@@ -9,7 +9,7 @@ pip3 install --upgrade pip
 
 pip3 install protobuf==5.29.0
 
-pip3 install graphviz pydot matplotlib seaborn sympy
+pip3 install graphviz pydot sympy tqdm seaborn matplotlib
 
 cd ..
 

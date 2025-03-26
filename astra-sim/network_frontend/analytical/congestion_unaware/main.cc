@@ -42,9 +42,12 @@ int main(int argc, char* argv[]) {
     const auto injection_scale = cmd_line_parser.get<double>("injection-scale");
     const auto rendezvous_protocol =
         cmd_line_parser.get<bool>("rendezvous-protocol");
+    // Log Networking information        
+    const auto network_log =
+        cmd_line_parser.get<std::string>("network-log");
 
     AstraSim::LoggerFactory::init(logging_configuration);
-
+    
     // Instantiate event queue
     const auto event_queue = std::make_shared<EventQueue>();
 
@@ -86,9 +89,10 @@ int main(int argc, char* argv[]) {
         network_apis.push_back(std::move(network_api));
         systems.push_back(system);
     }
-
+    //systems[0]->comm_NI->init_logger(network_log);
     // Initiate simulation
     for (int i = 0; i < npus_count; i++) {
+        systems[i]->comm_NI->init_logger(network_log);
         systems[i]->workload->fire();
     }
 

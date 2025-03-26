@@ -73,6 +73,13 @@ class AstraNetworkAPI {
         return;
     }
 
+    virtual void log_network(std::string str){
+        return;
+    }
+
+    virtual void init_logger(std::string str){
+        return;
+    }
     int rank;
 };
 
