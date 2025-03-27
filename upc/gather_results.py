@@ -8,6 +8,7 @@ import re
 import argparse
 import csv
 
+
 def list_logs(root):
     files = os.listdir(root)
     filtered = list()
@@ -23,8 +24,13 @@ def extract_runtime(log_path):
     dp, mp, sp, pp, sharded = int(dp), int(mp), int(sp), int(pp), int(sharded)
     exec_cycles = 0
     comm_cycles = 0
+    memory = 0
+    activation = 0
+    gradient = 0
+    parameter = 0
+    optimizer = 0
 
-    pattern = r"(\d+) cycles, exposed communication (\d+) cycles"
+    pattern = r"(\d+) cycles, exposed communication (\d+) cycles, memory (\d+), activation (\d+), gradient (\d+), parameter (\d+), optimizer (\d+)."
 
     # Lists to store extracted values
     execution_cycles = []
@@ -39,10 +45,31 @@ def extract_runtime(log_path):
         matches = re.findall(pattern, log_lines)
 
         if len(matches) == 0:
-            return dp, mp, sp, pp, sharded, -1, -1  # Not enough lines in log file
+            return (
+                dp,
+                mp,
+                sp,
+                pp,
+                sharded,
+                -1,
+                -1,
+                memory,
+                activation,
+                gradient,
+                parameter,
+                optimizer,
+            )  # Not enough lines in log file
 
         # Store extracted values in separate lists
-        for exec_cycles, comm_cycles in matches:
+        for (
+            exec_cycles,
+            comm_cycles,
+            memory,
+            activation,
+            gradient,
+            parameter,
+            optimizer,
+        ) in matches:
             execution_cycles.append(int(exec_cycles))
             communication_cycles.append(int(comm_cycles))
 
@@ -51,7 +78,20 @@ def extract_runtime(log_path):
         exec_cycles = sum(execution_cycles) / len(execution_cycles)
         comm_cycles = sum(communication_cycles) / len(communication_cycles)
 
-    return dp, mp, sp, pp, sharded, exec_cycles, comm_cycles
+    return (
+        dp,
+        mp,
+        sp,
+        pp,
+        sharded,
+        exec_cycles,
+        comm_cycles,
+        memory,
+        activation,
+        gradient,
+        parameter,
+        optimizer,
+    )
 
 
 def gather_runtimes(root):
@@ -60,10 +100,31 @@ def gather_runtimes(root):
     with multiprocessing.Pool() as pool:
         runtimes = pool.map(extract_runtime, logs)
     runtimes_dict = dict()
-    for dp, mp, sp, pp, sharded, exec_cycles, comm_cycles in runtimes:
+    for (
+        dp,
+        mp,
+        sp,
+        pp,
+        sharded,
+        exec_cycles,
+        comm_cycles,
+        memory,
+        activation,
+        gradient,
+        parameter,
+        optimizer,
+    ) in runtimes:
         if exec_cycles == -1 or comm_cycles == -1:
             continue
-        runtimes_dict[(dp, mp, sp, pp, sharded)] = [exec_cycles, comm_cycles]
+        runtimes_dict[(dp, mp, sp, pp, sharded)] = [
+            exec_cycles,
+            comm_cycles,
+            memory,
+            activation,
+            gradient,
+            parameter,
+            optimizer,
+        ]
     return runtimes_dict
 
 
@@ -78,11 +139,11 @@ def get_fails(runtimes):
 
 def visualize1(runtimes, ssp, sharded):
     max_runtimes = max(runtimes.values())
-    mat = -1 * np.ones((7, 7))
+    mat = -1 * np.ones((12, 12))
     # vis all data, x=(dp, mp) y=(sp, pp)
-    for ddp in range(7):
+    for ddp in range(12):
         x_value = ddp
-        for mmp in range(7):
+        for mmp in range(12):
             y_value = mmp
             for ssp in {ssp}:
                 ppp = 6 - ddp - mmp - ssp
@@ -103,12 +164,12 @@ def visualize1(runtimes, ssp, sharded):
 
 def visualize2(runtimes, sharded):
     max_runtimes = max(runtimes.values())
-    mat = -1 * np.ones((7 * 7, 7))
+    mat = -1 * np.ones((12 * 12, 12))
     # vis all data, x=(dp, mp) y=(sp, pp)
-    for ddp in range(7):
-        for mmp in range(7):
-            x_value = ddp * 7 + mmp
-            for ssp in range(7):
+    for ddp in range(12):
+        for mmp in range(12):
+            x_value = ddp * 12 + mmp
+            for ssp in range(12):
                 y_value = ssp
                 ppp = 6 - ddp - mmp - ssp
                 rddp, rmmp = int(2**ddp), int(2**mmp)
@@ -126,7 +187,7 @@ def visualize2(runtimes, sharded):
     return plt
 
 
-#def serialize_results(runtimes, json_filename):
+# def serialize_results(runtimes, json_filename):
 #    def get_jsonable_dict(dict_):
 #        ret = dict()
 #        for key in dict_.keys():
@@ -149,7 +210,6 @@ def topk(runtimes, k=10):
     for key, value in top_k_items:
         print(f"{key}: {value}")
     return top_k_items
-
 
 
 if __name__ == "__main__":
@@ -176,7 +236,7 @@ if __name__ == "__main__":
     os.makedirs(
         os.path.join(file_dir, os.path.dirname(args.output_filename)), exist_ok=True
     )
-    #serialize_results(runtimes, args.output_filename)
+    # serialize_results(runtimes, args.output_filename)
 
     with open(args.output_filename, mode="w", newline="") as file:
         writer = csv.writer(file)
@@ -192,11 +252,23 @@ if __name__ == "__main__":
                 "sharded",
                 "exec_cycles",
                 "comm_cycles",
+                "total_memory",
+                "activation",
+                "parameter",
+                "optimizer",
             ]
         )
 
         # Write data rows
-        for (dp, mp, sp, pp, sharded), (exec_cycles, comm_cycles) in runtimes.items():
+        for (dp, mp, sp, pp, sharded), (
+            exec_cycles,
+            comm_cycles,
+            memory,
+            activation,
+            gradient,
+            parameter,
+            optimizer,
+        ) in runtimes.items():
             writer.writerow(
                 [
                     f"{dp}_{mp}_{sp}_{pp}_{sharded}",
@@ -207,6 +279,10 @@ if __name__ == "__main__":
                     sharded,
                     exec_cycles,
                     comm_cycles,
+                    memory,
+                    activation,
+                    parameter,
+                    optimizer,
                 ]
             )
 
