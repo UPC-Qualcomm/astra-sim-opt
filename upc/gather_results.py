@@ -35,6 +35,11 @@ def extract_runtime(log_path):
     # Lists to store extracted values
     execution_cycles = []
     communication_cycles = []
+    memory_ = []
+    activation_ = []
+    gradient_ = []
+    parameter_ = []
+    optimizer_ = []
 
     with open(log_path, "r") as f:
         log_lines = f.read()
@@ -72,11 +77,21 @@ def extract_runtime(log_path):
         ) in matches:
             execution_cycles.append(int(exec_cycles))
             communication_cycles.append(int(comm_cycles))
+            memory_.append(int(memory))
+            activation_.append(int(activation))
+            gradient_.append(int(gradient))
+            parameter_.append(int(parameter))
+            optimizer_.append(int(optimizer))
 
         # print("Execution Cycles:", execution_cycles)
         # print("Communication Cycles:", communication_cycles)
         exec_cycles = sum(execution_cycles) / len(execution_cycles)
         comm_cycles = sum(communication_cycles) / len(communication_cycles)
+        memory = sum(memory_) / len(memory_)
+        activation = sum(activation_) / len(activation_)
+        gradient = sum(gradient_) / len(gradient_)
+        parameter = sum(parameter_) / len(parameter_)
+        optimizer = sum(optimizer_) / len(optimizer_)
 
     return (
         dp,
@@ -279,10 +294,10 @@ if __name__ == "__main__":
                     sharded,
                     exec_cycles,
                     comm_cycles,
-                    memory,
-                    activation,
-                    parameter,
-                    optimizer,
+                    int(memory) / 1000000000,
+                    int(activation) / 1000000000,
+                    int(parameter) / 1000000000,
+                    int(optimizer) / 1000000000,
                 ]
             )
 

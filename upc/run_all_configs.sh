@@ -34,7 +34,7 @@ python run_astrasim.py \
 #DGX_H100
 python run_astrasim.py \
     --workload_dir $workload_configuration \
-    --system ./configuration/DGX_H100.json \
+    --system ./configuration/DGX_H100_sys.json \
     --network ./configuration/DGX_H100.yml \
     --memory $memory_config  \
     --output_dir ${output}DGX_H100 \
