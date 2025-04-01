@@ -10,6 +10,7 @@
     "collective-optimization": "localBWAware",
     "local-mem-bw": 50,
     "local-mem-size":80,
+    "enable_network_logger":0,
     "boost-mode": 0,
     "peak-perf": 1000,
     "roofline-enabled": 1

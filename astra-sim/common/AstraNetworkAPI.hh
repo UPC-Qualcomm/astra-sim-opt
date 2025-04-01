@@ -65,22 +65,23 @@ class AstraNetworkAPI {
         return -1;
     };
 
-    // Notifies that the workload for this rank has finished. 
-    // Note that we have one network handler per rank. 
-    // Therefore, when implementing this function, the network handler must 
+    // Notifies that the workload for this rank has finished.
+    // Note that we have one network handler per rank.
+    // Therefore, when implementing this function, the network handler must
     // find a way to concur that all ranks have finished their workloads.
-    virtual void sim_notify_finished(){
+    virtual void sim_notify_finished() {
         return;
     }
 
-    virtual void log_network(std::string str){
+    virtual void log_network(std::string str) {
         return;
     }
 
-    virtual void init_logger(std::string str){
+    virtual void init_logger(std::string str, bool enable_network_logger) {
         return;
     }
     int rank;
+    bool enable_network_logger;
 };
 
 }  // namespace AstraSim

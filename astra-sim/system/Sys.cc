@@ -166,7 +166,7 @@ Sys::Sys(int id,
     this->local_mem_bw = 0;
 
     this->memory = new Memory();
-    
+
     this->memBus = nullptr;
     this->inp_L = 0;
     this->inp_o = 0;
@@ -501,6 +501,11 @@ bool Sys::initialize_sys(string name) {
         } else {
             this->replay_only = false;
         }
+    }
+    if (j.contains("enable_network_logger")) {
+        auto enable_network_logger =
+            (j["enable_network_logger"].get<int>() != 0);
+        this->comm_NI->enable_network_logger = enable_network_logger;
     }
 
     inFile.close();
