@@ -475,6 +475,11 @@ bool Sys::initialize_sys(string name) {
         local_mem_bw = j["local-mem-bw"];
         local_mem_bw = local_mem_bw * 1000000000;  // GB/sec
     }
+    if (j.contains("local-mem-size")) {
+        auto mem_size = j["local-mem-size"].get<long long>();
+        mem_size = mem_size * 1000000000;
+        this->memory->set_memory_size(mem_size);
+    }
     if (j.contains("roofline-enabled")) {
         if (j["roofline-enabled"] != 0) {
             roofline_enabled = true;

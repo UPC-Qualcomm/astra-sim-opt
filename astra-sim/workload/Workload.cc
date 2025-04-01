@@ -102,6 +102,7 @@ void Workload::issue_dep_free_nodes() {
     shared_ptr<Chakra::ETFeederNode> node = et_feeder->getNextIssuableNode();
     while (node != nullptr) {
         if (hw_resource->is_available(node)) {
+            sys->memory->update_consumed_memory(node);
             issue(node);
         } else {
             push_back_queue.push(node);
@@ -125,10 +126,9 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
         if ((node->type() == ChakraNodeType::MEM_LOAD_NODE) ||
             (node->type() == ChakraNodeType::MEM_STORE_NODE)) {
             if (sys->trace_enabled) {
-                logger->info("issue, {}, {}, {}, {}, {}",
-                              sys->id, Sys::boostedTick(), node->id(),
-                              node->name(),
-                              static_cast<uint64_t>(node->type()));
+                logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                             Sys::boostedTick(), node->id(), node->name(),
+                             static_cast<uint64_t>(node->type()));
             }
             issue_remote_mem(node);
         } else if (node->is_cpu_op() ||
@@ -138,10 +138,9 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
                 skip_invalid(node);
             } else {
                 if (sys->trace_enabled) {
-                    logger->info("issue, {}, {}, {}, {}, {}",
-                                  sys->id, Sys::boostedTick(), node->id(),
-                                  node->name(),
-                                  static_cast<uint64_t>(node->type()));
+                    logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                                 Sys::boostedTick(), node->id(), node->name(),
+                                 static_cast<uint64_t>(node->type()));
                 }
                 issue_comp(node);
             }
@@ -151,10 +150,9 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
                     (node->type() == ChakraNodeType::COMM_RECV_NODE))) {
             if (sys->trace_enabled) {
                 if (sys->trace_enabled) {
-                    logger->info("issue, {}, {}, {}, {}, {}",
-                                  sys->id, Sys::boostedTick(), node->id(),
-                                  node->name(),
-                                  static_cast<uint64_t>(node->type()));
+                    logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                                 Sys::boostedTick(), node->id(), node->name(),
+                                 static_cast<uint64_t>(node->type()));
                 }
             }
             issue_comm(node);
@@ -242,19 +240,21 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
         }
     } else {
         // involved_dim does not exist in ETFeeder.
-        // Assume involved_dim = [1,1,1,1,1] which we could simulate 5-Dimension.
-	// Could use Process Group to build involved_dim later. 
-	// Once process group is implemented, you should get
+        // Assume involved_dim = [1,1,1,1,1] which we could simulate
+        // 5-Dimension. Could use Process Group to build involved_dim later.
+        // Once process group is implemented, you should get
         // that with node->pg_name()
-	
-	for(int i = 0; i < 4; i++)
+
+        for (int i = 0; i < 4; i++) {
             involved_dim.push_back(true);
+        }
     }
 
     if (!node->is_cpu_op() &&
         (node->type() == ChakraNodeType::COMM_COLL_NODE)) {
         if (node->comm_type() == ChakraCollectiveCommType::ALL_REDUCE) {
-            sys->comm_NI->log_network(std::to_string(node->id()) + ",All_Reduce,,,,,,,,");
+            sys->comm_NI->log_network(std::to_string(node->id()) +
+                                      ",All_Reduce,,,,,,,,");
             DataSet* fp =
                 sys->generate_all_reduce(node->comm_size(), involved_dim,
                                          comm_group, node->comm_priority());
@@ -263,7 +263,8 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
             fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
 
         } else if (node->comm_type() == ChakraCollectiveCommType::ALL_TO_ALL) {
-            sys->comm_NI->log_network(std::to_string(node->id()) + ",ALL_TO_ALL,,,,,,,,"); 
+            sys->comm_NI->log_network(std::to_string(node->id()) +
+                                      ",ALL_TO_ALL,,,,,,,,");
             DataSet* fp =
                 sys->generate_all_to_all(node->comm_size(), involved_dim,
                                          comm_group, node->comm_priority());
@@ -272,7 +273,8 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
             fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
 
         } else if (node->comm_type() == ChakraCollectiveCommType::ALL_GATHER) {
-            sys->comm_NI->log_network(std::to_string(node->id()) + ",ALL_GATHER,,,,,,,,"); 
+            sys->comm_NI->log_network(std::to_string(node->id()) +
+                                      ",ALL_GATHER,,,,,,,,");
             DataSet* fp =
                 sys->generate_all_gather(node->comm_size(), involved_dim,
                                          comm_group, node->comm_priority());
@@ -282,7 +284,8 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
 
         } else if (node->comm_type() ==
                    ChakraCollectiveCommType::REDUCE_SCATTER) {
-            sys->comm_NI->log_network(std::to_string(node->id()) + ",REDUCE_SCATTER,,,,,,,,"); 
+            sys->comm_NI->log_network(std::to_string(node->id()) +
+                                      ",REDUCE_SCATTER,,,,,,,,");
             DataSet* fp =
                 sys->generate_reduce_scatter(node->comm_size(), involved_dim,
                                              comm_group, node->comm_priority());
@@ -291,7 +294,8 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
             fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
 
         } else if (node->comm_type() == ChakraCollectiveCommType::BROADCAST) {
-            sys->comm_NI->log_network(std::to_string(node->id()) + ",BROADCAST,,,,,,,,"); 
+            sys->comm_NI->log_network(std::to_string(node->id()) +
+                                      ",BROADCAST,,,,,,,,");
             // broadcast colelctive has not been implemented in ASTRA-SIM yet.
             // So, we just use its real system mesurements
             uint64_t runtime = 1ul;
@@ -311,7 +315,8 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
             fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
         }
     } else if (node->type() == ChakraNodeType::COMM_SEND_NODE) {
-        sys->comm_NI->log_network(std::to_string(node->id()) + ",COMM_SEND_NODE,,,,,,,,"); 
+        sys->comm_NI->log_network(std::to_string(node->id()) +
+                                  ",COMM_SEND_NODE,,,,,,,,");
         sim_request snd_req;
         snd_req.srcRank = node->comm_src();
         snd_req.dstRank = node->comm_dst();
@@ -326,7 +331,8 @@ void Workload::issue_comm(shared_ptr<Chakra::ETFeederNode> node) {
                                 Sys::FrontEndSendRecvType::NATIVE,
                                 &Sys::handleEvent, sehd);
     } else if (node->type() == ChakraNodeType::COMM_RECV_NODE) {
-        sys->comm_NI->log_network(std::to_string(node->id()) + ",COMM_RECV_NODE,,,,,,,,"); 
+        sys->comm_NI->log_network(std::to_string(node->id()) +
+                                  ",COMM_RECV_NODE,,,,,,,,");
         sim_request rcv_req;
         RecvPacketEventHandlerData* rcehd = new RecvPacketEventHandlerData;
         rcehd->wlhd = new WorkloadLayerHandlerData;
@@ -362,19 +368,19 @@ void Workload::call(EventType event, CallData* data) {
 
         if (sys->trace_enabled) {
             LoggerFactory::get_logger("workload")
-                ->info("callback, {}, {}, {}, {}, {}",
-                        sys->id, Sys::boostedTick(), node->id(), node->name(),
-                        static_cast<uint64_t>(node->type()));
+                ->info("callback, {}, {}, {}, {}, {}", sys->id,
+                       Sys::boostedTick(), node->id(), node->name(),
+                       static_cast<uint64_t>(node->type()));
         }
 
+        // sys->memory->update_consumed_memory(node);
         hw_resource->release(node);
-
         et_feeder->freeChildrenNodes(node_id);
 
         issue_dep_free_nodes();
-      
-        // The Dataset class provides statistics that should be used later to dump
-        // more statistics in the workload layer
+
+        // The Dataset class provides statistics that should be used later to
+        // dump more statistics in the workload layer
         delete collective_comm_wrapper_map[int_data->data];
         collective_comm_wrapper_map.erase(int_data->data);
         et_feeder->removeNode(node_id);
@@ -389,13 +395,13 @@ void Workload::call(EventType event, CallData* data) {
 
             if (sys->trace_enabled) {
                 LoggerFactory::get_logger("workload")
-                    ->info("callback, {}, {}, {}, {}, {}",
-                            sys->id, Sys::boostedTick(), node->id(),
-                            node->name(), static_cast<uint64_t>(node->type()));
+                    ->info("callback, {}, {}, {}, {}, {}", sys->id,
+                           Sys::boostedTick(), node->id(), node->name(),
+                           static_cast<uint64_t>(node->type()));
             }
 
+            // sys->memory->update_consumed_memory(node);
             hw_resource->release(node);
-
             et_feeder->freeChildrenNodes(node->id());
 
             issue_dep_free_nodes();
@@ -423,11 +429,38 @@ void Workload::fire() {
         }
     }
     call(EventType::General, NULL);
+    // Add to the local memory object to the Sys.
+    // Call update memory method passing the node.
+    // The update memory method will check if the node is fwd or bwd and
+    // increase the memory. The method would throw and excpetion when the memory
+    // size is exceeded. The method will divide the total memory into,
+    // activation, parameter, gradients and optimizer. The activations are freed
+    // after the forward pass. The gradient are freed at the end of bwd pass.
+    // The optimizer state meory is estimated based on Adam.
+    // The class records the max memory used for each type of memory.
+    // Communication nodes need to be considered to make sure we can store the
+    // recieved information. The local memory class should have max size class.
 }
 
 void Workload::report() {
     Tick curr_tick = Sys::boostedTick();
     LoggerFactory::get_logger("workload")
-        ->info("sys[{}] finished, {} cycles, exposed communication {} cycles.",
-               sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops);
+        ->info("sys[{}] finished, {} cycles, exposed communication {} cycles, "
+               "memory {}, activation {}, gradient {}, parameter {}, optimizer "
+               "{}.",
+               sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops,
+               sys->memory->get_consumed_memory(),
+               sys->memory->get_activation_memory(),
+               sys->memory->get_gradient_memory(),
+               sys->memory->get_parameter_memory(),
+               sys->memory->get_optimizer_memory());
+    /*std::cout << "sys[" << sys->id << "] finished, " << curr_tick
+              << " cycles, exposed communication "
+              << (curr_tick - hw_resource->tics_gpu_ops) << " cycles, "
+              << "memory " << sys->memory->get_consumed_memory() << ", "
+              << "activation " << sys->memory->get_activation_memory() << ", "
+              << "gradient " << sys->memory->get_gradient_memory() << ", "
+              << "parameter " << sys->memory->get_parameter_memory() << ", "
+              << "optimizer " << sys->memory->get_optimizer_memory() << "."
+              << std::endl;*/
 }

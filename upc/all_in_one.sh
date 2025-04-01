@@ -1,10 +1,47 @@
 #!/bin/bash
 
-#generate workloads
+#folder_name="T5_Small"
+#model_num=0
 
+#folder_name="T5_Base"
+#model_num=1
 
-folder_name="GPT_3_1300M"
-model_num=5
+#folder_name="T5_Large"
+#model_num=2
+
+#folder_name="GPT_2_Small"
+#model_num=3
+
+#folder_name="GPT_2_Medium"
+#model_num=4
+
+#folder_name="GPT_3_1300M"
+#model_num=5
+
+#folder_name="GPT_Neo_2700M"
+#model_num=6
+
+#folder_name="FLAN_T5_XXL_11B"
+#model_num=7
+
+#folder_name="OPT_13B"
+#model_num=8
+
+folder_name="GPT_NeoX_20B"
+model_num=9
+
+#folder_name="GPT_3_175B"
+#model_num=10
+
+#folder_name="PaLM_540B"
+#model_num=11
+
+#folder_name="GPT_4_Estimated_over_1T"
+#model_num=12
+
+#folder_name="Default"
+#model_num=13
+
 workload_configuration="./workload/"${folder_name}
 memory_config="./configuration/RemoteMemory.json"
 network_log="./network_log/"${folder_name}"/"
@@ -41,7 +78,7 @@ python run_astrasim.py \
 #DGX_H100
 python run_astrasim.py \
     --workload_dir $workload_configuration \
-    --system ./configuration/DGX_H100.json \
+    --system ./configuration/DGX_H100_sys.json \
     --network ./configuration/DGX_H100.yml \
     --memory $memory_config  \
     --output_dir ${output}DGX_H100 \

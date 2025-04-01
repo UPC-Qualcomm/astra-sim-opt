@@ -42,15 +42,19 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
     os.makedirs(os.path.join(file_dir, output_dir), exist_ok=True)
     os.makedirs(os.path.join(file_dir, network_log), exist_ok=True)
     log = os.path.join(file_dir, output_dir, os.path.split(workload_path)[1] + ".log")
-    network_log = os.path.join(file_dir, network_log, os.path.split(workload_path)[1] + ".csv")
+    # with open(log, 'w') as outfile:
+    #    pass
+    network_log = os.path.join(
+        file_dir, network_log, os.path.split(workload_path)[1] + ".csv"
+    )
     cmd = (
         f"{astrasim_bin} "
         f"--system-configuration={system} "
         f"--workload-configuration={workload_path} "
         f"--network-configuration={network} "
         f"--remote-memory-configuration={memory} "
-        f"--comm-group-configuration={workload_path}.json > {log} "
-        f"--network-log={network_log} "
+        f"--comm-group-configuration={workload_path}.json "
+        f"--network-log={network_log} > {log} "
     )
     print(cmd)
     success = run_command(cmd)
@@ -99,7 +103,7 @@ if __name__ == "__main__":
         network=args.network,
         memory=args.memory,
         output_dir=args.output_dir,
-        network_log=args.network_log
+        network_log=args.network_log,
     )
 
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:
