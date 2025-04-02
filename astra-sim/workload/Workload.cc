@@ -126,7 +126,7 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
         if ((node->type() == ChakraNodeType::MEM_LOAD_NODE) ||
             (node->type() == ChakraNodeType::MEM_STORE_NODE)) {
             if (sys->trace_enabled) {
-                logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                logger->info("[TRACE] issue,{},{},{},{},{}", sys->id,
                              Sys::boostedTick(), node->id(), node->name(),
                              static_cast<uint64_t>(node->type()));
             }
@@ -138,7 +138,7 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
                 skip_invalid(node);
             } else {
                 if (sys->trace_enabled) {
-                    logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                    logger->info("[TRACE] issue,{},{},{},{},{}", sys->id,
                                  Sys::boostedTick(), node->id(), node->name(),
                                  static_cast<uint64_t>(node->type()));
                 }
@@ -150,7 +150,7 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
                     (node->type() == ChakraNodeType::COMM_RECV_NODE))) {
             if (sys->trace_enabled) {
                 if (sys->trace_enabled) {
-                    logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                    logger->info("[TRACE] issue,{},{},{},{},{}", sys->id,
                                  Sys::boostedTick(), node->id(), node->name(),
                                  static_cast<uint64_t>(node->type()));
                 }
@@ -208,6 +208,9 @@ void Workload::issue_comp(shared_ptr<Chakra::ETFeederNode> node) {
         } else {
             hw_resource->tics_gpu_ops += runtime;
         }
+        logger.info("[ROOFLINE] {},{},{},{},{},{}",
+                    node->id(), node->num_ops(), node->tensor_size(), perf,
+                    operational_intensity, elapsed_time);
         sys->register_event(this, EventType::General, wlhd, runtime);
     } else {
         // advance this node forward the recorded "replayed" time specificed in
@@ -368,7 +371,7 @@ void Workload::call(EventType event, CallData* data) {
 
         if (sys->trace_enabled) {
             LoggerFactory::get_logger("workload")
-                ->info("callback, {}, {}, {}, {}, {}", sys->id,
+                ->info("[TRACE] callback,{},{},{},{},{}", sys->id,
                        Sys::boostedTick(), node->id(), node->name(),
                        static_cast<uint64_t>(node->type()));
         }
@@ -395,7 +398,7 @@ void Workload::call(EventType event, CallData* data) {
 
             if (sys->trace_enabled) {
                 LoggerFactory::get_logger("workload")
-                    ->info("callback, {}, {}, {}, {}, {}", sys->id,
+                    ->info("[TRACE] callback,{},{},{},{},{}", sys->id,
                            Sys::boostedTick(), node->id(), node->name(),
                            static_cast<uint64_t>(node->type()));
             }
@@ -425,7 +428,10 @@ void Workload::fire() {
     if (sys->id == 0) {
         if (sys->trace_enabled) {
             LoggerFactory::get_logger("workload")
-                ->info("action,sys_id,tick,node_id,node_name,node_type");
+                ->info("[TRACE] action,sys_id,tick,node_id,node_name,node_type");
+            LoggerFactory::get_logger("workload")
+                ->info("[ROOFLINE] node_id,num_ops,tensor_size,perf,operational_intensity,"
+                       "elapsed_time");
         }
     }
     call(EventType::General, NULL);
@@ -445,7 +451,7 @@ void Workload::fire() {
 void Workload::report() {
     Tick curr_tick = Sys::boostedTick();
     LoggerFactory::get_logger("workload")
-        ->info("sys[{}] finished, {} cycles, exposed communication {} cycles, "
+        ->info("[SUMMARY] sys[{}] finished, {} cycles, exposed communication {} cycles, "
                "memory {}, activation {}, gradient {}, parameter {}, optimizer "
                "{}.",
                sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops,
