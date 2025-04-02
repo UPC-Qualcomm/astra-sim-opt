@@ -15,8 +15,8 @@
 #folder_name="GPT_2_Medium"
 #model_num=4
 
-#folder_name="GPT_3_1300M"
-#model_num=5
+folder_name="GPT_3_1300M"
+model_num=5
 
 #folder_name="GPT_Neo_2700M"
 #model_num=6
@@ -27,8 +27,8 @@
 #folder_name="OPT_13B"
 #model_num=8
 
-folder_name="GPT_NeoX_20B"
-model_num=9
+# folder_name="GPT_NeoX_20B"
+# model_num=9
 
 #folder_name="GPT_3_175B"
 #model_num=10
