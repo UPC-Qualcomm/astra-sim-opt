@@ -425,7 +425,7 @@ void Workload::fire() {
     if (sys->id == 0) {
         if (sys->trace_enabled) {
             LoggerFactory::get_logger("workload")
-                ->info("action, sys_id, tick, node_id, node_name, node_type");
+                ->info("action,sys_id,tick,node_id,node_name,node_type");
         }
     }
     call(EventType::General, NULL);
