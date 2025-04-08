@@ -208,7 +208,8 @@ void Workload::issue_comp(shared_ptr<Chakra::ETFeederNode> node) {
         } else {
             hw_resource->tics_gpu_ops += runtime;
         }
-        logger.info("[ROOFLINE] {},{},{},{},{},{}",
+        LoggerFactory::get_logger("workload")
+            ->info("[ROOFLINE] {},{},{},{},{},{}",
                     node->id(), node->num_ops(), node->tensor_size(), perf,
                     operational_intensity, elapsed_time);
         sys->register_event(this, EventType::General, wlhd, runtime);

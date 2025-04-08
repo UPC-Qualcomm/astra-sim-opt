@@ -51,11 +51,11 @@ result="./results/"${folder_name}"/"
 
 rm -rf $output
 rm -rf $result
-rm -rf $workload_configuration
-rm -rf $network_log
+# rm -rf $workload_configuration
+# rm -rf $network_log
 #
 #
-python generate_workloads.py --model $model_num --folder_name $folder_name
+# python generate_workloads.py --model $model_num --folder_name $folder_name
 
 #2D_Torus
 python run_astrasim.py \
