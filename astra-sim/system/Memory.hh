@@ -181,6 +181,8 @@ class Memory {
     int get_curr_stack(std::string node_name);
     std::string layer_type_to_str(LayerTypes type);
     Memory::LayerTypes str_to_layer_type(std::string node_name);
+    bool check_free_memory(const std::shared_ptr<Chakra::ETFeederNode> node,
+                           int sys_id);
     void update_consumed_memory(
         const std::shared_ptr<Chakra::ETFeederNode> node, int sys_id);
 

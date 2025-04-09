@@ -174,8 +174,9 @@ void Memory::update_consumed_memory(
     }
 }*/
 
-void Memory::update_consumed_memory(
-    const std::shared_ptr<Chakra::ETFeederNode> node, int sys_id) {
+bool Memory::check_free_memory(const std::shared_ptr<Chakra::ETFeederNode> node,
+                               int sys_id) {
+
     // Check for free memory.
     if (this->get_free_memory() + node->tensor_size() < 0) {
         std::ostringstream oss;
@@ -183,7 +184,11 @@ void Memory::update_consumed_memory(
             << node->name() << " with Id " << node->id();
         throw std::logic_error(oss.str());
     }
+    return true;
+}
 
+void Memory::update_consumed_memory(
+    const std::shared_ptr<Chakra::ETFeederNode> node, int sys_id) {
     // Get access to the Chakra node
     auto chakra_node = node->getChakraNode();
 
@@ -216,7 +221,7 @@ void Memory::update_consumed_memory(
                     }
                 }
             }
-        }  
+        }
         // Communication node
         // Replace current node ID in children lists with its actual
         // children
@@ -234,7 +239,6 @@ void Memory::update_consumed_memory(
                                               children_ids);
 
                 this->tmp_gradient_memory += tensor_size;
-
             }
         }
         // Remove node_id from activation_memory children lists
@@ -248,13 +252,11 @@ void Memory::update_consumed_memory(
         this->is_forward_pass && !is_tensor ? 0 : this->get_optimizer_memory();
     long long consumed_mem = this->get_parameter_memory() + optimizer_mem +
                              activation_mem + gradient_mem;
-    LoggerFactory::get_logger("memory")->info(
-        "memory, {}, {}, {}, {}, {}, memory {}, activation {}, gradient {}, "
-        "parameter {}, optimizer "
-        "{}.",
-        sys_id, Sys::boostedTick(), node->id(), node->name(),
-        static_cast<uint64_t>(node->type()), consumed_mem, activation_mem,
-        gradient_mem, this->get_parameter_memory(), optimizer_mem);
+    LoggerFactory::get_memory_logger()->info(
+        ",{}, {}, {}, {}, {}, {}, {}, {}, {}, {}.", sys_id, Sys::boostedTick(),
+        node->id(), node->name(), static_cast<uint64_t>(node->type()),
+        consumed_mem, activation_mem, gradient_mem,
+        this->get_parameter_memory(), optimizer_mem);
 }
 
 Memory::~Memory() {}
