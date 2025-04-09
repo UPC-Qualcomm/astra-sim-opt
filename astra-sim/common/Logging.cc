@@ -4,8 +4,8 @@ namespace AstraSim {
 
 std::unordered_set<spdlog::sink_ptr> LoggerFactory::default_sinks;
 std::shared_ptr<spdlog::logger> LoggerFactory::memory_logger = nullptr;
-std::shared_ptr<spdlog::logger> LoggerFactory::system_logger = nullptr;
-std::shared_ptr<spdlog::logger> LoggerFactory::workload_logger = nullptr;
+// std::shared_ptr<spdlog::logger> LoggerFactory::system_logger = nullptr;
+// std::shared_ptr<spdlog::logger> LoggerFactory::workload_logger = nullptr;
 
 std::shared_ptr<spdlog::logger> LoggerFactory::get_logger(
     const std::string& logger_name) {
@@ -33,13 +33,13 @@ std::shared_ptr<spdlog::logger> LoggerFactory::get_memory_logger() {
     return memory_logger;
 }
 
-std::shared_ptr<spdlog::logger> LoggerFactory::get_system_logger() {
+/*std::shared_ptr<spdlog::logger> LoggerFactory::get_system_logger() {
     return system_logger;
-}
+}*/
 
-std::shared_ptr<spdlog::logger> LoggerFactory::get_workload_logger() {
+/*std::shared_ptr<spdlog::logger> LoggerFactory::get_workload_logger() {
     return workload_logger;
-}
+}*/
 
 void LoggerFactory::init(const std::string& log_config_path) {
     if (log_config_path != "empty") {
@@ -71,7 +71,7 @@ void LoggerFactory::init_default_components(
 
     auto sink_rotate_err =
         std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-            log_config_path + "_err.log", 1024 * 1024 * 10, 10);
+            log_config_path + ".err", 1024 * 1024 * 10, 10);
     sink_rotate_err->set_level(spdlog::level::err);
     default_sinks.insert(sink_rotate_err);
 
@@ -87,21 +87,23 @@ void LoggerFactory::init_default_components(
                         "Parameter, Optimizer");
 
     // Initialize system logger
-    auto system_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+    /*auto system_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
         log_config_path + "_system_trace.csv", 1024 * 1024 * 10, 10);
     system_sink->set_level(spdlog::level::info);
     system_logger = std::make_shared<spdlog::logger>("system", system_sink);
     spdlog::register_logger(system_logger);
     // Set the header
-    system_logger->info(",action, sys_id, tick, node_id, node_name, node_type");
+    system_logger->info(",action, sys_id, tick, node_id, node_name,
+    node_type");*/
 
     // Initialize workload logger
-    auto workload_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        log_config_path + "_workload.csv", 1024 * 1024 * 10, 10);
+    /*auto workload_sink =
+    std::make_shared<spdlog::sinks::rotating_file_sink_mt>( log_config_path +
+    "_workload.csv", 1024 * 1024 * 10, 10);
     workload_sink->set_level(spdlog::level::info);
     workload_logger =
         std::make_shared<spdlog::logger>("workload", workload_sink);
-    spdlog::register_logger(workload_logger);
+    spdlog::register_logger(workload_logger);*/
 
     spdlog::init_thread_pool(8192, 1);
     spdlog::set_pattern("[%Y-%m-%dT%T%z] [%L] <%n>: %v");
