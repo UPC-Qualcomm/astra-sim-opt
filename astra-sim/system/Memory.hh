@@ -184,7 +184,9 @@ class Memory {
     bool check_free_memory(const std::shared_ptr<Chakra::ETFeederNode> node,
                            int sys_id);
     void update_consumed_memory(
-        const std::shared_ptr<Chakra::ETFeederNode> node, int sys_id);
+        const std::shared_ptr<Chakra::ETFeederNode> node,
+        int sys_id,
+        bool trace_mem);
 
     ~Memory();
 

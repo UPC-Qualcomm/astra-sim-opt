@@ -188,7 +188,9 @@ bool Memory::check_free_memory(const std::shared_ptr<Chakra::ETFeederNode> node,
 }
 
 void Memory::update_consumed_memory(
-    const std::shared_ptr<Chakra::ETFeederNode> node, int sys_id) {
+    const std::shared_ptr<Chakra::ETFeederNode> node,
+    int sys_id,
+    bool trace_mem) {
     // Get access to the Chakra node
     auto chakra_node = node->getChakraNode();
 
@@ -252,11 +254,13 @@ void Memory::update_consumed_memory(
         this->is_forward_pass && !is_tensor ? 0 : this->get_optimizer_memory();
     long long consumed_mem = this->get_parameter_memory() + optimizer_mem +
                              activation_mem + gradient_mem;
-    LoggerFactory::get_memory_logger()->info(
-        ",{}, {}, {}, {}, {}, {}, {}, {}, {}, {}.", sys_id, Sys::boostedTick(),
-        node->id(), node->name(), static_cast<uint64_t>(node->type()),
-        consumed_mem, activation_mem, gradient_mem,
-        this->get_parameter_memory(), optimizer_mem);
+    if (trace_mem) {
+        LoggerFactory::get_memory_logger()->info(
+            ",{}, {}, {}, {}, {}, {}, {}, {}, {}, {}.", sys_id,
+            Sys::boostedTick(), node->id(), node->name(),
+            static_cast<uint64_t>(node->type()), consumed_mem, activation_mem,
+            gradient_mem, this->get_parameter_memory(), optimizer_mem);
+    }
 }
 
 Memory::~Memory() {}
