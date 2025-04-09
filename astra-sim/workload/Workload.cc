@@ -102,7 +102,6 @@ void Workload::issue_dep_free_nodes() {
     shared_ptr<Chakra::ETFeederNode> node = et_feeder->getNextIssuableNode();
     while (node != nullptr) {
         if (hw_resource->is_available(node)) {
-            sys->memory->update_consumed_memory(node);
             issue(node);
         } else {
             push_back_queue.push(node);
@@ -119,6 +118,7 @@ void Workload::issue_dep_free_nodes() {
 
 void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
     auto logger = LoggerFactory::get_logger("workload");
+    sys->memory->update_consumed_memory(node, sys->id);
     if (sys->replay_only) {
         hw_resource->occupy(node);
         issue_replay(node);
@@ -372,8 +372,6 @@ void Workload::call(EventType event, CallData* data) {
                        Sys::boostedTick(), node->id(), node->name(),
                        static_cast<uint64_t>(node->type()));
         }
-
-        // sys->memory->update_consumed_memory(node);
         hw_resource->release(node);
         et_feeder->freeChildrenNodes(node_id);
 
@@ -399,8 +397,6 @@ void Workload::call(EventType event, CallData* data) {
                            Sys::boostedTick(), node->id(), node->name(),
                            static_cast<uint64_t>(node->type()));
             }
-
-            // sys->memory->update_consumed_memory(node);
             hw_resource->release(node);
             et_feeder->freeChildrenNodes(node->id());
 

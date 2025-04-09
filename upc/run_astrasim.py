@@ -54,7 +54,7 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
         f"--network-configuration={network} "
         f"--remote-memory-configuration={memory} "
         f"--comm-group-configuration={workload_path}.json "
-        f"--network-log={network_log} > {log} "
+        f"--network-log={network_log} > {log} 2>&1 "
     )
     print(cmd)
     success = run_command(cmd)

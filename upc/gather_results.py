@@ -269,6 +269,7 @@ if __name__ == "__main__":
                 "comm_cycles",
                 "total_memory",
                 "activation",
+                "gradient",
                 "parameter",
                 "optimizer",
             ]
@@ -294,10 +295,11 @@ if __name__ == "__main__":
                     sharded,
                     exec_cycles,
                     comm_cycles,
-                    int(memory) / 1000000000,
-                    int(activation) / 1000000000,
-                    int(parameter) / 1000000000,
-                    int(optimizer) / 1000000000,
+                    int(memory) / (1024 * 1024 * 1024),
+                    int(activation) /  (1024 * 1024 * 1024),
+                    int(gradient) /  (1024 * 1024 * 1024),
+                    int(parameter) /  (1024 * 1024 * 1024),
+                    int(optimizer) /  (1024 * 1024 * 1024),
                 ]
             )
 
