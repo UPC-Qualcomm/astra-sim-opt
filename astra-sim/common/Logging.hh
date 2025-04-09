@@ -20,7 +20,7 @@ class LoggerFactory {
     static void shutdown(void);
 
   private:
-    static void init_default_components();
+    static void init_default_components(const std::string& log_config_path);
     static std::unordered_set<spdlog::sink_ptr> default_sinks;
 };
 
