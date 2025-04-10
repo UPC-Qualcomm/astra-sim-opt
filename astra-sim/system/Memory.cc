@@ -209,7 +209,9 @@ void Memory::update_consumed_memory(
 
     if (this->is_forward_pass) {
         if (is_tensor) {
-            this->parameter_memory += node->tensor_size();
+            if (node->type() == ChakraNodeType::COMP_NODE) {
+                this->parameter_memory += node->tensor_size();
+            }
             this->gradient_memory.removeChildIdFromAll(node_id);
         } else {
             if (node->type() == ChakraNodeType::COMP_NODE ||
@@ -232,15 +234,21 @@ void Memory::update_consumed_memory(
     } else {  // Backward pass
 
         if (is_tensor) {
-            this->parameter_memory += node->tensor_size();
+            if (node->type() == ChakraNodeType::COMP_NODE) {
+                this->parameter_memory += node->tensor_size();
+            }
         } else {
             if (node->type() == ChakraNodeType::COMP_NODE ||
                 node->type() == ChakraNodeType::COMM_RECV_NODE) {
-                uint64_t tensor_size = node->tensor_size();
-                this->gradient_memory.addNode(node_id, tensor_size,
-                                              children_ids);
+                for (auto attr : chakra_node->attr()) {
+                    if (attr.name() == "y_tensor_size") {
+                        uint64_t tensor_size = attr.int64_val();
+                        this->gradient_memory.addNode(node_id, tensor_size,
+                                                      children_ids);
 
-                this->tmp_gradient_memory += tensor_size;
+                        this->tmp_gradient_memory += tensor_size;
+                    }
+                }
             }
         }
         // Remove node_id from activation_memory children lists
