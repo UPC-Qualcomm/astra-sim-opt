@@ -206,16 +206,21 @@ void Memory::update_consumed_memory(
     this->is_forward_pass = !(node->name().find("_d") != std::string::npos);
 
     bool is_tensor = !(node->name().find("@0") != std::string::npos);
-
+    bool is_embedding = node->name().find("emb") != std::string::npos;
     if (this->is_forward_pass) {
         if (is_tensor) {
-            if (node->type() == ChakraNodeType::COMP_NODE) {
-                this->parameter_memory += node->tensor_size();
+            if (node->type() == ChakraNodeType::COMP_NODE && !is_embedding) {
+                for (auto attr : chakra_node->attr()) {
+                    if (attr.name() == "y_tensor_size") {
+                        uint64_t tensor_size = attr.int64_val();
+                        this->parameter_memory += tensor_size;
+                    }
+                }
             }
             this->gradient_memory.removeChildIdFromAll(node_id);
         } else {
-            if (node->type() == ChakraNodeType::COMP_NODE ||
-                node->type() == ChakraNodeType::COMM_RECV_NODE) {
+            if  (!is_embedding && (node->type() == ChakraNodeType::COMP_NODE ||
+                node->type() == ChakraNodeType::COMM_RECV_NODE)) {
                 for (auto attr : chakra_node->attr()) {
                     if (attr.name() == "y_tensor_size") {
                         uint64_t tensor_size = attr.int64_val();
@@ -232,17 +237,15 @@ void Memory::update_consumed_memory(
         this->activation_memory.replaceNodeWithChildrenEverywhere(node_id,
                                                                   children_ids);
     } else {  // Backward pass
-
         if (is_tensor) {
-            if (node->type() == ChakraNodeType::COMP_NODE) {
-                this->parameter_memory += node->tensor_size();
-            }
+            
         } else {
-            if (node->type() == ChakraNodeType::COMP_NODE ||
-                node->type() == ChakraNodeType::COMM_RECV_NODE) {
+            if (!is_embedding && (node->type() == ChakraNodeType::COMP_NODE ||
+                node->type() == ChakraNodeType::COMM_RECV_NODE)) {
                 for (auto attr : chakra_node->attr()) {
                     if (attr.name() == "y_tensor_size") {
                         uint64_t tensor_size = attr.int64_val();
+                        //this->gradient_memory.removeChildIdFromAll(node_id);
                         this->gradient_memory.addNode(node_id, tensor_size,
                                                       children_ids);
 
@@ -255,7 +258,19 @@ void Memory::update_consumed_memory(
         this->activation_memory.removeChildIdFromAll(node_id);
         this->gradient_memory.replaceNodeWithChildrenEverywhere(node_id,
                                                                 children_ids);
+
+            
     }
+    if (sys_id == 32) {for (auto [id, info]  : this->gradient_memory.nodes_) {
+        std::cout << "node id: " << node->id() << "," << id << " {";
+        for(auto child : info.child_node_ids) {
+            std::cout << child << ", ";
+        }
+        std::cout << "}" << std::endl;
+    }
+
+    }
+    
     long long activation_mem = this->activation_memory.totalSize();
     long long gradient_mem = this->gradient_memory.totalSize();
     long long optimizer_mem =

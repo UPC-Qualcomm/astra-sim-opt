@@ -119,6 +119,8 @@ void Workload::issue_dep_free_nodes() {
 void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
     auto logger = LoggerFactory::get_logger("workload");
     sys->memory->check_free_memory(node, sys->id);
+    sys->memory->update_consumed_memory(node, sys->id,
+        sys->trace_enabled);
     if (sys->replay_only) {
         hw_resource->occupy(node);
         issue_replay(node);
@@ -377,7 +379,7 @@ void Workload::call(EventType event, CallData* data) {
 
         issue_dep_free_nodes();
         // TODO: Print memory stats on issue or callback?!
-        sys->memory->update_consumed_memory(node, sys->id, sys->trace_enabled);
+        //sys->memory->update_consumed_memory(node, sys->id, sys->trace_enabled);
 
         // The Dataset class provides statistics that should be used later to
         // dump more statistics in the workload layer
@@ -405,8 +407,8 @@ void Workload::call(EventType event, CallData* data) {
             issue_dep_free_nodes();
 
             // TODO: Print memory stats on issue or callback?!
-            sys->memory->update_consumed_memory(node, sys->id,
-                                                sys->trace_enabled);
+            //sys->memory->update_consumed_memory(node, sys->id,
+            //                                    sys->trace_enabled);
 
             et_feeder->removeNode(wlhd->node_id);
             delete wlhd;

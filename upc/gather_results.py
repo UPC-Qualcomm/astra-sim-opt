@@ -296,10 +296,10 @@ if __name__ == "__main__":
                     exec_cycles,
                     comm_cycles,
                     int(memory) / (1024 * 1024 * 1024),
-                    int(activation) /  (1024 * 1024 * 1024),
-                    int(gradient) /  (1024 * 1024 * 1024),
-                    int(parameter) /  (1024 * 1024 * 1024),
-                    int(optimizer) /  (1024 * 1024 * 1024),
+                    int(activation) / (1024 * 1024 * 1024),
+                    int(gradient) / (1024 * 1024 * 1024),
+                    int(parameter) / (1024 * 1024 * 1024),
+                    int(optimizer) / (1024 * 1024 * 1024),
                 ]
             )
 
