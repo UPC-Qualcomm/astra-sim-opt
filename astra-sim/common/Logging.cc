@@ -77,7 +77,7 @@ void LoggerFactory::init_default_components(
 
     // Initialize memory logger
     auto memory_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        log_config_path + "_memory.csv", 1024 * 1024 * 10, 10);
+        log_config_path + "_memory.csv", 1024 * 1024 * 10 * 10, 10);
     memory_sink->set_level(spdlog::level::info);
     memory_logger = std::make_shared<spdlog::logger>("memory", memory_sink);
     spdlog::register_logger(memory_logger);

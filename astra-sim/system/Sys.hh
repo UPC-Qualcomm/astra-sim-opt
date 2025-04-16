@@ -325,6 +325,8 @@ class Sys : public Callable {
     // statistics
     bool trace_enabled;
 
+    bool trace_mem;
+    
     // skip simulation for all nodes and use current duration
     bool replay_only;
 

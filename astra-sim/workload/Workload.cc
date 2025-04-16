@@ -120,7 +120,7 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
     auto logger = LoggerFactory::get_logger("workload");
     sys->memory->check_free_memory(node, sys->id);
     sys->memory->update_consumed_memory(node, sys->id,
-        sys->trace_enabled);
+        sys->trace_mem);
     if (sys->replay_only) {
         hw_resource->occupy(node);
         issue_replay(node);

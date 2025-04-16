@@ -494,6 +494,14 @@ bool Sys::initialize_sys(string name) {
             this->trace_enabled = false;
         }
     }
+    this->trace_mem = false;
+    if (j.contains("trace-mem")) {
+        if (j["trace-mem"] != 0) {
+            this->trace_mem = true;
+        } else {
+            this->trace_mem = false;
+        }
+    }
     this->replay_only = false;
     if (j.contains("replay-only")) {
         if (j["replay-only"] != 0) {
