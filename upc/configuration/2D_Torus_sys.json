@@ -15,7 +15,8 @@
     "peak-perf": 1000,
     "roofline-enabled": 1,
     "trace-enabled":0,
-    "trace-mem": 1
+    "trace-mem": 1,
+    "mixed-percision": 0
 
 
 }

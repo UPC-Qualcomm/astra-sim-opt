@@ -494,12 +494,20 @@ bool Sys::initialize_sys(string name) {
             this->trace_enabled = false;
         }
     }
-    this->trace_mem = false;
+    this->memory->trace_mem = false;
     if (j.contains("trace-mem")) {
         if (j["trace-mem"] != 0) {
-            this->trace_mem = true;
+            this->memory->trace_mem = true;
         } else {
-            this->trace_mem = false;
+            this->memory->trace_mem = false;
+        }
+    }
+    this->memory->is_mixed_percision = false;
+    if (j.contains("mixed-percision")) {
+        if (j["mixed-percision"] != 0) {
+            this->memory->is_mixed_percision = true;
+        } else {
+            this->memory->is_mixed_percision = false;
         }
     }
     this->replay_only = false;
