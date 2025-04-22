@@ -83,8 +83,8 @@ void LoggerFactory::init_default_components(
     spdlog::register_logger(memory_logger);
     // Set the header
     memory_logger->info(", Sys, Time, Node ID, Node Name, Node Type ,Total "
-                        "Memory,  Activation, Gradient, "
-                        "Parameter, Optimizer");
+                        "Peak Memory,  Activation, Gradient, "
+                        "Parameter, Optimizer, OOM");
 
     // Initialize system logger
     /*auto system_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(

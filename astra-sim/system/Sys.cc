@@ -477,7 +477,7 @@ bool Sys::initialize_sys(string name) {
     }
     if (j.contains("local-mem-size")) {
         auto mem_size = j["local-mem-size"].get<long long>();
-        mem_size = mem_size * 1000000000;
+        mem_size = mem_size * 1024 * 1024 * 1024;
         this->memory->set_memory_size(mem_size);
     }
     if (j.contains("roofline-enabled")) {

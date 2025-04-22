@@ -171,38 +171,47 @@ class Memory {
     Memory();
     void set_memory_size(long long size);
     long long get_memory_size();
-    long long get_consumed_memory();
-    long long get_activation_memory();
-    long long get_gradient_memory();
-    long long get_parameter_memory();
-    long long get_optimizer_memory();
+    long long get_curr_consumed_memory();
+    long long get_max_consumed_memory();
+    long long get_max_activation_memory();
+    long long get_max_gradient_memory();
+    long long get_max_parameter_memory();
+    long long get_max_optimizer_memory();
+    long long get_curr_activation_memory();
+    long long get_curr_gradient_memory();
+    long long get_acumilated_activation_memory();
+    long long get_acumilated_gradient_memory();
     long long get_free_memory();
+    int get_num_bytes();
+    int get_is_oom();
 
     int get_curr_stack(std::string node_name);
     std::string layer_type_to_str(LayerTypes type);
     Memory::LayerTypes str_to_layer_type(std::string node_name);
-    bool check_free_memory(const std::shared_ptr<Chakra::ETFeederNode> node,
-                           int sys_id);
+    bool check_free_memory(const std::shared_ptr<Chakra::ETFeederNode> node);
     void update_consumed_memory(
-        const std::shared_ptr<Chakra::ETFeederNode> node,
-        int sys_id);
+        const std::shared_ptr<Chakra::ETFeederNode> node, int sys_id);
 
     ~Memory();
 
     long long memory_size;
-    long long consumed_memory;
+    long long curr_consumed_mem;
+    long long max_consumed_memory;
+    long long max_parameter_memory;
+    long long max_optimizer_memory;
+    long long max_activation_memory;
+    long long max_gradient_memory;
     NodeIndex activation_memory;
-    long long parameter_memory;
     NodeIndex gradient_memory;
-    long long optimizer_memory;
-    long long tmp_activation_memory;
-    long long tmp_gradient_memory;
+    long long acumilated_activation_memory;
+    long long acumilated_gradient_memory;
     bool is_forward_pass;
     int layer_type_prev;
     int stop_recording_memory;
     int prev_stack_number;
     bool trace_mem;
     bool is_mixed_percision;
+    bool is_oom;
 };
 
 }  // namespace AstraSim
