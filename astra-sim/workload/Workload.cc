@@ -102,7 +102,6 @@ void Workload::issue_dep_free_nodes() {
     shared_ptr<Chakra::ETFeederNode> node = et_feeder->getNextIssuableNode();
     while (node != nullptr) {
         if (hw_resource->is_available(node)) {
-            sys->memory->update_consumed_memory(node);
             issue(node);
         } else {
             push_back_queue.push(node);
@@ -119,6 +118,7 @@ void Workload::issue_dep_free_nodes() {
 
 void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
     auto logger = LoggerFactory::get_logger("workload");
+    sys->memory->update_consumed_memory(node, sys->id);
     if (sys->replay_only) {
         hw_resource->occupy(node);
         issue_replay(node);
@@ -149,11 +149,9 @@ void Workload::issue(shared_ptr<Chakra::ETFeederNode> node) {
                     (node->type() == ChakraNodeType::COMM_SEND_NODE) ||
                     (node->type() == ChakraNodeType::COMM_RECV_NODE))) {
             if (sys->trace_enabled) {
-                if (sys->trace_enabled) {
-                    logger->info("issue, {}, {}, {}, {}, {}", sys->id,
-                                 Sys::boostedTick(), node->id(), node->name(),
-                                 static_cast<uint64_t>(node->type()));
-                }
+                logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                             Sys::boostedTick(), node->id(), node->name(),
+                             static_cast<uint64_t>(node->type()));
             }
             issue_comm(node);
         } else if (node->type() == ChakraNodeType::INVALID_NODE) {
@@ -372,12 +370,12 @@ void Workload::call(EventType event, CallData* data) {
                        Sys::boostedTick(), node->id(), node->name(),
                        static_cast<uint64_t>(node->type()));
         }
-
-        // sys->memory->update_consumed_memory(node);
         hw_resource->release(node);
         et_feeder->freeChildrenNodes(node_id);
 
         issue_dep_free_nodes();
+        // TODO: Print memory stats on issue or callback?!
+        // sys->memory->update_consumed_memory(node, sys->id);
 
         // The Dataset class provides statistics that should be used later to
         // dump more statistics in the workload layer
@@ -399,12 +397,13 @@ void Workload::call(EventType event, CallData* data) {
                            Sys::boostedTick(), node->id(), node->name(),
                            static_cast<uint64_t>(node->type()));
             }
-
-            // sys->memory->update_consumed_memory(node);
             hw_resource->release(node);
             et_feeder->freeChildrenNodes(node->id());
 
             issue_dep_free_nodes();
+
+            // TODO: Print memory stats on issue or callback?!
+            // sys->memory->update_consumed_memory(node, sys->id);
 
             et_feeder->removeNode(wlhd->node_id);
             delete wlhd;
@@ -447,13 +446,15 @@ void Workload::report() {
     LoggerFactory::get_logger("workload")
         ->info("sys[{}] finished, {} cycles, exposed communication {} cycles, "
                "memory {}, activation {}, gradient {}, parameter {}, optimizer "
+               "{}, is_OOM "
                "{}.",
                sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops,
-               sys->memory->get_consumed_memory(),
-               sys->memory->get_activation_memory(),
-               sys->memory->get_gradient_memory(),
-               sys->memory->get_parameter_memory(),
-               sys->memory->get_optimizer_memory());
+               sys->memory->get_max_consumed_memory(),
+               sys->memory->get_max_activation_memory(),
+               sys->memory->get_max_gradient_memory(),
+               sys->memory->get_max_parameter_memory(),
+               sys->memory->get_max_optimizer_memory(),
+               sys->memory->get_is_oom());
     /*std::cout << "sys[" << sys->id << "] finished, " << curr_tick
               << " cycles, exposed communication "
               << (curr_tick - hw_resource->tics_gpu_ops) << " cycles, "

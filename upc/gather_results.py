@@ -29,8 +29,9 @@ def extract_runtime(log_path):
     gradient = 0
     parameter = 0
     optimizer = 0
+    is_oom = False
 
-    pattern = r"(\d+) cycles, exposed communication (\d+) cycles, memory (\d+), activation (\d+), gradient (\d+), parameter (\d+), optimizer (\d+)."
+    pattern = r"(\d+) cycles, exposed communication (\d+) cycles, memory (\d+), activation (\d+), gradient (\d+), parameter (\d+), optimizer (\d+), is_OOM (\d+)."
 
     # Lists to store extracted values
     execution_cycles = []
@@ -63,6 +64,7 @@ def extract_runtime(log_path):
                 gradient,
                 parameter,
                 optimizer,
+                is_oom,
             )  # Not enough lines in log file
 
         # Store extracted values in separate lists
@@ -74,6 +76,7 @@ def extract_runtime(log_path):
             gradient,
             parameter,
             optimizer,
+            is_oom
         ) in matches:
             execution_cycles.append(int(exec_cycles))
             communication_cycles.append(int(comm_cycles))
@@ -106,6 +109,7 @@ def extract_runtime(log_path):
         gradient,
         parameter,
         optimizer,
+        is_oom,
     )
 
 
@@ -128,6 +132,7 @@ def gather_runtimes(root):
         gradient,
         parameter,
         optimizer,
+        is_oom,
     ) in runtimes:
         if exec_cycles == -1 or comm_cycles == -1:
             continue
@@ -139,6 +144,7 @@ def gather_runtimes(root):
             gradient,
             parameter,
             optimizer,
+            is_oom,
         ]
     return runtimes_dict
 
@@ -154,11 +160,11 @@ def get_fails(runtimes):
 
 def visualize1(runtimes, ssp, sharded):
     max_runtimes = max(runtimes.values())
-    mat = -1 * np.ones((12, 12))
+    mat = -1 * np.ones((13, 13))
     # vis all data, x=(dp, mp) y=(sp, pp)
-    for ddp in range(12):
+    for ddp in range(13):
         x_value = ddp
-        for mmp in range(12):
+        for mmp in range(13):
             y_value = mmp
             for ssp in {ssp}:
                 ppp = 6 - ddp - mmp - ssp
@@ -179,12 +185,12 @@ def visualize1(runtimes, ssp, sharded):
 
 def visualize2(runtimes, sharded):
     max_runtimes = max(runtimes.values())
-    mat = -1 * np.ones((12 * 12, 12))
+    mat = -1 * np.ones((13 * 13, 13))
     # vis all data, x=(dp, mp) y=(sp, pp)
-    for ddp in range(12):
-        for mmp in range(12):
-            x_value = ddp * 12 + mmp
-            for ssp in range(12):
+    for ddp in range(13):
+        for mmp in range(13):
+            x_value = ddp * 13 + mmp
+            for ssp in range(13):
                 y_value = ssp
                 ppp = 6 - ddp - mmp - ssp
                 rddp, rmmp = int(2**ddp), int(2**mmp)
@@ -269,8 +275,10 @@ if __name__ == "__main__":
                 "comm_cycles",
                 "total_memory",
                 "activation",
+                "gradient",
                 "parameter",
                 "optimizer",
+                "is_oom",
             ]
         )
 
@@ -283,6 +291,7 @@ if __name__ == "__main__":
             gradient,
             parameter,
             optimizer,
+            is_oom,
         ) in runtimes.items():
             writer.writerow(
                 [
@@ -294,10 +303,12 @@ if __name__ == "__main__":
                     sharded,
                     exec_cycles,
                     comm_cycles,
-                    int(memory) / 1000000000,
-                    int(activation) / 1000000000,
-                    int(parameter) / 1000000000,
-                    int(optimizer) / 1000000000,
+                    int(memory) / (1024 * 1024 * 1024),
+                    int(activation) / (1024 * 1024 * 1024),
+                    int(gradient) / (1024 * 1024 * 1024),
+                    int(parameter) / (1024 * 1024 * 1024),
+                    int(optimizer) / (1024 * 1024 * 1024),
+                    is_oom,
                 ]
             )
 
