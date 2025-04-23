@@ -160,7 +160,11 @@ void Workload::issue_dep_free_nodes() {
 
 void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     auto logger = LoggerFactory::get_logger("workload");
-    //sys->memory->update_consumed_memory(node, sys->id);
+    sys->memory->update_consumed_memory(node,
+                                        this->et_feeder->getDependancyResolver()
+                                            .get_data_dependancy()
+                                            .get_children(node->id()),
+                                        sys->id);
     if (sys->trace_enabled) {
         logger->debug("issue,sys->id={}, tick={}, node->id={}, "
                       "node->name={}, node->type={}",
@@ -194,7 +198,8 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                 } else {
                     if (sys->trace_enabled) {
                         logger->info("issue, {}, {}, {}, {}, {}", sys->id,
-                                     Sys::boostedTick(), node->id(), node->name(),
+                                     Sys::boostedTick(), node->id(),
+                                     node->name(),
                                      static_cast<uint64_t>(node->type()));
                     }
                     // comp node on gpu
@@ -468,7 +473,7 @@ void Workload::call(EventType event, CallData* data) {
             this->et_feeder->getDependancyResolver().finish_node(wlhd->node_id);
 
             issue_dep_free_nodes();
- 
+
             delete wlhd;
         }
     }
@@ -513,13 +518,13 @@ void Workload::report() {
                "memory {}, activation {}, gradient {}, parameter {}, optimizer "
                "{}, is_OOM "
                "{}.",
-               sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops, 0, 0, 0 ,0 ,0 ,0);
-               //sys->memory->get_max_consumed_memory(),
-               //sys->memory->get_max_activation_memory(),
-               //sys->memory->get_max_gradient_memory(),
-               //sys->memory->get_max_parameter_memory(),
-               //sys->memory->get_max_optimizer_memory(),
-               //sys->memory->get_is_oom());
+               sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops,
+               sys->memory->get_max_consumed_memory(),
+               sys->memory->get_max_activation_memory(),
+               sys->memory->get_max_gradient_memory(),
+               sys->memory->get_max_parameter_memory(),
+               sys->memory->get_max_optimizer_memory(),
+               sys->memory->get_is_oom());
     /*std::cout << "sys[" << sys->id << "] finished, " << curr_tick
               << " cycles, exposed communication "
               << (curr_tick - hw_resource->tics_gpu_ops) << " cycles, "
