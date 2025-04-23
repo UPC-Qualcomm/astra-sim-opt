@@ -513,13 +513,13 @@ void Workload::report() {
                "memory {}, activation {}, gradient {}, parameter {}, optimizer "
                "{}, is_OOM "
                "{}.",
-               sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops,
-               sys->memory->get_max_consumed_memory(),
-               sys->memory->get_max_activation_memory(),
-               sys->memory->get_max_gradient_memory(),
-               sys->memory->get_max_parameter_memory(),
-               sys->memory->get_max_optimizer_memory(),
-               sys->memory->get_is_oom());
+               sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops, 0, 0, 0 ,0 ,0 ,0);
+               //sys->memory->get_max_consumed_memory(),
+               //sys->memory->get_max_activation_memory(),
+               //sys->memory->get_max_gradient_memory(),
+               //sys->memory->get_max_parameter_memory(),
+               //sys->memory->get_max_optimizer_memory(),
+               //sys->memory->get_is_oom());
     /*std::cout << "sys[" << sys->id << "] finished, " << curr_tick
               << " cycles, exposed communication "
               << (curr_tick - hw_resource->tics_gpu_ops) << " cycles, "

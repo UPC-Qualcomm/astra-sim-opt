@@ -165,7 +165,7 @@ Sys::Sys(int id,
     this->remote_mem->set_sys(id, this);
     this->local_mem_bw = 0;
 
-    this->memory = new Memory();
+    //this->memory = new Memory();
 
     this->memBus = nullptr;
     this->inp_L = 0;
@@ -475,11 +475,11 @@ bool Sys::initialize_sys(string name) {
         local_mem_bw = j["local-mem-bw"];
         local_mem_bw = local_mem_bw * 1000000000;  // GB/sec
     }
-    if (j.contains("local-mem-size")) {
+    /*if (j.contains("local-mem-size")) {
         auto mem_size = j["local-mem-size"].get<long long>();
         mem_size = mem_size * 1024 * 1024 * 1024;
         this->memory->set_memory_size(mem_size);
-    }
+    }*/
     if (j.contains("roofline-enabled")) {
         if (j["roofline-enabled"] != 0) {
             roofline_enabled = true;
@@ -494,7 +494,7 @@ bool Sys::initialize_sys(string name) {
             this->trace_enabled = false;
         }
     }
-    this->memory->trace_mem = false;
+    /*this->memory->trace_mem = false;
     if (j.contains("trace-mem")) {
         if (j["trace-mem"] != 0) {
             this->memory->trace_mem = true;
@@ -509,7 +509,7 @@ bool Sys::initialize_sys(string name) {
         } else {
             this->memory->is_mixed_percision = false;
         }
-    }
+    }*/
     this->replay_only = false;
     if (j.contains("replay-only")) {
         if (j["replay-only"] != 0) {

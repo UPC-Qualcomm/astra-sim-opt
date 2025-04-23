@@ -329,7 +329,7 @@ class Sys : public Callable {
     bool replay_only;
 
     // local memory
-    Memory* memory;
+    //Memory* memory;
 };
 
 }  // namespace AstraSim
