@@ -8,6 +8,7 @@ LICENSE file in the root directory of this source tree.
 #include "common/CommonNetworkApi.hh"
 #include <astra-network-analytical/common/Type.h>
 #include <astra-network-analytical/congestion_unaware/Topology.h>
+#include <string>
 #include <vector>
 
 using namespace AstraSim;
@@ -48,6 +49,9 @@ class CongestionUnawareNetworkApi final : public CommonNetworkApi {
                  sim_request* request,
                  void (*msg_handler)(void* fun_arg),
                  void* fun_arg) override;
+
+    void log_network(std::string str);
+    void init_logger(std::string str, bool enable_network_logger);
 
   private:
     /// topology

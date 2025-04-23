@@ -72,10 +72,26 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
     const auto send_delay = static_cast<double>(send_delay_ns);
     const auto delta = timespec_t({NS, send_delay});
 
+    // Log Network Info
+    // LogNetwork::getInstance().write(std::to_string(src) + ","+
+    // std::to_string(dst) + ",");
+
     // register chunk arrival event after send communication delay
     sim_schedule(delta, CongestionUnawareNetworkApi::process_chunk_arrival,
                  arg_ptr);
 
     // return
     return 0;
+}
+
+void CongestionUnawareNetworkApi::log_network(std::string str) {
+
+    if (this->enable_network_logger) {
+        NetworkLogger::getInstance().write(str);
+    }
+}
+
+void CongestionUnawareNetworkApi::init_logger(std::string str,
+                                              bool enable_network_logger) {
+    NetworkLogger::getInstance().init(str, enable_network_logger);
 }
