@@ -44,19 +44,27 @@ model_num=5
 
 output="./output/"${folder_name}
 result="./results/"${folder_name}
-arch="Switch"
+arch="2D_Torus"
+for arch in "2D_Torus" "3D_Torus" "DGX1" "DGX_H100" "Dragonfly" "FullyConnected" "Ring" "Switch"; do
+    echo "Current architecture: $arch"
+    rm -rf "${result}/${arch}/"
 
-rm -rf "${result}/${arch}/"
+    python gather_node_timings.py --sim_logfilename "${output}/${arch}/1_8_2_4_0.log" --output_filename "${result}/${arch}/trace_1_8_2_4_0.csv"
+    python gather_node_timings.py --sim_logfilename "${output}/${arch}/2_1_32_1_0.log" --output_filename "${result}/${arch}/trace_2_1_32_1_0.csv"
+    python gather_node_timings.py --sim_logfilename "${output}/${arch}/4_1_16_1_0.log" --output_filename "${result}/${arch}/trace_4_1_16_1_0.csv"
+    python gather_node_timings.py --sim_logfilename "${output}/${arch}/4_2_2_4_0.log" --output_filename "${result}/${arch}/trace_4_2_2_4_0.csv"
+    python gather_node_timings.py --sim_logfilename "${output}/${arch}/4_8_2_1_0.log" --output_filename "${result}/${arch}/trace_4_8_2_1_0.csv"
+    python gather_node_timings.py --sim_logfilename "${output}/${arch}/16_1_1_4_0.log" --output_filename "${result}/${arch}/trace_16_1_1_4_0.csv"
+    python gather_node_timings.py --sim_logfilename "${output}/${arch}/1_1_64_1_0.log" --output_filename "${result}/${arch}/trace_1_1_64_1_0.csv"
 
-python gather_node_timings.py --sim_logfilename "${output}/${arch}/1_8_2_4_0.log" --output_filename "${result}/${arch}/trace_1_8_2_4_0.csv"
-python gather_node_timings.py --sim_logfilename "${output}/${arch}/2_1_32_1_0.log" --output_filename "${result}/${arch}/trace_2_1_32_1_0.csv"
-python gather_node_timings.py --sim_logfilename "${output}/${arch}/4_1_16_1_0.log" --output_filename "${result}/${arch}/trace_4_1_16_1_0.csv"
-python gather_node_timings.py --sim_logfilename "${output}/${arch}/4_2_2_4_0.log" --output_filename "${result}/${arch}/trace_4_2_2_4_0.csv"
-python gather_node_timings.py --sim_logfilename "${output}/${arch}/4_8_2_1_0.log" --output_filename "${result}/${arch}/trace_4_8_2_1_0.csv"
+    python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/1_8_2_4_0.log" --output_filename "${result}/${arch}/roofline_1_8_2_4_0.csv"
+    python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/2_1_32_1_0.log" --output_filename "${result}/${arch}/roofline_2_1_32_1_0.csv"
+    python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/4_1_16_1_0.log" --output_filename "${result}/${arch}/roofline_4_1_16_1_0.csv"
+    python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/4_2_2_4_0.log" --output_filename "${result}/${arch}/roofline_4_2_2_4_0.csv"
+    python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/4_8_2_1_0.log" --output_filename "${result}/${arch}/roofline_4_8_2_1_0.csv"
+    python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/16_1_1_4_0.log" --output_filename "${result}/${arch}/roofline_16_1_1_4_0.csv"
+    python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/1_1_64_1_0.log" --output_filename "${result}/${arch}/roofline_1_1_64_1_0.csv"
 
-python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/1_8_2_4_0.log" --output_filename "${result}/${arch}/roofline_1_8_2_4_0.csv"
-python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/2_1_32_1_0.log" --output_filename "${result}/${arch}/roofline_2_1_32_1_0.csv"
-python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/4_1_16_1_0.log" --output_filename "${result}/${arch}/roofline_4_1_16_1_0.csv"
-python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/4_2_2_4_0.log" --output_filename "${result}/${arch}/roofline_4_2_2_4_0.csv"
-python gather_roofline_metrics.py --sim_logfilename "${output}/${arch}/4_8_2_1_0.log" --output_filename "${result}/${arch}/roofline_4_8_2_1_0.csv"
+done
+
 
