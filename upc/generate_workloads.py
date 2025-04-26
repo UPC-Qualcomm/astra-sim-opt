@@ -139,6 +139,7 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
         f"--seq {seq} "
         f"--head {head} "
         f"--num_stacks {num_stacks} "
+        f"--weight_sharded {sharded} "
         f"--chakra_schema_version v0.0.4"
     )
     cwd = os.path.join(
@@ -147,6 +148,7 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
         "extern",
         "symbolic_tensor_graph",
     )
+    print(cmd)
     run_command(cmd, cwd)
 
 if __name__ == "__main__":

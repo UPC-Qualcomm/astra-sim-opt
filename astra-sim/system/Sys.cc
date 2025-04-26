@@ -477,7 +477,7 @@ bool Sys::initialize_sys(string name) {
     }
     if (j.contains("local-mem-size")) {
         auto mem_size = j["local-mem-size"].get<long long>();
-        mem_size = mem_size * 1000000000;
+        mem_size = mem_size * 1024 * 1024 * 1024;
         this->memory->set_memory_size(mem_size);
     }
     if (j.contains("roofline-enabled")) {
@@ -492,6 +492,22 @@ bool Sys::initialize_sys(string name) {
             this->trace_enabled = true;
         } else {
             this->trace_enabled = false;
+        }
+    }
+    this->memory->trace_mem = false;
+    if (j.contains("trace-mem")) {
+        if (j["trace-mem"] != 0) {
+            this->memory->trace_mem = true;
+        } else {
+            this->memory->trace_mem = false;
+        }
+    }
+    this->memory->is_mixed_percision = false;
+    if (j.contains("mixed-percision")) {
+        if (j["mixed-percision"] != 0) {
+            this->memory->is_mixed_percision = true;
+        } else {
+            this->memory->is_mixed_percision = false;
         }
     }
     this->replay_only = false;

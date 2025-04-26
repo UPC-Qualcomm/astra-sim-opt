@@ -41,7 +41,7 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
     memory = os.path.join(file_dir, memory)
     os.makedirs(os.path.join(file_dir, output_dir), exist_ok=True)
     os.makedirs(os.path.join(file_dir, network_log), exist_ok=True)
-    log = os.path.join(file_dir, output_dir, os.path.split(workload_path)[1] + ".log")
+    log = os.path.join(file_dir, output_dir, os.path.split(workload_path)[1])
     # with open(log, 'w') as outfile:
     #    pass
     network_log = os.path.join(
@@ -54,7 +54,8 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
         f"--network-configuration={network} "
         f"--remote-memory-configuration={memory} "
         f"--comm-group-configuration={workload_path}.json "
-        f"--network-log={network_log} > {log} "
+        f"--logging-configuration={log} "
+        f"--network-log={network_log} "
     )
     print(cmd)
     success = run_command(cmd)

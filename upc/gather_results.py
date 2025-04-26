@@ -29,8 +29,9 @@ def extract_runtime(log_path):
     gradient = 0
     parameter = 0
     optimizer = 0
+    is_oom = False
 
-    pattern = r"(\d+) cycles, exposed communication (\d+) cycles, memory (\d+), activation (\d+), gradient (\d+), parameter (\d+), optimizer (\d+)."
+    pattern = r"(\d+) cycles, exposed communication (\d+) cycles."
 
     # Lists to store extracted values
     execution_cycles = []
@@ -58,40 +59,42 @@ def extract_runtime(log_path):
                 sharded,
                 -1,
                 -1,
-                memory,
-                activation,
-                gradient,
-                parameter,
-                optimizer,
+                ##memory,
+                ##activation,
+                ##gradient,
+                ##parameter,
+                ##optimizer,
+                ##is_oom,
             )  # Not enough lines in log file
 
         # Store extracted values in separate lists
         for (
             exec_cycles,
             comm_cycles,
-            memory,
-            activation,
-            gradient,
-            parameter,
-            optimizer,
+            ##memory,
+            ##activation,
+            ##gradient,
+            ##parameter,
+            ##optimizer,
+            ##is_oom
         ) in matches:
             execution_cycles.append(int(exec_cycles))
             communication_cycles.append(int(comm_cycles))
-            memory_.append(int(memory))
-            activation_.append(int(activation))
-            gradient_.append(int(gradient))
-            parameter_.append(int(parameter))
-            optimizer_.append(int(optimizer))
+            ##memory_.append(int(memory))
+            ##activation_.append(int(activation))
+            ##gradient_.append(int(gradient))
+            ##parameter_.append(int(parameter))
+            ##optimizer_.append(int(optimizer))
 
         # print("Execution Cycles:", execution_cycles)
         # print("Communication Cycles:", communication_cycles)
-        exec_cycles = sum(execution_cycles) / len(execution_cycles)
-        comm_cycles = sum(communication_cycles) / len(communication_cycles)
-        memory = sum(memory_) / len(memory_)
-        activation = sum(activation_) / len(activation_)
-        gradient = sum(gradient_) / len(gradient_)
-        parameter = sum(parameter_) / len(parameter_)
-        optimizer = sum(optimizer_) / len(optimizer_)
+        exec_cycles = max(execution_cycles) 
+        comm_cycles = max(communication_cycles)
+        ##memory = sum(memory_) / len(memory_)
+        ##activation = sum(activation_) / len(activation_)
+        ##gradient = sum(gradient_) / len(gradient_)
+        ##parameter = sum(parameter_) / len(parameter_)
+        ##optimizer = sum(optimizer_) / len(optimizer_)
 
     return (
         dp,
@@ -101,11 +104,12 @@ def extract_runtime(log_path):
         sharded,
         exec_cycles,
         comm_cycles,
-        memory,
-        activation,
-        gradient,
-        parameter,
-        optimizer,
+        ##memory,
+        ##activation,
+        ##gradient,
+        ##parameter,
+        ##optimizer,
+        ##is_oom,
     )
 
 
@@ -123,22 +127,24 @@ def gather_runtimes(root):
         sharded,
         exec_cycles,
         comm_cycles,
-        memory,
-        activation,
-        gradient,
-        parameter,
-        optimizer,
+        ##memory,
+        ##activation,
+        ##gradient,
+        ##parameter,
+        ##optimizer,
+        ##is_oom,
     ) in runtimes:
         if exec_cycles == -1 or comm_cycles == -1:
             continue
         runtimes_dict[(dp, mp, sp, pp, sharded)] = [
             exec_cycles,
             comm_cycles,
-            memory,
-            activation,
-            gradient,
-            parameter,
-            optimizer,
+            ##memory,
+            ##activation,
+            ##gradient,
+            ##parameter,
+            ##optimizer,
+            ##is_oom,
         ]
     return runtimes_dict
 
@@ -154,11 +160,12 @@ def get_fails(runtimes):
 
 def visualize1(runtimes, ssp, sharded):
     max_runtimes = max(runtimes.values())
-    mat = -1 * np.ones((12, 12))
+    num = 7
+    mat = -1 * np.ones((num, num))
     # vis all data, x=(dp, mp) y=(sp, pp)
-    for ddp in range(12):
+    for ddp in range(num):
         x_value = ddp
-        for mmp in range(12):
+        for mmp in range(num):
             y_value = mmp
             for ssp in {ssp}:
                 ppp = 6 - ddp - mmp - ssp
@@ -179,12 +186,13 @@ def visualize1(runtimes, ssp, sharded):
 
 def visualize2(runtimes, sharded):
     max_runtimes = max(runtimes.values())
-    mat = -1 * np.ones((12 * 12, 12))
+    num = 7
+    mat = -1 * np.ones((num * num, num))
     # vis all data, x=(dp, mp) y=(sp, pp)
-    for ddp in range(12):
-        for mmp in range(12):
-            x_value = ddp * 12 + mmp
-            for ssp in range(12):
+    for ddp in range(num):
+        for mmp in range(num):
+            x_value = ddp * num + mmp
+            for ssp in range(num):
                 y_value = ssp
                 ppp = 6 - ddp - mmp - ssp
                 rddp, rmmp = int(2**ddp), int(2**mmp)
@@ -267,10 +275,12 @@ if __name__ == "__main__":
                 "sharded",
                 "exec_cycles",
                 "comm_cycles",
-                "total_memory",
-                "activation",
-                "parameter",
-                "optimizer",
+                ##"total_memory",
+                ##"activation",
+                ##"gradient",
+                ##"parameter",
+                ##"optimizer",
+                ##"is_oom",
             ]
         )
 
@@ -278,11 +288,12 @@ if __name__ == "__main__":
         for (dp, mp, sp, pp, sharded), (
             exec_cycles,
             comm_cycles,
-            memory,
-            activation,
-            gradient,
-            parameter,
-            optimizer,
+            ##memory,
+            ##activation,
+            ##gradient,
+            ##parameter,
+            ##optimizer,
+            ##is_oom,
         ) in runtimes.items():
             writer.writerow(
                 [
@@ -294,10 +305,12 @@ if __name__ == "__main__":
                     sharded,
                     exec_cycles,
                     comm_cycles,
-                    int(memory) / 1000000000,
-                    int(activation) / 1000000000,
-                    int(parameter) / 1000000000,
-                    int(optimizer) / 1000000000,
+                    ##int(memory) / (1024 * 1024 * 1024),
+                    ##int(activation) / (1024 * 1024 * 1024),
+                    ##int(gradient) / (1024 * 1024 * 1024),
+                    ##int(parameter) / (1024 * 1024 * 1024),
+                    ##int(optimizer) / (1024 * 1024 * 1024),
+                    ##is_oom,
                 ]
             )
 
