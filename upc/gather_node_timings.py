@@ -11,7 +11,7 @@ def extract_csv_from_log(file_path, output_path):
     csv_lines = []
     for line in lines:
         match = re.match(
-            r"^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[workload\] \[info\] \[TRACE\] (action,sys_id,tick,node_id,node_name,node_type|issue,\d+,\d+,\d+,.*|callback,\d+,\d+,\d+,.*)$",
+            r"^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[workload\] \[info\] \[TRACE\] (.*)$",
             line,
         )
         if match:

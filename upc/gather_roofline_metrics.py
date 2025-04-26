@@ -9,7 +9,7 @@ def extract_csv_from_log(file_path, output_path):
     
     csv_lines = []
     for line in lines:
-        match = re.match(r'^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[workload\] \[info\] \[ROOFLINE\] (node_id,num_ops,tensor_size,perf,operational_intensity,elapsed_time|\d+,\d+,\d+,\d+\.\d+,\d+\.\d+,\d+\.\d+)$', line)
+        match = re.match(r'^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[workload\] \[info\] \[ROOFLINE\] (.*)$', line)
         if match:
             csv_lines.append(match.group(1))
     
