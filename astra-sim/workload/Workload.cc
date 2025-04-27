@@ -169,7 +169,6 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         logger->info("[TRACE] issue,{},{},{},{},{}", sys->id,
                                  Sys::boostedTick(), node->id(), node->name(),
                                  static_cast<uint64_t>(node->type()));
-                }
     }
 
     this->et_feeder->getDependancyResolver().take_node(node->id());
@@ -520,7 +519,7 @@ void Workload::fire() {
 void Workload::report() {
     Tick curr_tick = Sys::boostedTick();
     LoggerFactory::get_logger("workload")
-        ->info("[SUMMARY] sys[{}] finished, {} cycles, exposed communication {} cycles, "
+        ->info("[SUMMARY] sys[{}] finished, {} cycles, exposed communication {} cycles, ",
                sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops);
     // sys->memory->get_max_consumed_memory(),
     // sys->memory->get_max_activation_memory(),
