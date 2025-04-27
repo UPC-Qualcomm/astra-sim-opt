@@ -166,10 +166,10 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                                             .get_children(node->id()),
                                         sys->id);*/
     if (sys->trace_enabled) {
-        logger->debug("issue,sys->id={}, tick={}, node->id={}, "
-                      "node->name={}, node->type={}",
-                      sys->id, Sys::boostedTick(), node->id(), node->name(),
-                      static_cast<uint64_t>(node->type()));
+        logger->info("[TRACE] issue,{},{},{},{},{}", sys->id,
+                                 Sys::boostedTick(), node->id(), node->name(),
+                                 static_cast<uint64_t>(node->type()));
+                }
     }
 
     this->et_feeder->getDependancyResolver().take_node(node->id());
@@ -181,7 +181,7 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         if ((node->type() == ChakraNodeType::MEM_LOAD_NODE) ||
             (node->type() == ChakraNodeType::MEM_STORE_NODE)) {
             if (sys->trace_enabled) {
-                logger->info("issue, {}, {}, {}, {}, {}", sys->id,
+                logger->info("[TRACE] issue,{},{},{},{},{}", sys->id,
                              Sys::boostedTick(), node->id(), node->name(),
                              static_cast<uint64_t>(node->type()));
             }
@@ -197,10 +197,9 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                     issue_replay(node);
                 } else {
                     if (sys->trace_enabled) {
-                        logger->info("issue, {}, {}, {}, {}, {}", sys->id,
-                                     Sys::boostedTick(), node->id(),
-                                     node->name(),
-                                     static_cast<uint64_t>(node->type()));
+                        logger->info("[TRACE] issue,{},{},{},{},{}", sys->id,
+                                 Sys::boostedTick(), node->id(), node->name(),
+                                 static_cast<uint64_t>(node->type()));
                     }
                     // comp node on gpu
                     issue_comp(node);
@@ -277,6 +276,10 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     } else {
         hw_resource->tics_gpu_ops += runtime;
     }
+    LoggerFactory::get_logger("workload")
+            ->info("[ROOFLINE] {},{},{},{},{},{}",
+                    node->id(), node->num_ops(), node->tensor_size(), perf,
+                    operational_intensity, elapsed_time);
     sys->register_event(this, EventType::General, wlhd, runtime);
 }
 
@@ -439,7 +442,7 @@ void Workload::call(EventType event, CallData* data) {
 
         if (sys->trace_enabled) {
             LoggerFactory::get_logger("workload")
-                ->info("callback, {}, {}, {}, {}, {}", sys->id,
+                ->info("[TRACE] callback,{},{},{},{},{}", sys->id,
                        Sys::boostedTick(), node->id(), node->name(),
                        static_cast<uint64_t>(node->type()));
         }
@@ -464,7 +467,7 @@ void Workload::call(EventType event, CallData* data) {
 
             if (sys->trace_enabled) {
                 LoggerFactory::get_logger("workload")
-                    ->info("callback, {}, {}, {}, {}, {}", sys->id,
+                    ->info("[TRACE] callback,{},{},{},{},{}", sys->id,
                            Sys::boostedTick(), node->id(), node->name(),
                            static_cast<uint64_t>(node->type()));
             }
@@ -494,7 +497,10 @@ void Workload::fire() {
     if (sys->id == 0) {
         if (sys->trace_enabled) {
             LoggerFactory::get_logger("workload")
-                ->info("action, sys_id, tick, node_id, node_name, node_type");
+                ->info("[TRACE] action,sys_id,tick,node_id,node_name,node_type");
+            LoggerFactory::get_logger("workload")
+                ->info("[ROOFLINE] node_id,num_ops,tensor_size,perf,operational_intensity,"
+                       "elapsed_time");
         }
     }
     call(EventType::General, NULL);
@@ -514,7 +520,7 @@ void Workload::fire() {
 void Workload::report() {
     Tick curr_tick = Sys::boostedTick();
     LoggerFactory::get_logger("workload")
-        ->info("sys[{}] finished, {} cycles, exposed communication {} cycles, ",
+        ->info("[SUMMARY] sys[{}] finished, {} cycles, exposed communication {} cycles, "
                sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops);
     // sys->memory->get_max_consumed_memory(),
     // sys->memory->get_max_activation_memory(),
