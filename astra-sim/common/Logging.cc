@@ -114,7 +114,7 @@ void LoggerFactory::init_default_components(
     spdlog::register_logger(roofline_logger);
     // Set the header
     roofline_logger->info(
-        ", node_id,num_ops,tensor_size,perf,operational_intensity,"
+        ",sys_id,node_id,num_ops,tensor_size,perf,operational_intensity,"
         "elapsed_time");
 
     // Initialize system logger
