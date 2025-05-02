@@ -113,9 +113,9 @@ void LoggerFactory::init_default_components(
         std::make_shared<spdlog::logger>("roofline", roofline_sink);
     spdlog::register_logger(roofline_logger);
     // Set the header
-    roofline_logger->info(
-        ",sys_id,node_id,num_ops,tensor_size,perf,operational_intensity,"
-        "elapsed_time");
+    roofline_logger->info(",sys_id,node_id,node_name,num_ops,tensor_size,perf,"
+                          "operational_intensity,"
+                          "elapsed_time,issue_tick,callback_tick");
 
     // Initialize system logger
     /*auto system_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(

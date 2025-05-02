@@ -278,8 +278,9 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         hw_resource->tics_gpu_ops += runtime;
     }
     LoggerFactory::get_roofline_logger()->info(
-        ",{},{},{},{},{},{},{}", sys->id, node->id(), node->num_ops(),
-        node->tensor_size(), perf, operational_intensity, elapsed_time);
+        ",{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(), node->name(),
+        node->num_ops(), node->tensor_size(), perf, operational_intensity,
+        runtime, Sys::boostedTick(), Sys::boostedTick() + runtime);
     sys->register_event(this, EventType::General, wlhd, runtime);
 }
 
