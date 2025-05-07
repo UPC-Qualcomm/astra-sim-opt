@@ -98,7 +98,7 @@ void LoggerFactory::init_default_components(
 
     // Initialize trace logger
     auto trace_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        log_config_path + "_trace.csv", 1024 * 1024 * 10 * 10, 10);
+        log_config_path + "_trace.csv", 1024 * 1024 * 10 * 100, 10);
     trace_sink->set_level(spdlog::level::info);
     trace_logger = std::make_shared<spdlog::logger>("trace", trace_sink);
     spdlog::register_logger(trace_logger);
@@ -107,7 +107,7 @@ void LoggerFactory::init_default_components(
 
     // Initialize roofeline logger
     auto roofline_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        log_config_path + "_roofline.csv", 1024 * 1024 * 10 * 10, 10);
+        log_config_path + "_roofline.csv", 1024 * 1024 * 10 * 100, 10);
     roofline_sink->set_level(spdlog::level::info);
     roofline_logger =
         std::make_shared<spdlog::logger>("roofline", roofline_sink);
