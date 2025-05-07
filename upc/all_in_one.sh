@@ -55,7 +55,7 @@ rm -rf $result
 # rm -rf $network_log
 #
 #
-# python generate_workloads.py --model $model_num --folder_name $folder_name
+python generate_workloads.py --model $model_num --folder_name $folder_name
 
 #2D_Torus
 python run_astrasim.py \
@@ -133,24 +133,32 @@ python run_astrasim.py \
 #Collect results
 #2D_Torus
 python gather_results.py --sim_logfiles_dir ${output}2D_Torus --output_filename ${result}2D_Torus.csv
+python gather_all_NPUs_results.py --sim_logfile ${output}2D_Torus  --output_filename ${result}2D_Torus
 
 #3D_Torus
 python gather_results.py --sim_logfiles_dir ${output}3D_Torus --output_filename ${result}3D_Torus.csv
+python gather_all_NPUs_results.py --sim_logfile ${output}3D_Torus  --output_filename ${result}3D_Torus
 
 #DGX_H100
 python gather_results.py --sim_logfiles_dir ${output}DGX_H100 --output_filename ${result}DGX_H100.csv
+python gather_all_NPUs_results.py --sim_logfile ${output}DGX_H100  --output_filename ${result}DGX_H100
 
 #DGX1
 python gather_results.py --sim_logfiles_dir ${output}DGX1 --output_filename ${result}DGX1.csv
+python gather_all_NPUs_results.py --sim_logfile ${output}DGX1  --output_filename ${result}DGX1
 
 #Dragonfly
 python gather_results.py --sim_logfiles_dir ${output}Dragonfly --output_filename ${result}Dragonfly.csv
+python gather_all_NPUs_results.py --sim_logfile ${output}Dragonfly  --output_filename ${result}Dragonfly
 
 #FullyConnected
 python gather_results.py --sim_logfiles_dir ${output}FullyConnected --output_filename ${result}FullyConnected.csv
+python gather_all_NPUs_results.py --sim_logfile ${output}FullyConnected  --output_filename ${result}FullyConnected
 
 #Ring
 python gather_results.py --sim_logfiles_dir ${output}Ring --output_filename ${result}Ring.csv
+python gather_all_NPUs_results.py --sim_logfile ${output}Ring  --output_filename ${result}Ring
 
 #Switch
 python gather_results.py --sim_logfiles_dir ${output}Switch --output_filename ${result}Switch.csv
+python gather_all_NPUs_results.py --sim_logfile ${output}Switch  --output_filename ${result}Switch

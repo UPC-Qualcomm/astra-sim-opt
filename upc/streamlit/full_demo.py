@@ -4,6 +4,7 @@ import numpy as np
 import os
 import trace_visualization as tv
 import roofline_visualization as rv
+import simulation_res as sr
 import time
 import generate_single_workload as gen
 from pathlib import Path
@@ -58,6 +59,8 @@ with st.form("model_config_form"):
 sharding_val = "1" if sharding else "0"
 
 if submitted:
+    for key in st.session_state.keys():
+        del st.session_state[key]
     subprocess.run(f"rm -rf {temp_dir}*", shell=True, cwd=None)
     with st.spinner(f"Generating a trace for `{selected_model_name}`..."):
         start_time = time.time()
@@ -85,6 +88,15 @@ json_files = [f.name for f in Path(config_dir).glob("*_sys.json")]
 st.subheader("Configuration")
 selected_config_name = st.selectbox("Select a config", configs)
 
+# Define all the log files
+astrasim_bin = "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware"
+workload = os.path.join(temp_dir, f'{dp}_{tp}_{sp}_{pp}_{sharding_val}')
+log = os.path.join(sim_dir, f'{dp}_{tp}_{sp}_{pp}_{sharding_val}')
+memory = os.path.join(config_dir, "RemoteMemory.json")
+network_log = workload + '.csv'
+res_log = f'{log}_res.csv'
+
+
 # Create two columns
 col1, col2 = st.columns(2)
 with col1:
@@ -106,7 +118,7 @@ with col1:
             updated_content = st.text_area("Edit Network Config", value=networ_file_content, height=400)
 
 
-        if st.button("🚀 Run Network Simulator"):
+        if st.button("🚀 Run AstraSim"):
             subprocess.run(f"rm {sim_dir}*", shell=True, cwd=None)
             temp_network_config = os.path.join(sim_dir, "network.yml")
             with open(temp_network_config, "w") as f:
@@ -117,11 +129,6 @@ with col1:
                 f.write(updated_sys_content)
             st.success("Saved modified config")
 
-            astrasim_bin = "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware"
-            workload = os.path.join(temp_dir, f'{dp}_{tp}_{sp}_{pp}_{sharding_val}')
-            log = os.path.join(sim_dir, f'{dp}_{tp}_{sp}_{pp}_{sharding_val}')
-            memory = os.path.join(config_dir, "RemoteMemory.json")
-            network_log = workload + '.csv'
             cmd = (
                 f"{astrasim_bin} "
                 f"--system-configuration={temp_sys_config} "
@@ -144,10 +151,25 @@ with col1:
             if returncode != 0:
                 st.warning(f"Simulation Failed - code: {returncode}.")
             else:
-                st.success("✅ The Simulation has completed successfully within {elapsed_time:.2f} seconds.")
+                st.success(f"✅ The Simulation has completed successfully within {elapsed_time:.2f} seconds.")
+                collect_res_cmd = f"python ../gather_all_NPUs_results.py --sim_logfile {log}.log  --output_filename {res_log}"
+                subprocess.run(collect_res_cmd, shell=True, cwd=None)
+                st.session_state.show_npu_plots = True
 
     else:
         st.warning("No Configurations Found.")
+
+if 'show_npu_plots' not in st.session_state:
+    st.session_state.show_npu_plots = False
+
+if (st.session_state.show_npu_plots):
+    st.markdown("---")
+    st.title("📊 Visualize the exposed communications for all NPUs")
+
+    plots = sr.plot_sim_results(res_log)
+
+    for pl in plots:
+        st.write(pl)
 
 
 
@@ -332,7 +354,7 @@ if os.path.isfile(csv_trace_file):
         # Auto-advance logic
         if st.session_state.is_playing:
             next_step()  # move to next timestep
-            time.sleep(0.2)  # 200 ms pause between steps
+            time.sleep(0.5)  # 200 ms pause between steps
             st.rerun()
 
 else:
