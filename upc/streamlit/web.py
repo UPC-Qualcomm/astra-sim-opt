@@ -7,13 +7,17 @@ import roofline_visualization as rv
 import simulation_res as sr
 import time
 import subprocess
-
+import json
 
 st.set_page_config(page_title="Roofline Viewer", layout="wide")
 
 st.title("📊 Trace Visualization Viewer")
 
 BASE_MODELS_DIR = os.path.abspath(os.path.join(os.getcwd(), "../output"))
+CONFIGS_DIR = os.path.abspath(os.path.join(os.getcwd(), "../configuration"))
+
+peak_perf = 0
+peak_bw = 0
 
 # One row with two dropdowns
 col_model, col_config = st.columns([1, 1])
@@ -82,6 +86,13 @@ if "csv_roofline_file" in st.session_state and os.path.isfile(st.session_state["
     if os.path.isfile(csv_trace_file):
         st.success(f"✅ Found trace file: `{trace_file_name}`")
 
+        config_file = os.path.join(CONFIGS_DIR, f'{selected_config}_sys.json')
+        with open(config_file, "r") as f:
+            config_file_content = f.read()
+            config_file_content = json.loads(config_file_content) 
+            peak_perf = config_file_content['peak-perf']
+            peak_bw = config_file_content['local-mem-bw']
+
         df = pd.read_csv(csv_trace_file)
         df = tv.get_timings_df(df)
         max_npu = int(df["sys_id"].max())
@@ -100,6 +111,13 @@ if "csv_roofline_file" in st.session_state and os.path.isfile(st.session_state["
         st.subheader("Visualize the compute and communication node over time.")
         npu = st.number_input("NPU index", min_value=0, max_value=max_npu, value=0, step=1)
         st.altair_chart(tv.plot_one_npu(df, npu), use_container_width=True)
+
+        mem, comp, idle = rv.get_info(csv_roofline_file, npu=npu, perf = peak_perf, bw = peak_bw)
+        st.info(f"""
+            **Percentage of time spent with memory bound operations**: {mem:.2f}% \n
+            **Percentage of time spent with compute bound operations**: {comp:.2f}% \n
+            **Percentage of time spent with idle bound operations**: {idle:.2f}%
+        """)
 
         st.markdown("---")
 
@@ -143,16 +161,16 @@ if "csv_roofline_file" in st.session_state and os.path.isfile(st.session_state["
         elif st.session_state.active_plot == "roofline_3d":
             st.subheader("Visualize 3D roofline model.")
             st.plotly_chart(
-                rv.get_3d_roofline_plot(csv_roofline_file, npu, time_window=time_window)
+                rv.get_3d_roofline_plot(csv_roofline_file, npu, time_window=time_window, perf=peak_perf, bw = peak_bw)
             )
         elif st.session_state.active_plot == "roofline_2d":
             st.subheader("Visualize 2D roofline model.")
-            st.altair_chart(rv.get_2d_roofline_plot_normal(csv_roofline_file, npu))
+            st.altair_chart(rv.get_2d_roofline_plot_normal(csv_roofline_file, npu, perf=peak_perf, bw = peak_bw))
         elif st.session_state.active_plot == "roofline_2d_over_time":
             st.subheader("Visualize 2D roofline model overtime.")
             st.altair_chart(
                 rv.get_2d_roofline_plot_with_time(
-                    csv_roofline_file, npu, time_window=time_window
+                    csv_roofline_file, npu, time_window=time_window, perf=peak_perf, bw = peak_bw
                 )
             )
         elif st.session_state.active_plot == "roofline_2d_timestep":
@@ -232,7 +250,7 @@ if "csv_roofline_file" in st.session_state and os.path.isfile(st.session_state["
             df = df[df["issue_tick"] == st.session_state.selected_timestep]
             col1, col2 = st.columns([2, 1])
             with col1:
-                st.altair_chart(rv.get_2d_roofline_plot_timestep(df))
+                st.altair_chart(rv.get_2d_roofline_plot_timestep(df, perf=peak_perf, bw = peak_bw))
             with col2:
                 st.write("ℹ️ Points at this timestep:")
                 st.dataframe(

@@ -9,13 +9,12 @@ import time
 import generate_single_workload as gen
 from pathlib import Path
 import subprocess
-
+import json
 
 # Set Streamlit page config to wide mode
 st.set_page_config(page_title="Roofline Viewer", layout="wide")
 
 st.title("Generate a workload trace")
-
 
 temp_dir = "temp/"
 
@@ -105,7 +104,6 @@ with col1:
 
         selected_network_config = os.path.join(config_dir, f"{selected_config_name}.yml")
         selected_sys_config = os.path.join(config_dir, f"{selected_config_name}_sys.json")
-
         with open(selected_network_config, "r") as f:
             networ_file_content = f.read()
 
@@ -117,7 +115,6 @@ with col1:
         with col2:
             updated_content = st.text_area("Edit Network Config", value=networ_file_content, height=400)
 
-
         if st.button("🚀 Run AstraSim"):
             subprocess.run(f"rm {sim_dir}*", shell=True, cwd=None)
             temp_network_config = os.path.join(sim_dir, "network.yml")
@@ -127,6 +124,8 @@ with col1:
             temp_sys_config = os.path.join(sim_dir, "system.json")
             with open(temp_sys_config, "w") as f:
                 f.write(updated_sys_content)
+            
+            
             st.success("Saved modified config")
 
             cmd = (
@@ -137,9 +136,8 @@ with col1:
                 f"--remote-memory-configuration={memory} "
                 f"--comm-group-configuration={workload}.json "
                 f"--logging-configuration={log} "
-                f"--network-log={network_log} "
+                f"--network-log={network_log} > test.txt"
             )
-            print(cmd)
             returncode = -1
             with st.spinner(f"Generating a trace for `{selected_model_name}`..."):
                 start_time = time.time()
@@ -155,9 +153,20 @@ with col1:
                 collect_res_cmd = f"python ../gather_all_NPUs_results.py --sim_logfile {log}.log  --output_filename {res_log}"
                 subprocess.run(collect_res_cmd, shell=True, cwd=None)
                 st.session_state.show_npu_plots = True
+                
+                parsed_sys_config = json.loads(updated_sys_content)
+                st.session_state.peak_perf = parsed_sys_config['peak-perf']
+                st.session_state.peak_bw = parsed_sys_config['local-mem-bw']
 
     else:
         st.warning("No Configurations Found.")
+
+
+if 'peak_perf' not in st.session_state:
+    st.session_state.peak_perf = 300
+if 'peak_bw' not in st.session_state:
+    st.session_state.peak_bw = 2000
+
 
 if 'show_npu_plots' not in st.session_state:
     st.session_state.show_npu_plots = False
@@ -203,6 +212,13 @@ if os.path.isfile(csv_trace_file):
     st.subheader("Visualize the compute and communication node over time.")
     st.altair_chart(tv.plot_one_npu(df, npu), use_container_width=True)
 
+    mem, comp, idle = rv.get_info(csv_roofline_file, npu=npu, perf = st.session_state.peak_perf, bw = st.session_state.peak_bw)
+    st.info(f"""
+        **Percentage of time spent with memory bound operations**: {mem:.2f}% \n
+        **Percentage of time spent with compute bound operations**: {comp:.2f}% \n
+        **Percentage of time spent with idle bound operations**: {idle:.2f}% \n
+    """)
+
     st.markdown("---")
 
     col_plot1, col_plot2, col_plot3, col_plot4, col_plot5, col_plot6 = st.columns(6)
@@ -245,16 +261,16 @@ if os.path.isfile(csv_trace_file):
     elif st.session_state.active_plot == "roofline_3d":
         st.subheader("Visualize 3D roofline model.")
         st.plotly_chart(
-            rv.get_3d_roofline_plot(csv_roofline_file, npu, time_window=time_window)
+            rv.get_3d_roofline_plot(csv_roofline_file, npu, time_window=time_window, perf=st.session_state.peak_perf, bw = st.session_state.peak_bw)
         )
     elif st.session_state.active_plot == "roofline_2d":
         st.subheader("Visualize 2D roofline model.")
-        st.altair_chart(rv.get_2d_roofline_plot_normal(csv_roofline_file, npu))
+        st.altair_chart(rv.get_2d_roofline_plot_normal(csv_roofline_file, npu, perf=st.session_state.peak_perf, bw = st.session_state.peak_bw))
     elif st.session_state.active_plot == "roofline_2d_over_time":
         st.subheader("Visualize 2D roofline model overtime.")
         st.altair_chart(
             rv.get_2d_roofline_plot_with_time(
-                csv_roofline_file, npu, time_window=time_window
+                csv_roofline_file, npu, time_window=time_window, perf=st.session_state.peak_perf, bw = st.session_state.peak_bw
             )
         )
     elif st.session_state.active_plot == "roofline_2d_timestep":
@@ -334,7 +350,7 @@ if os.path.isfile(csv_trace_file):
         df = df[df["issue_tick"] == st.session_state.selected_timestep]
         col1, col2 = st.columns([2, 1])
         with col1:
-            st.altair_chart(rv.get_2d_roofline_plot_timestep(df))
+            st.altair_chart(rv.get_2d_roofline_plot_timestep(df, perf=st.session_state.peak_perf, bw = st.session_state.peak_bw))
         with col2:
             st.write("ℹ️ Points at this timestep:")
             st.dataframe(

@@ -78,6 +78,13 @@ def expand_df_and_average(df, time_window=50000):
                 weight_prev = remaining_time / time_window
                 weight_curr = time_needed / time_window
                 new_row['perf'] = (buffer_row['perf'] * weight_prev) + (row['perf'] * weight_curr)
+                #if (buffer_row['operational_intensity'] == 0 and row['operational_intensity'] != 0):
+                #    new_row['operational_intensity'] = row['operational_intensity'] 
+                #elif (row['operational_intensity'] == 0 and buffer_row['operational_intensity'] != 0):
+                #    new_row['operational_intensity'] = buffer_row['operational_intensity'] 
+                #elif (row['operational_intensity'] != 0 and buffer_row['operational_intensity'] != 0):
+                #    new_row['operational_intensity'] = (buffer_row['operational_intensity'] + row['operational_intensity'] ) / 2
+                #new_row['operational_intensity'] = max(buffer_row['operational_intensity'] , row['operational_intensity'])
                 new_row['operational_intensity'] = (buffer_row['operational_intensity'] * weight_prev) + (row['operational_intensity'] * weight_curr)
                 
                 new_rows.append(new_row)
@@ -118,6 +125,13 @@ def expand_df_and_average(df, time_window=50000):
                 weight_row = row['elapsed_time'] / total_time
                 
                 buffer_row['perf'] = (buffer_row['perf'] * weight_buffer) + (row['perf'] * weight_row)
+                #if (buffer_row['operational_intensity'] == 0 and  row['operational_intensity'] != 0):
+                #    buffer_row['operational_intensity'] = row['operational_intensity'] 
+                #elif (row['operational_intensity'] == 0 and buffer_row['operational_intensity'] != 0):
+                #    buffer_row['operational_intensity'] = buffer_row['operational_intensity'] 
+                #elif (row['operational_intensity'] != 0 and buffer_row['operational_intensity'] != 0):
+                #    buffer_row['operational_intensity'] = (buffer_row['operational_intensity'] + row['operational_intensity'] ) / 2
+                #buffer_row['operational_intensity'] = max(buffer_row['operational_intensity'] , row['operational_intensity'] )
                 buffer_row['operational_intensity'] = (buffer_row['operational_intensity'] * weight_buffer) + (row['operational_intensity'] * weight_row)
                 buffer_row['elapsed_time'] = total_time
                 buffer_row['callback_tick'] = buffer_row['issue_tick'] + total_time
@@ -314,7 +328,7 @@ def plot_roofline_time(df, beta=2000, pi=300):
                 legend=None,
                 scale=alt.Scale(
                     domain=["Zero OI", "Memory bound", "Compute bound"],
-                    range=["rgba(0,0,0,0.1)", "red", "steelblue"],
+                    range=["rgba(0,0,0,0.3)", "red", "steelblue"],
                 ),
             ),
             tooltip=[
@@ -442,7 +456,7 @@ def plot_3d_roofline(df, beta=2000, pi=300):
                 title="Operational Intensity (FLOPs/byte)",
                 range=[op_intensity_min, op_intensity_max],
             ),
-            yaxis=dict(title="Issue Tick", range=[issue_tick_min, issue_tick_max]),
+            yaxis=dict(title="Issue Time (cycles)", range=[issue_tick_min, issue_tick_max]),
             zaxis=dict(title="Performance (FLOPs/sec)", range=[0, pi]),
         ),
         title="3D Roofline Model",
@@ -512,5 +526,24 @@ def get_2d_roofline_plot_timestep(df, bw=2000, perf=300):
     )
 
 
+def get_info(csv_file, npu = 0, perf = 300, bw = 2000):
+    df = pd.read_csv(csv_file)
+    df = df[df["sys_id"] == npu]
+    compute_memory_boundary = (perf/ bw) * 1e3 #FLOPS/Byte
+    total_time = df["callback_tick"].max() - df["issue_tick"].min()
+    df_memory = df[df["operational_intensity"] < compute_memory_boundary]
+    df_compute= df[df["operational_intensity"] >= compute_memory_boundary]
+    df_idle = df[df["perf"] == 0]
+
+    mem_time = df_memory['elapsed_time'].sum()
+    comp_time = df_compute['elapsed_time'].sum()
+    idle_time = df_idle['elapsed_time'].sum()
+
+    mem_time_percent = mem_time/total_time
+    comp_time_percent = comp_time/total_time
+    idle_time_percent = (total_time - df["elapsed_time"].sum())/total_time
+
+    
+    return mem_time_percent, comp_time_percent, idle_time_percent
 # TODO:
 # Plot with slider
