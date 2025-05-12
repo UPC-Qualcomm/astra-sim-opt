@@ -34,10 +34,9 @@ def get_timings_df(df: pd.DataFrame) -> pd.DataFrame:
 def plot_elapsed_times(
     df: pd.DataFrame, npu, sys_id: int = 0, max_height: int = 600
 ) -> alt.Chart:
-    font_size = 15
     df = df.query(f"sys_id == {sys_id}")
     unique_nodes = df["node_name"].nunique()
-    chart_height =  max(unique_nodes * font_size * 1.5, max_height)  # min/max to keep reasonable bounds
+    chart_height =  min(unique_nodes * 40, max_height)  # min/max to keep reasonable bounds
 
     return (
         alt.Chart(df)
@@ -46,7 +45,7 @@ def plot_elapsed_times(
             x=alt.X("elapsed_time:Q", title="Elapsed Time"),
             y=alt.Y(
                 "node_name:N",
-                sort=alt.SortField(field="elapsed_time", order="descending"),
+                sort=alt.SortField(field="tick_issue", order="ascending"),
                 title="Node Name",
             ),
             tooltip=["node_name", "elapsed_time", "tick_issue"],
@@ -57,7 +56,7 @@ def plot_elapsed_times(
             title=f"Elapsed Time by Node Name - NPU {npu}",
         )
         .configure_axis(
-            labelFontSize=font_size,
+            labelFontSize=15,
             labelLimit=250,
             titleFontSize=18,
             titlePadding=50,  # Increase this number as needed for your label lengths

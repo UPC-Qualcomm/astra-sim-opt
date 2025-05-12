@@ -241,11 +241,8 @@ def plot_roofline_timestep(df, beta=2000, pi=300):
     I_c = (pi * 1e12) / (beta * 1e9)
     P_c = pi
 
-    x_min = min(0, df["operational_intensity"].min())
-    x_max = max(df["operational_intensity"].max(), I_c) * 1.5 # Add 10% headroom
-    y_min = 0
-    y_max = max(df["perf"].max(), pi) * 1.2
-
+    x_min = min(-1, df["operational_intensity"].min())
+    x_max = max(df["operational_intensity"].max(), pi) * 1.5 # Add 10% headroom
     x_vals = np.linspace(x_min, x_max, 200)
 
     # Create dataframes for the roofline model lines
@@ -263,15 +260,9 @@ def plot_roofline_timestep(df, beta=2000, pi=300):
         .mark_circle()
         .encode(
             x=alt.X(
-                "operational_intensity:Q",
-                title="Operational Intensity (FLOPs/byte)",
-                scale=alt.Scale(domain=[x_min, x_max])
+                "operational_intensity:Q", title="Operational Intensity (FLOPs/byte)"
             ),
-            y=alt.Y(
-                "perf:Q",
-                title="Performance (TFLOPs/sec)",
-                scale=alt.Scale(domain=[y_min, y_max])
-            ),
+            y=alt.Y("perf:Q", title="Performance (TFLOPs/sec)"),
             size=alt.value(100),
             tooltip=list(df.columns),
         )
@@ -285,14 +276,14 @@ def plot_roofline_timestep(df, beta=2000, pi=300):
     # Bandwidth line (sloped)
     beta_line = (
         alt.Chart(roofline_data)
-        .mark_line(color="red", strokeDash=[5, 5])
+        .mark_line(color="red")
         .encode(x="operational_intensity:Q", y="beta_line:Q")
     )
 
     # Peak performance line (horizontal)
     pi_line = (
         alt.Chart(roofline_data)
-        .mark_line(color="green", strokeDash=[3, 3])
+        .mark_line(color="green")
         .encode(x="operational_intensity:Q", y="pi_line:Q")
     )
 
@@ -534,6 +525,7 @@ def get_2d_roofline_plot_timestep(df, bw=2000, perf=300):
         perf,
     )
 
+
 def get_info(csv_file, npu = 0, perf = 300, bw = 2000):
     df = pd.read_csv(csv_file)
     df = df[df["sys_id"] == npu]
@@ -547,9 +539,9 @@ def get_info(csv_file, npu = 0, perf = 300, bw = 2000):
     comp_time = df_compute['elapsed_time'].sum()
     idle_time = df_idle['elapsed_time'].sum()
 
-    mem_time_percent = mem_time/total_time * 100
-    comp_time_percent = comp_time/total_time * 100
-    idle_time_percent = (total_time - df["elapsed_time"].sum())/total_time * 100
+    mem_time_percent = mem_time/total_time
+    comp_time_percent = comp_time/total_time
+    idle_time_percent = (total_time - df["elapsed_time"].sum())/total_time
 
     
     return mem_time_percent, comp_time_percent, idle_time_percent

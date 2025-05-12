@@ -39,6 +39,8 @@ upc/results/
 upc/network_log/
 upc/streamlit/temp
 upc/streamlit/__pycache__
+upc/streamlit/sections/__pycache__
+upc/streamlit_old/__pycache__
 
 *.ipynb_checkpoints/
 

@@ -29,7 +29,6 @@ def plot_sim_results(csv_file):
         ax.set_xticks(y_pos)
         ax.set_xticklabels(chunk['sys_id'], rotation=45)
         ax.set_ylabel('Cycles')
-        ax.set_xlabel('NPU')
         ax.set_title('Execution Cycles with Communication Breakdown')
         ax.legend()
 
