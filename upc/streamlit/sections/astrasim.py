@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import json
+import trace_visualization as tv
 
 
 def run_astrasim(params):
@@ -23,6 +24,7 @@ def run_astrasim(params):
 
     paths = _compute_paths(params, config_dir, sim_dir)
     col1, col2 = st.columns(2)
+    trace_file_name = ""
     with col1:
         if configs:
             net_content, sys_content = _load_config_files(
@@ -40,6 +42,18 @@ def run_astrasim(params):
                 returncode, elapsed_time = _run_astrasim_bin(
                     paths, temp_sys_path, temp_net_path, params["temp_dir"]
                 )
+                trace_file_name, csv_trace_file, output_file = _get_file_paths(
+                    sim_dir,
+                    params["dp"],
+                    params["tp"],
+                    params["sp"],
+                    params["pp"],
+                    params["sharding_val"],
+                )
+                if "df_matched" not in st.session_state:
+                    st.session_state.df_matched = tv.get_timings_df(
+                        csv_trace_file, output_file
+                    )
                 _handle_sim_result(returncode, elapsed_time, paths, updated_sys_content)
         else:
             st.warning("No Configurations Found.")
@@ -49,16 +63,12 @@ def run_astrasim(params):
         "sim_dir": sim_dir,
         "log": paths["log"],
         "res_log": paths["res_log"],
-        "dp": params["dp"],
-        "tp": params["tp"],
-        "sp": params["sp"],
-        "pp": params["pp"],
-        "sharding_val": params["sharding_val"],
+        "trace_file_name": trace_file_name,
     }
 
 
 def visualize_simulation_results(sim_outputs):
-    if 'show_npu_plots' not in st.session_state:
+    if "show_npu_plots" not in st.session_state:
         st.session_state.show_npu_plots = False
 
     if st.session_state.show_npu_plots:
@@ -66,6 +76,7 @@ def visualize_simulation_results(sim_outputs):
         plots = sr.plot_sim_results(sim_outputs["res_log"])
         for pl in plots:
             st.write(pl)
+
 
 def _setup_dirs(temp_dir):
     config_dir = "../configuration"
@@ -176,3 +187,11 @@ def _handle_sim_result(returncode, elapsed_time, paths, updated_sys_content):
         parsed_sys_config = json.loads(updated_sys_content)
         st.session_state.peak_perf = parsed_sys_config.get("peak-perf", 300)
         st.session_state.peak_bw = parsed_sys_config.get("local-mem-bw", 2000)
+
+
+def _get_file_paths(sim_dir, dp, tp, sp, pp, sharding_val):
+    trace_file_name = f"{dp}_{tp}_{sp}_{pp}_{sharding_val}_trace.csv"
+    timed_file_name = f"{dp}_{tp}_{sp}_{pp}_{sharding_val}_trace_matched_timing.csv"
+    csv_trace_file = os.path.join(sim_dir, trace_file_name)
+    timed_file = os.path.join(sim_dir, timed_file_name)
+    return trace_file_name, csv_trace_file, timed_file

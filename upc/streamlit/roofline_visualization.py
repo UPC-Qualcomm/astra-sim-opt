@@ -24,16 +24,16 @@ def add_comm_points(df, npu=0):
 
         # Prepare the new row as specified
         new_row = {
-            'sys_id': current_row['sys_id'],
-            'node_id': 0,
-            'node_name': prev_row['node_name'] + '_comm_' + current_row['node_name'],
-            'num_ops': 0,
-            'tensor_size': 0,
-            'perf': 0,
-            'operational_intensity': 0,
-            'elapsed_time': current_row['issue_tick'] - prev_row['callback_tick'],
-            'issue_tick': prev_row['callback_tick'],
-            'callback_tick': current_row['issue_tick']
+            "sys_id": current_row["sys_id"],
+            "node_id": 0,
+            "node_name": prev_row["node_name"] + "_comm_" + current_row["node_name"],
+            "num_ops": 0,
+            "tensor_size": 0,
+            "perf": 0,
+            "operational_intensity": 0,
+            "elapsed_time": current_row["issue_tick"] - prev_row["callback_tick"],
+            "issue_tick": prev_row["callback_tick"],
+            "callback_tick": current_row["issue_tick"],
         }
         new_rows.append(new_row)
 
@@ -48,9 +48,6 @@ def add_comm_points(df, npu=0):
 
     df_combined_sorted = df_combined_sorted[df_combined_sorted["elapsed_time"] != 0]
 
-    # Save to a new CSV, or overwrite as needed
-    # df_combined_sorted.to_csv("1_1_16_4_0_roofline_with_comm.csv", index=False)
-
     return df_combined_sorted
 
 
@@ -58,115 +55,129 @@ def expand_df_and_average(df, time_window=50000):
     new_rows = []
     buffer_row = None
     remaining_time = 0
-    
+
     for i in range(len(df)):
         row = df.iloc[i].copy()
-        
+
         # If we have a buffer row from previous iteration
         if buffer_row is not None:
             # Calculate how much time we need to complete the window
             time_needed = time_window - remaining_time
-            
-            if row['elapsed_time'] >= time_needed:
+
+            if row["elapsed_time"] >= time_needed:
                 # We can complete the window
                 # Create a new row that completes the window
                 new_row = buffer_row.copy()
-                new_row['elapsed_time'] = time_window
-                new_row['callback_tick'] = new_row['issue_tick'] + time_window
-                
+                new_row["elapsed_time"] = time_window
+                new_row["callback_tick"] = new_row["issue_tick"] + time_window
+
                 # Calculate weighted averages for performance metrics
                 weight_prev = remaining_time / time_window
                 weight_curr = time_needed / time_window
-                new_row['perf'] = (buffer_row['perf'] * weight_prev) + (row['perf'] * weight_curr)
-                #if (buffer_row['operational_intensity'] == 0 and row['operational_intensity'] != 0):
-                #    new_row['operational_intensity'] = row['operational_intensity'] 
-                #elif (row['operational_intensity'] == 0 and buffer_row['operational_intensity'] != 0):
-                #    new_row['operational_intensity'] = buffer_row['operational_intensity'] 
-                #elif (row['operational_intensity'] != 0 and buffer_row['operational_intensity'] != 0):
+                new_row["perf"] = (buffer_row["perf"] * weight_prev) + (
+                    row["perf"] * weight_curr
+                )
+                # if (buffer_row['operational_intensity'] == 0 and row['operational_intensity'] != 0):
+                #    new_row['operational_intensity'] = row['operational_intensity']
+                # elif (row['operational_intensity'] == 0 and buffer_row['operational_intensity'] != 0):
+                #    new_row['operational_intensity'] = buffer_row['operational_intensity']
+                # elif (row['operational_intensity'] != 0 and buffer_row['operational_intensity'] != 0):
                 #    new_row['operational_intensity'] = (buffer_row['operational_intensity'] + row['operational_intensity'] ) / 2
-                #new_row['operational_intensity'] = max(buffer_row['operational_intensity'] , row['operational_intensity'])
-                new_row['operational_intensity'] = (buffer_row['operational_intensity'] * weight_prev) + (row['operational_intensity'] * weight_curr)
-                
+                # new_row['operational_intensity'] = max(buffer_row['operational_intensity'] , row['operational_intensity'])
+                new_row["operational_intensity"] = (
+                    buffer_row["operational_intensity"] * weight_prev
+                ) + (row["operational_intensity"] * weight_curr)
+
                 new_rows.append(new_row)
-                
+
                 # Update the current row
-                row['elapsed_time'] -= time_needed
-                row['issue_tick'] += time_needed
-                
+                row["elapsed_time"] -= time_needed
+                row["issue_tick"] += time_needed
+
                 # Process the remaining time in the current row
-                remaining_full_windows = int(row['elapsed_time'] // time_window)
-                
+                remaining_full_windows = int(row["elapsed_time"] // time_window)
+
                 # Add full windows
                 for j in range(remaining_full_windows):
                     window_row = row.copy()
-                    window_row['elapsed_time'] = time_window
-                    window_row['issue_tick'] = row['issue_tick'] + (j * time_window)
-                    window_row['callback_tick'] = window_row['issue_tick'] + time_window
+                    window_row["elapsed_time"] = time_window
+                    window_row["issue_tick"] = row["issue_tick"] + (j * time_window)
+                    window_row["callback_tick"] = window_row["issue_tick"] + time_window
                     new_rows.append(window_row)
-                
+
                 # Calculate the remaining time after full windows
-                remaining_time = row['elapsed_time'] % time_window
+                remaining_time = row["elapsed_time"] % time_window
                 if remaining_time > 0:
                     # Store the remaining part for the next iteration
                     buffer_row = row.copy()
-                    buffer_row['elapsed_time'] = remaining_time
-                    buffer_row['issue_tick'] = row['issue_tick'] + (remaining_full_windows * time_window)
-                    buffer_row['callback_tick'] = buffer_row['issue_tick'] + remaining_time
+                    buffer_row["elapsed_time"] = remaining_time
+                    buffer_row["issue_tick"] = row["issue_tick"] + (
+                        remaining_full_windows * time_window
+                    )
+                    buffer_row["callback_tick"] = (
+                        buffer_row["issue_tick"] + remaining_time
+                    )
                 else:
                     buffer_row = None
                     remaining_time = 0
             else:
                 # We can't complete the window yet
-                remaining_time += row['elapsed_time']
-                
+                remaining_time += row["elapsed_time"]
+
                 # Update buffer row with weighted averages
-                total_time = buffer_row['elapsed_time'] + row['elapsed_time']
-                weight_buffer = buffer_row['elapsed_time'] / total_time
-                weight_row = row['elapsed_time'] / total_time
-                
-                buffer_row['perf'] = (buffer_row['perf'] * weight_buffer) + (row['perf'] * weight_row)
-                #if (buffer_row['operational_intensity'] == 0 and  row['operational_intensity'] != 0):
-                #    buffer_row['operational_intensity'] = row['operational_intensity'] 
-                #elif (row['operational_intensity'] == 0 and buffer_row['operational_intensity'] != 0):
-                #    buffer_row['operational_intensity'] = buffer_row['operational_intensity'] 
-                #elif (row['operational_intensity'] != 0 and buffer_row['operational_intensity'] != 0):
+                total_time = buffer_row["elapsed_time"] + row["elapsed_time"]
+                weight_buffer = buffer_row["elapsed_time"] / total_time
+                weight_row = row["elapsed_time"] / total_time
+
+                buffer_row["perf"] = (buffer_row["perf"] * weight_buffer) + (
+                    row["perf"] * weight_row
+                )
+                # if (buffer_row['operational_intensity'] == 0 and  row['operational_intensity'] != 0):
+                #    buffer_row['operational_intensity'] = row['operational_intensity']
+                # elif (row['operational_intensity'] == 0 and buffer_row['operational_intensity'] != 0):
+                #    buffer_row['operational_intensity'] = buffer_row['operational_intensity']
+                # elif (row['operational_intensity'] != 0 and buffer_row['operational_intensity'] != 0):
                 #    buffer_row['operational_intensity'] = (buffer_row['operational_intensity'] + row['operational_intensity'] ) / 2
-                #buffer_row['operational_intensity'] = max(buffer_row['operational_intensity'] , row['operational_intensity'] )
-                buffer_row['operational_intensity'] = (buffer_row['operational_intensity'] * weight_buffer) + (row['operational_intensity'] * weight_row)
-                buffer_row['elapsed_time'] = total_time
-                buffer_row['callback_tick'] = buffer_row['issue_tick'] + total_time
+                # buffer_row['operational_intensity'] = max(buffer_row['operational_intensity'] , row['operational_intensity'] )
+                buffer_row["operational_intensity"] = (
+                    buffer_row["operational_intensity"] * weight_buffer
+                ) + (row["operational_intensity"] * weight_row)
+                buffer_row["elapsed_time"] = total_time
+                buffer_row["callback_tick"] = buffer_row["issue_tick"] + total_time
         else:
             # No buffer row, process the current row directly
-            full_windows = int(row['elapsed_time'] // time_window)
-            
+            full_windows = int(row["elapsed_time"] // time_window)
+
             # Add full windows
             for j in range(full_windows):
                 window_row = row.copy()
-                window_row['elapsed_time'] = time_window
-                window_row['issue_tick'] = row['issue_tick'] + (j * time_window)
-                window_row['callback_tick'] = window_row['issue_tick'] + time_window
+                window_row["elapsed_time"] = time_window
+                window_row["issue_tick"] = row["issue_tick"] + (j * time_window)
+                window_row["callback_tick"] = window_row["issue_tick"] + time_window
                 new_rows.append(window_row)
-            
+
             # Calculate the remaining time
-            remaining_time = row['elapsed_time'] % time_window
+            remaining_time = row["elapsed_time"] % time_window
             if remaining_time > 0:
                 # Store the remaining part for the next iteration
                 buffer_row = row.copy()
-                buffer_row['elapsed_time'] = remaining_time
-                buffer_row['issue_tick'] = row['issue_tick'] + (full_windows * time_window)
-                buffer_row['callback_tick'] = buffer_row['issue_tick'] + remaining_time
+                buffer_row["elapsed_time"] = remaining_time
+                buffer_row["issue_tick"] = row["issue_tick"] + (
+                    full_windows * time_window
+                )
+                buffer_row["callback_tick"] = buffer_row["issue_tick"] + remaining_time
             else:
                 buffer_row = None
-    
+
     # Don't forget to add the last buffer row if it exists
     if buffer_row is not None:
         new_rows.append(buffer_row)
-    
+
     # Create the new dataframe
     if new_rows:
         df_new = pd.DataFrame(new_rows)
         # Sort the final dataframe by issue_tick
-        df_new = df_new.sort_values('issue_tick').reset_index(drop=True)
+        df_new = df_new.sort_values("issue_tick").reset_index(drop=True)
         return df_new
     else:
         # Return an empty dataframe with the same columns as the input
@@ -242,7 +253,7 @@ def plot_roofline_timestep(df, beta=2000, pi=300):
     P_c = pi
 
     x_min = min(0, df["operational_intensity"].min())
-    x_max = max(df["operational_intensity"].max(), I_c) * 1.5 # Add 10% headroom
+    x_max = max(df["operational_intensity"].max(), I_c) * 1.5  # Add 10% headroom
     y_min = 0
     y_max = max(df["perf"].max(), pi) * 1.2
 
@@ -265,12 +276,12 @@ def plot_roofline_timestep(df, beta=2000, pi=300):
             x=alt.X(
                 "operational_intensity:Q",
                 title="Operational Intensity (FLOPs/byte)",
-                scale=alt.Scale(domain=[x_min, x_max])
+                scale=alt.Scale(domain=[x_min, x_max]),
             ),
             y=alt.Y(
                 "perf:Q",
                 title="Performance (TFLOPs/sec)",
-                scale=alt.Scale(domain=[y_min, y_max])
+                scale=alt.Scale(domain=[y_min, y_max]),
             ),
             size=alt.value(100),
             tooltip=list(df.columns),
@@ -316,7 +327,7 @@ def plot_roofline_time(df, beta=2000, pi=300):
     # Create a new column labeling points based on operational intensity threshold
     df["oi_category"] = np.select(
         [df["operational_intensity"] == 0, df["operational_intensity"] < I_c],
-        ["Zero OI", "Memory bound"],
+        ["Idle", "Memory bound"],
         default="Compute bound",
     )
 
@@ -334,9 +345,9 @@ def plot_roofline_time(df, beta=2000, pi=300):
             ),
             color=alt.Color(
                 "oi_category:N",
-                legend=None,
+                title="Operational Intensity Category",
                 scale=alt.Scale(
-                    domain=["Zero OI", "Memory bound", "Compute bound"],
+                    domain=["Idle", "Memory bound", "Compute bound"],
                     range=["rgba(0,0,0,0.3)", "red", "steelblue"],
                 ),
             ),
@@ -465,7 +476,9 @@ def plot_3d_roofline(df, beta=2000, pi=300):
                 title="Operational Intensity (FLOPs/byte)",
                 range=[op_intensity_min, op_intensity_max],
             ),
-            yaxis=dict(title="Issue Time (cycles)", range=[issue_tick_min, issue_tick_max]),
+            yaxis=dict(
+                title="Issue Time (cycles)", range=[issue_tick_min, issue_tick_max]
+            ),
             zaxis=dict(title="Performance (FLOPs/sec)", range=[0, pi]),
         ),
         title="3D Roofline Model",
@@ -476,9 +489,9 @@ def plot_3d_roofline(df, beta=2000, pi=300):
     return fig
 
 
-def get_3d_roofline_plot(csv_file, npu=0, bw=2000, perf=300, time_window=0):
-    df = pd.read_csv(csv_file)
-    df_single_npu = add_comm_points(df, npu=npu)
+def get_3d_roofline_plot(df, npu=0, bw=2000, perf=300, time_window=0):
+    df_single_npu = df[df["sys_id"] == npu].copy()
+    df_single_npu["perf"] = df_single_npu["perf"] / 1e12
     if time_window != 0:
         df_single_npu = expand_df_and_average(df_single_npu, time_window=time_window)
     return plot_3d_roofline(
@@ -490,9 +503,9 @@ def get_3d_roofline_plot(csv_file, npu=0, bw=2000, perf=300, time_window=0):
     )
 
 
-def get_2d_roofline_plot_normal(csv_file, npu=0, bw=2000, perf=300):
-    df = pd.read_csv(csv_file)
-    df_single_npu = add_comm_points(df, npu=npu)
+def get_2d_roofline_plot_normal(df, npu=0, bw=2000, perf=300):
+    df_single_npu = df[df["sys_id"] == npu].copy()
+    df_single_npu["perf"] = df_single_npu["perf"] / 1e12
     return plot_roofline(
         df_single_npu.loc[
             :, ["perf", "operational_intensity", "issue_tick", "node_id", "node_name"]
@@ -502,9 +515,9 @@ def get_2d_roofline_plot_normal(csv_file, npu=0, bw=2000, perf=300):
     )
 
 
-def get_2d_roofline_plot_with_time(csv_file, npu=0, bw=2000, perf=300, time_window=0):
-    df = pd.read_csv(csv_file)
-    df_single_npu = add_comm_points(df, npu=npu)
+def get_2d_roofline_plot_with_time(df, npu=0, bw=2000, perf=300, time_window=0):
+    df_single_npu = df[df["sys_id"] == npu].copy()
+    df_single_npu["perf"] = df_single_npu["perf"] / 1e12
     if time_window != 0:
         df_single_npu = expand_df_and_average(df_single_npu, time_window=time_window)
     return plot_roofline_time(
@@ -516,9 +529,9 @@ def get_2d_roofline_plot_with_time(csv_file, npu=0, bw=2000, perf=300, time_wind
     )
 
 
-def get_timesteps(csv_file, npu=0, time_window=0):
-    df = pd.read_csv(csv_file)
-    df_single_npu = add_comm_points(df, npu=npu)
+def get_timesteps(df, npu=0, time_window=0):
+    df_single_npu = df[df["sys_id"] == npu].copy()
+    df_single_npu["perf"] = df_single_npu["perf"] / 1e12
     if time_window != 0:
         df_single_npu = expand_df_and_average(df_single_npu, time_window=time_window)
     timesteps = df_single_npu["issue_tick"].unique()
@@ -534,24 +547,28 @@ def get_2d_roofline_plot_timestep(df, bw=2000, perf=300):
         perf,
     )
 
-def get_info(csv_file, npu = 0, perf = 300, bw = 2000):
-    df = pd.read_csv(csv_file)
-    df = df[df["sys_id"] == npu]
-    compute_memory_boundary = (perf/ bw) * 1e3 #FLOPS/Byte
-    total_time = df["callback_tick"].max() - df["issue_tick"].min()
-    df_memory = df[df["operational_intensity"] < compute_memory_boundary]
-    df_compute= df[df["operational_intensity"] >= compute_memory_boundary]
-    df_idle = df[df["perf"] == 0]
 
-    mem_time = df_memory['elapsed_time'].sum()
-    comp_time = df_compute['elapsed_time'].sum()
-    idle_time = df_idle['elapsed_time'].sum()
+def get_info(df, npu=0, perf=300, bw=2000):
+    df_local = df[df["sys_id"] == npu].copy()
+    compute_memory_boundary = (perf / bw) * 1e3  # FLOPS/Byte
+    total_time = df_local["callback_tick"].max()
+    df_memory = df_local[
+        (df_local["operational_intensity"] < compute_memory_boundary)
+        & (df_local["operational_intensity"] != 0)
+    ]
+    df_compute = df_local[df_local["operational_intensity"] >= compute_memory_boundary]
+    df_idle = df_local[df_local["operational_intensity"] == 0]
 
-    mem_time_percent = mem_time/total_time * 100
-    comp_time_percent = comp_time/total_time * 100
-    idle_time_percent = (total_time - df["elapsed_time"].sum())/total_time * 100
+    mem_time = df_memory["elapsed_time"].sum()
+    comp_time = df_compute["elapsed_time"].sum()
+    idle_time = df_idle["elapsed_time"].sum()
 
-    
+    mem_time_percent = mem_time / total_time * 100
+    comp_time_percent = comp_time / total_time * 100
+    idle_time_percent = (total_time - (mem_time + comp_time)) / total_time * 100
+
     return mem_time_percent, comp_time_percent, idle_time_percent
+
+
 # TODO:
 # Plot with slider

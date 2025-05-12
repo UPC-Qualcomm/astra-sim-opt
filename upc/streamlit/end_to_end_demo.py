@@ -1,6 +1,6 @@
 import streamlit as st
 import sections.generate_workload as gen
-import sections.astrasim  as astra
+import sections.astrasim as astra
 import sections.trace_viewer as viewer
 
 st.set_page_config(page_title="Roofline Viewer", layout="wide")
@@ -22,4 +22,3 @@ st.markdown("---")
 
 # Section 4: Trace Visualization Viewer
 viewer.trace_viewer(sim_outputs)
-

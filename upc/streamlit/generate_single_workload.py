@@ -117,5 +117,5 @@ def generate_trace(parallelism_strategy, parameters):
         "extern",
         "symbolic_tensor_graph",
     )
-    #print(cmd)
+    # print(cmd)
     run_command(cmd, cwd)

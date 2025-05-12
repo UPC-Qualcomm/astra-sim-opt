@@ -1,10 +1,10 @@
-
 import os
 import json
 import pandas as pd
 import streamlit as st
 import trace_visualization as tv
 from pathlib import Path
+
 
 def trace_picker():
     st.title("📊 Trace Picker")
@@ -17,17 +17,16 @@ def trace_picker():
     if selected_model and selected_config:
         _parallelism_startegy_form(selected_model, selected_config, BASE_MODELS_DIR)
 
-        if "csv_roofline_file" in st.session_state and os.path.isfile(
+        if "csv_trace_file" in st.session_state and os.path.isfile(
             st.session_state["csv_trace_file"]
         ):
             csv_trace_file = st.session_state["csv_trace_file"]
-            csv_roofline_file = st.session_state["csv_roofline_file"]
             trace_file_name = st.session_state["trace_file_name"]
             res_file = st.session_state["res_file"]
             log_file = st.session_state["log_file"]
             res_path = st.session_state["res_path"]
 
-            _detect_file_change(csv_roofline_file)
+            _detect_file_change(csv_trace_file)
 
             st.success(f"✅ Found trace file: `{trace_file_name}`")
 
@@ -35,6 +34,7 @@ def trace_picker():
             with open(config_file, "r") as f:
                 config_file_content = f.read()
                 config_file_content = json.loads(config_file_content)
+
                 st.session_state.peak_perf = config_file_content.get("peak-perf", 300)
                 st.session_state.peak_bw = config_file_content.get("local-mem-bw", 2000)
 
@@ -42,7 +42,9 @@ def trace_picker():
 
             st.session_state.show_npu_plots = True
             return {
-                "sim_dir": os.path.join(BASE_MODELS_DIR, selected_model, selected_config),
+                "sim_dir": os.path.join(
+                    BASE_MODELS_DIR, selected_model, selected_config
+                ),
                 "log": log_file,
                 "res_log": res_file,
                 "dp": dp,
@@ -58,7 +60,6 @@ def trace_picker():
             f"❌ The combination you entered does not correspond to an existing trace file: `{trace_file_name}`"
         )
 
-        
     return -1
 
 
@@ -73,7 +74,9 @@ def _get_configs_dir():
 
 
 def _get_config_names(model_dir):
-    return [d for d in os.listdir(model_dir) if os.path.isdir(os.path.join(model_dir, d))]
+    return [
+        d for d in os.listdir(model_dir) if os.path.isdir(os.path.join(model_dir, d))
+    ]
 
 
 def _get_model_names(base_model_dir):
@@ -115,28 +118,30 @@ def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
 
     sharding_val = 0
     if st.button("Submit"):
+        for key in st.session_state.keys():
+            del st.session_state[key]
+
         sharding_val = "1" if sharding else "0"
         file_base = f"{dp}_{tp}_{sp}_{pp}_{sharding_val}"
         trace_file_name = f"{file_base}_trace.csv"
-        roofline_file_name = f"{file_base}_roofline.csv"
+        timed_file_name = f"{file_base}_trace_matched_timiming.csv"
 
         base_dir = os.path.join(base_model_dir, selected_model, selected_config)
+        output_file = os.path.join(base_dir, timed_file_name)
         csv_trace_file = os.path.join(base_dir, trace_file_name)
-        csv_roofline_file = os.path.join(base_dir, roofline_file_name)
         res_path = os.path.abspath(
-            os.path.join(
-                os.getcwd(), f"../results/{selected_model}/{selected_config}/"
-            )
+            os.path.join(os.getcwd(), f"../results/{selected_model}/{selected_config}/")
         )
         res_file = os.path.join(res_path, f"{file_base}_res.csv")
         log_file = os.path.join(base_dir, f"{file_base}.log")
 
+        if "df_matched" not in st.session_state:
+            st.session_state.df_matched = tv.get_timings_df(csv_trace_file, output_file)
+
         st.session_state.update(
             {
                 "csv_trace_file": csv_trace_file,
-                "csv_roofline_file": csv_roofline_file,
                 "trace_file_name": trace_file_name,
-                "roofline_file_name": roofline_file_name,
                 "res_file": res_file,
                 "log_file": log_file,
                 "res_path": res_path,
@@ -145,11 +150,11 @@ def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
         )
 
 
-def _detect_file_change(csv_roofline_file):
+def _detect_file_change(csv_trace_file):
     if (
-        "last_roofline_file" not in st.session_state
-        or st.session_state.last_roofline_file != csv_roofline_file
+        "last_trace_file" not in st.session_state
+        or st.session_state.last_trace_file != csv_trace_file
     ):
-        st.session_state.last_roofline_file = csv_roofline_file
+        st.session_state.last_trace_file = csv_trace_file
         st.session_state.timestep_idx = 0
         st.session_state.selected_timestep = None

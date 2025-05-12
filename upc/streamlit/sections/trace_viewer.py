@@ -17,28 +17,12 @@ import roofline_visualization as rv
 def trace_viewer(sim_outputs):
     st.title("📊 Trace Visualization Viewer")
     _init_session_state()
-
-    dp, tp, sp, pp, sharding_val = (
-        sim_outputs["dp"],
-        sim_outputs["tp"],
-        sim_outputs["sp"],
-        sim_outputs["pp"],
-        sim_outputs["sharding_val"],
-    )
-    sim_dir = sim_outputs["sim_dir"]
-    trace_file_name, roofline_file_name, csv_trace_file, csv_roofline_file = (
-        _get_file_paths(sim_dir, dp, tp, sp, pp, sharding_val)
-    )
-    _detect_file_change(csv_roofline_file)
-
-    if os.path.isfile(csv_trace_file):
-        df, npu, max_npu = _load_and_select_npu(csv_trace_file)
-        _show_basic_plots(df, npu, csv_roofline_file)
-        _plot_selector(df, npu, max_npu, csv_roofline_file)
+    if "df_matched" not in st.session_state:
+        st.warning("The simulation trace is not available yet.")
     else:
-        st.error(
-            f"❌ The combination you entered does not correspond to an existing trace file: `{trace_file_name}`"
-        )
+        npu, max_npu = _load_and_select_npu(st.session_state.df_matched)
+        _show_basic_plots(st.session_state.df_matched, npu)
+        _plot_selector(st.session_state.df_matched, npu, max_npu)
 
 
 def _init_session_state():
@@ -48,39 +32,29 @@ def _init_session_state():
         st.session_state.peak_bw = 2000
 
 
-def _get_file_paths(sim_dir, dp, tp, sp, pp, sharding_val):
-    trace_file_name = f"{dp}_{tp}_{sp}_{pp}_{sharding_val}_trace.csv"
-    roofline_file_name = f"{dp}_{tp}_{sp}_{pp}_{sharding_val}_roofline.csv"
-    csv_trace_file = os.path.join(sim_dir, trace_file_name)
-    csv_roofline_file = os.path.join(sim_dir, roofline_file_name)
-    return trace_file_name, roofline_file_name, csv_trace_file, csv_roofline_file
-
-
-def _detect_file_change(csv_roofline_file):
+def _detect_file_change(csv_trace_file):
     if (
-        "last_roofline_file" not in st.session_state
-        or st.session_state.last_roofline_file != csv_roofline_file
+        "last_trace_file" not in st.session_state
+        or st.session_state.last_trace_file != csv_trace_file
     ):
-        st.session_state.last_roofline_file = csv_roofline_file
+        st.session_state.last_trace_file = csv_trace_file
         st.session_state.timestep_idx = 0
         st.session_state.selected_timestep = None
 
 
-def _load_and_select_npu(csv_trace_file):
-    df = pd.read_csv(csv_trace_file)
-    df = tv.get_timings_df(df)
+def _load_and_select_npu(df):
     max_npu = int(df["sys_id"].max())
     npu = st.number_input("NPU index", min_value=0, max_value=max_npu, value=0, step=1)
     if "active_plot" not in st.session_state:
         st.session_state.active_plot = None
-    return df, npu, max_npu
+    return npu, max_npu
 
 
-def _show_basic_plots(df, npu, csv_roofline_file):
+def _show_basic_plots(df, npu):
     st.subheader("Visualize the compute and communication node over time.")
     st.altair_chart(tv.plot_one_npu(df, npu), use_container_width=True)
     mem, comp, idle = rv.get_info(
-        csv_roofline_file,
+        df,
         npu=npu,
         perf=st.session_state.peak_perf,
         bw=st.session_state.peak_bw,
@@ -88,12 +62,12 @@ def _show_basic_plots(df, npu, csv_roofline_file):
     st.info(f"""
         **Percentage of time spent with memory bound operations**: {mem:.2f}% \n
         **Percentage of time spent with compute bound operations**: {comp:.2f}% \n
-        **Percentage of time spent with idle bound operations**: {idle:.2f}% \n
+        **Percentage of time spent with idle**: {idle:.2f} \n
     """)
     st.markdown("---")
 
 
-def _plot_selector(df, npu, max_npu, csv_roofline_file):
+def _plot_selector(df, npu, max_npu):
     col_plot1, col_plot2, col_plot3, col_plot4, col_plot5, col_plot6 = st.columns(6)
     with col_plot1:
         if st.button("Show Chakra Times"):
@@ -129,20 +103,20 @@ def _plot_selector(df, npu, max_npu, csv_roofline_file):
                 use_container_width=True,
             )
     elif st.session_state.active_plot == "roofline_3d":
-        _show_3d_roofline(csv_roofline_file, npu, time_window)
+        _show_3d_roofline(df, npu, time_window)
     elif st.session_state.active_plot == "roofline_2d":
-        _show_2d_roofline(csv_roofline_file, npu)
+        _show_2d_roofline(df, npu)
     elif st.session_state.active_plot == "roofline_2d_over_time":
-        _show_2d_roofline_over_time(csv_roofline_file, npu, time_window)
+        _show_2d_roofline_over_time(df, npu, time_window)
     elif st.session_state.active_plot == "roofline_2d_timestep":
-        _show_2d_roofline_timestep(csv_roofline_file, npu)
+        _show_2d_roofline_timestep(df, npu)
 
 
-def _show_3d_roofline(csv_roofline_file, npu, time_window):
+def _show_3d_roofline(df, npu, time_window):
     st.subheader("Visualize 3D roofline model.")
     st.plotly_chart(
         rv.get_3d_roofline_plot(
-            csv_roofline_file,
+            df,
             npu,
             time_window=time_window,
             perf=st.session_state.peak_perf,
@@ -151,11 +125,11 @@ def _show_3d_roofline(csv_roofline_file, npu, time_window):
     )
 
 
-def _show_2d_roofline(csv_roofline_file, npu):
+def _show_2d_roofline(df, npu):
     st.subheader("Visualize 2D roofline model.")
     st.altair_chart(
         rv.get_2d_roofline_plot_normal(
-            csv_roofline_file,
+            df,
             npu,
             perf=st.session_state.peak_perf,
             bw=st.session_state.peak_bw,
@@ -163,11 +137,11 @@ def _show_2d_roofline(csv_roofline_file, npu):
     )
 
 
-def _show_2d_roofline_over_time(csv_roofline_file, npu, time_window):
+def _show_2d_roofline_over_time(df, npu, time_window):
     st.subheader("Visualize 2D roofline model overtime.")
     st.altair_chart(
         rv.get_2d_roofline_plot_with_time(
-            csv_roofline_file,
+            df,
             npu,
             time_window=time_window,
             perf=st.session_state.peak_perf,
@@ -176,15 +150,15 @@ def _show_2d_roofline_over_time(csv_roofline_file, npu, time_window):
     )
 
 
-def _show_2d_roofline_timestep(csv_roofline_file, npu):
+def _show_2d_roofline_timestep(df, npu):
     st.subheader("Visualize 2D roofline model based on a timestep.")
-    df, timesteps = rv.get_timesteps(csv_file=csv_roofline_file, npu=npu)
-    _init_timestep_state(timesteps)
+    df, timesteps = rv.get_timesteps(df=df, npu=npu)
+    _init_timestep_state()
     _timestep_controls(timesteps)
     _show_timestep_plot_and_table(df, timesteps)
 
 
-def _init_timestep_state(timesteps):
+def _init_timestep_state():
     if "timestep_idx" not in st.session_state:
         st.session_state.timestep_idx = 0
 
@@ -192,8 +166,10 @@ def _init_timestep_state(timesteps):
 def play():
     st.session_state.is_playing = True
 
+
 def pause():
     st.session_state.is_playing = False
+
 
 def next_step(timesteps):
     idx = st.session_state.timestep_idx
@@ -202,12 +178,14 @@ def next_step(timesteps):
     else:
         st.session_state.timestep_idx = 0
 
+
 def prev_step(timesteps):
     idx = st.session_state.timestep_idx
     if idx > 0:
         st.session_state.timestep_idx = idx - 1
     else:
         st.session_state.timestep_idx = len(timesteps) - 1
+
 
 def _timestep_controls(timesteps):
     if "is_playing" not in st.session_state:

@@ -21,14 +21,42 @@ NodeType = {
 node_types = list(NodeType.keys())
 
 
-def get_timings_df(df: pd.DataFrame) -> pd.DataFrame:
+# def get_timings_df(df: pd.DataFrame) -> pd.DataFrame:
+#    df_issues = df.query("action == 'issue'").drop(columns="action")
+#    df_callbacks = df.query("action == 'callback'").drop(columns="action")
+#    return df_issues.merge(
+#        df_callbacks,
+#        on=["sys_id", "node_id", "node_name", "node_type"],
+#        suffixes=("_issue", "_callback"),
+#    ).assign(elapsed_time=lambda d: d["tick_callback"] - d["tick_issue"])
+
+
+def get_timings_df(csv_trace_file, output_file_name) -> pd.DataFrame:
+    df = pd.read_csv(csv_trace_file)
+    # Filter issues and rename 'tick' to 'issue_tick'
     df_issues = df.query("action == 'issue'").drop(columns="action")
-    df_callbacks = df.query("action == 'callback'").drop(columns="action")
-    return df_issues.merge(
-        df_callbacks,
+
+    # Filter callbacks and rename 'tick' to 'callback_tick'
+    df_callbacks = (
+        df.query("action == 'callback'")
+        .drop(columns="action")
+        .rename(columns={"issue_tick": "callback_tick"})
+    )
+
+    # Merge issues with callbacks on the identifying columns
+    merged_df = df_issues.merge(
+        df_callbacks[["sys_id", "node_id", "node_name", "node_type", "callback_tick"]],
         on=["sys_id", "node_id", "node_name", "node_type"],
-        suffixes=("_issue", "_callback"),
-    ).assign(elapsed_time=lambda d: d["tick_callback"] - d["tick_issue"])
+        how="left",
+        suffixes=("", ""),
+    )
+
+    # Add elapsed_time column
+    merged_df["elapsed_time"] = merged_df["callback_tick"] - merged_df["issue_tick"]
+
+    merged_df.to_csv(output_file_name)
+
+    return merged_df
 
 
 def plot_elapsed_times(
@@ -37,7 +65,9 @@ def plot_elapsed_times(
     font_size = 15
     df = df.query(f"sys_id == {sys_id}")
     unique_nodes = df["node_name"].nunique()
-    chart_height =  max(unique_nodes * font_size * 1.5, max_height)  # min/max to keep reasonable bounds
+    chart_height = max(
+        unique_nodes * font_size * 1.5, max_height
+    )  # min/max to keep reasonable bounds
 
     return (
         alt.Chart(df)
@@ -49,7 +79,7 @@ def plot_elapsed_times(
                 sort=alt.SortField(field="elapsed_time", order="descending"),
                 title="Node Name",
             ),
-            tooltip=["node_name", "elapsed_time", "tick_issue"],
+            tooltip=["node_name", "elapsed_time", "issue_tick"],
         )
         .properties(
             width=600,
@@ -69,25 +99,25 @@ def plot_elapsed_times(
 
 def get_overlapped_blocks(df: pd.DataFrame) -> dict[str, list[int]]:
     """df should be filtered by sys_id and node_type."""
-    df_sorted = df.sort_values("tick_issue")
+    df_sorted = df.sort_values("issue_tick")
     blocks = {
         "start": [],
         "end": [],
     }
     prev_start, prev_end = 0, 0
     for _, row in df_sorted.iterrows():
-        if row["tick_issue"] <= prev_end:
+        if row["issue_tick"] <= prev_end:
             # overlap
             # merge the two blocks with proper start and end times
             # update the prev variables
             # do not append the block until we know it is not overlapping with any other subsequent block
-            prev_end = max(prev_end, row["tick_callback"])
+            prev_end = max(prev_end, row["callback_tick"])
         else:
             # there is no overlap, append the block and update the prev variables
             blocks["start"].append(prev_start)
             blocks["end"].append(prev_end)
-            prev_start = row["tick_issue"]
-            prev_end = row["tick_callback"]
+            prev_start = row["issue_tick"]
+            prev_end = row["callback_tick"]
 
     blocks["start"].append(prev_start)
     blocks["end"].append(prev_end)
