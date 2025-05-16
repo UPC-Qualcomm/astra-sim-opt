@@ -165,12 +165,6 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                                             .get_data_dependancy()
                                             .get_children(node->id()),
                                         sys->id);*/
-    if (sys->trace_enabled) {
-        LoggerFactory::get_trace_logger()->info(
-            ",issue,{},{},{},{},{}", sys->id, Sys::boostedTick(), node->id(),
-            node->name(), static_cast<uint64_t>(node->type()));
-    }
-
     this->et_feeder->getDependancyResolver().take_node(node->id());
     this->hw_resource->occupy(node);
 
@@ -181,9 +175,9 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
             (node->type() == ChakraNodeType::MEM_STORE_NODE)) {
             if (sys->trace_enabled) {
                 LoggerFactory::get_trace_logger()->info(
-                    ",issue,{},{},{},{},{}", sys->id, Sys::boostedTick(),
-                    node->id(), node->name(),
-                    static_cast<uint64_t>(node->type()));
+                    ",issue,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+                    node->name(), static_cast<uint64_t>(node->type()), 0, 0, 0,
+                    0, Sys::boostedTick());
             }
             issue_remote_mem(node);
         } else if (node->type() == ChakraNodeType::COMP_NODE) {
@@ -196,12 +190,6 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                     // with replay.
                     issue_replay(node);
                 } else {
-                    if (sys->trace_enabled) {
-                        LoggerFactory::get_trace_logger()->info(
-                            ",issue,{},{},{},{},{}", sys->id,
-                            Sys::boostedTick(), node->id(), node->name(),
-                            static_cast<uint64_t>(node->type()));
-                    }
                     // comp node on gpu
                     issue_comp(node);
                 }
@@ -209,6 +197,12 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         } else if (node->type() == ChakraNodeType::COMM_COLL_NODE ||
                    node->type() == ChakraNodeType::COMM_SEND_NODE ||
                    node->type() == ChakraNodeType::COMM_RECV_NODE) {
+            if (sys->trace_enabled) {
+                LoggerFactory::get_trace_logger()->info(
+                    ",issue,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+                    node->name(), static_cast<uint64_t>(node->type()), 0, 0, 0,
+                    0, Sys::boostedTick());
+            }
             issue_comm(node);
         } else if (node->type() == ChakraNodeType::INVALID_NODE) {
             skip_invalid(node);
@@ -277,10 +271,13 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     } else {
         hw_resource->tics_gpu_ops += runtime;
     }
-    LoggerFactory::get_roofline_logger()->info(
-        ",{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(), node->name(),
-        node->num_ops(), node->tensor_size(), perf, operational_intensity,
-        runtime, Sys::boostedTick(), Sys::boostedTick() + runtime);
+    if (sys->trace_enabled) {
+        LoggerFactory::get_trace_logger()->info(
+            ",issue,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+            node->name(), static_cast<uint64_t>(node->type()), node->num_ops(),
+            node->tensor_size(), perf, operational_intensity,
+            Sys::boostedTick());
+    }
     sys->register_event(this, EventType::General, wlhd, runtime);
 }
 
@@ -443,8 +440,9 @@ void Workload::call(EventType event, CallData* data) {
 
         if (sys->trace_enabled) {
             LoggerFactory::get_trace_logger()->info(
-                ",callback,{},{},{},{},{}", sys->id, Sys::boostedTick(),
-                node->id(), node->name(), static_cast<uint64_t>(node->type()));
+                ",callback,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+                node->name(), static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                Sys::boostedTick());
         }
         hw_resource->release(node);
 
@@ -467,9 +465,9 @@ void Workload::call(EventType event, CallData* data) {
 
             if (sys->trace_enabled) {
                 LoggerFactory::get_trace_logger()->info(
-                    ",callback,{},{},{},{},{}", sys->id, Sys::boostedTick(),
-                    node->id(), node->name(),
-                    static_cast<uint64_t>(node->type()));
+                    ",callback,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+                    node->name(), static_cast<uint64_t>(node->type()), 0, 0, 0,
+                    0, Sys::boostedTick());
             }
             hw_resource->release(node);
 
