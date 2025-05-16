@@ -3,7 +3,32 @@ import os
 import subprocess
 import multiprocessing
 import argparse
+import pandas as pd
 
+def get_timings_df(csv_trace_file, output_file_name):
+    df = pd.read_csv(csv_trace_file)
+    # Filter issues and rename 'tick' to 'issue_tick'
+    df_issues = df.query("action == 'issue'").drop(columns="action")
+
+    # Filter callbacks and rename 'tick' to 'callback_tick'
+    df_callbacks = (
+        df.query("action == 'callback'")
+        .drop(columns="action")
+        .rename(columns={"issue_tick": "callback_tick"})
+    )
+
+    # Merge issues with callbacks on the identifying columns
+    merged_df = df_issues.merge(
+        df_callbacks[["sys_id", "node_id", "node_name", "node_type", "callback_tick"]],
+        on=["sys_id", "node_id", "node_name", "node_type"],
+        how="left",
+        suffixes=("", ""),
+    )
+
+    # Add elapsed_time column
+    merged_df["elapsed_time"] = merged_df["callback_tick"] - merged_df["issue_tick"]
+    merged_df.fillna(0, inplace=True)
+    merged_df.to_csv(output_file_name)
 
 def run_command(command, cwd=None):
     result = subprocess.run(command, shell=True, cwd=cwd)
@@ -59,6 +84,8 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
     )
     print(cmd)
     success = run_command(cmd)
+    if success:
+        get_timings_df(f"{log}_trace.csv", f"{log}_trace_matched_timing.csv")
     if not success:
         return cmd
     return ""

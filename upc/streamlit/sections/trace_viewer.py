@@ -12,7 +12,7 @@ import numpy as np
 import time
 import trace_visualization as tv
 import roofline_visualization as rv
-
+import io
 
 def trace_viewer(sim_outputs):
     st.title("📊 Trace Visualization Viewer")
@@ -59,10 +59,12 @@ def _show_basic_plots(df, npu):
         perf=st.session_state.peak_perf,
         bw=st.session_state.peak_bw,
     )
+    total = idle + comp + mem
     st.info(f"""
-        **Percentage of time spent with memory bound operations**: {mem:.2f}% \n
-        **Percentage of time spent with compute bound operations**: {comp:.2f}% \n
-        **Percentage of time spent with idle**: {idle:.2f} \n
+        **Percentage of time spent with memory bound operations**: {mem/total * 100:.2f}% \n
+        **Percentage of time spent with compute bound operations**: {comp/total * 100:.2f}% \n
+        **Percentage of time spent with idle**: {idle/total*100:.2f} \n
+        **Total time spent**: {total*1e-6:.2f} ms \n
     """)
     st.markdown("---")
 
@@ -221,11 +223,14 @@ def _show_timestep_plot_and_table(df, timesteps):
     df = df[df["issue_tick"] == timesteps[st.session_state.timestep_idx]]
     col1, col2 = st.columns([2, 1])
     with col1:
-        st.altair_chart(
-            rv.get_2d_roofline_plot_timestep(
+        buf = io.BytesIO()
+        rv.get_2d_roofline_plot_timestep(
                 df, perf=st.session_state.peak_perf, bw=st.session_state.peak_bw
-            )
-        )
+            ).save(buf, format='png')  # Requires vl-convert or altair_saver
+        buf.seek(0)
+        png_bytes = buf.read()
+        st.image(png_bytes)
+       
     with col2:
         st.write("ℹ️ Points at this timestep:")
         st.dataframe(

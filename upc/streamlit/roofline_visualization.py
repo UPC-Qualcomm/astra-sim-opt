@@ -288,7 +288,7 @@ def plot_roofline_timestep(df, beta=2000, pi=300):
         )
         .properties(
             title="Roofline Model: Performance vs Operational Intensity",
-            width=600,
+            width=1000,
             height=400,
         )
     )
@@ -563,12 +563,60 @@ def get_info(df, npu=0, perf=300, bw=2000):
     comp_time = df_compute["elapsed_time"].sum()
     idle_time = df_idle["elapsed_time"].sum()
 
-    mem_time_percent = mem_time / total_time * 100
-    comp_time_percent = comp_time / total_time * 100
-    idle_time_percent = (total_time - (mem_time + comp_time)) / total_time * 100
+    
 
-    return mem_time_percent, comp_time_percent, idle_time_percent
+    return mem_time, comp_time, total_time - (mem_time + comp_time)
 
+
+##TODO: Check if needed - get info while considering the overlapping within MEM and COMP
+#def get_info(df, npu=0, perf=300, bw=2000):
+#    df_local = df[df["sys_id"] == npu].copy()
+#    compute_memory_boundary = (perf / bw) * 1e3  # FLOPS/Byte
+#
+#    # Add start and end times
+#    df_local['start'] = df_local['issue_tick']
+#    df_local['end'] = df_local['callback_tick']
+#
+#    # Classify intervals
+#    mem_intervals = df_local[
+#        (df_local["operational_intensity"] < compute_memory_boundary) &
+#        (df_local["operational_intensity"] != 0)
+#    ][['start', 'end']].values.tolist()
+#
+#    comp_intervals = df_local[
+#        (df_local["operational_intensity"] >= compute_memory_boundary)
+#    ][['start', 'end']].values.tolist()
+#
+#    idle_intervals = df_local[
+#        (df_local["operational_intensity"] == 0)
+#    ][['start', 'end']].values.tolist()
+#
+#    # Merge intervals to avoid double-counting
+#    mem_time = merge_intervals(mem_intervals)
+#    comp_time = merge_intervals(comp_intervals)
+#    idle_time = merge_intervals(idle_intervals)
+#
+#    # Total time is the span from min start to max end
+#    total_time = df_local['end'].max() - df_local['start'].min()
+#
+#    # Optionally, you can check that mem_time + comp_time + idle_time <= total_time
+#    return mem_time, comp_time, idle_time
+#
+#
+#def merge_intervals(intervals):
+#    """Merge overlapping intervals and return total covered time."""
+#    if not intervals:
+#        return 0
+#    sorted_intervals = sorted(intervals, key=lambda x: x[0])
+#    merged = [sorted_intervals[0]]
+#    for start, end in sorted_intervals[1:]:
+#        last_end = merged[-1][1]
+#        if start <= last_end:
+#            merged[-1][1] = max(last_end, end)
+#        else:
+#            merged.append([start, end])
+#    total = sum(end - start for start, end in merged)
+#    return total
 
 # TODO:
 # Plot with slider

@@ -8,11 +8,11 @@
     "reduce-scatter-implementation": ["ring","halvingDoubling"],
     "all-to-all-implementation": ["ring","halvingDoubling"],
     "collective-optimization": "localBWAware",
-    "local-mem-bw": 50,
-    "local-mem-size":80,
-    "enable_network_logger":0,
+    "local-mem-bw": 3350,
+    "local-mem-size": 80,
+    "enable_network_logger": 0,
     "boost-mode": 0,
-    "peak-perf": 1000,
+    "peak-perf": 989,
     "roofline-enabled": 1,
     "trace-enabled": 1
 }
