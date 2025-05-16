@@ -8,11 +8,13 @@
     "reduce-scatter-implementation": ["ring"],
     "all-to-all-implementation": ["ring"],
     "collective-optimization": "localBWAware",
-    "local-mem-bw": 50,
-    "local-mem-size":80,
-    "enable_network_logger":0,
+    "local-mem-bw": 2000, 
+    "local-mem-size": 80,
+    "enable_network_logger": 0,
     "boost-mode": 0,
-    "peak-perf": 1000,
+    "peak-perf": 300,
     "roofline-enabled": 1,
-    "trace-enabled": true
+    "trace-enabled": 1,
+    "trace-mem": 1,
+    "mixed-percision": 1
 }

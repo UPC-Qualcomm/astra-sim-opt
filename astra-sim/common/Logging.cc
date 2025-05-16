@@ -4,6 +4,8 @@ namespace AstraSim {
 
 std::unordered_set<spdlog::sink_ptr> LoggerFactory::default_sinks;
 std::shared_ptr<spdlog::logger> LoggerFactory::memory_logger = nullptr;
+std::shared_ptr<spdlog::logger> LoggerFactory::trace_logger = nullptr;
+std::shared_ptr<spdlog::logger> LoggerFactory::roofline_logger = nullptr;
 // std::shared_ptr<spdlog::logger> LoggerFactory::system_logger = nullptr;
 // std::shared_ptr<spdlog::logger> LoggerFactory::workload_logger = nullptr;
 
@@ -31,6 +33,14 @@ std::shared_ptr<spdlog::logger> LoggerFactory::get_logger(
 
 std::shared_ptr<spdlog::logger> LoggerFactory::get_memory_logger() {
     return memory_logger;
+}
+
+std::shared_ptr<spdlog::logger> LoggerFactory::get_trace_logger() {
+    return trace_logger;
+}
+
+std::shared_ptr<spdlog::logger> LoggerFactory::get_roofline_logger() {
+    return roofline_logger;
 }
 
 /*std::shared_ptr<spdlog::logger> LoggerFactory::get_system_logger() {
@@ -65,7 +75,7 @@ void LoggerFactory::init_default_components(
 
     auto sink_rotate_out =
         std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-            log_config_path + ".log", 1024 * 1024 * 10, 10);
+            log_config_path + ".log", 1024 * 1024 * 10 * 10, 10);
     sink_rotate_out->set_level(spdlog::level::debug);
     default_sinks.insert(sink_rotate_out);
 
@@ -85,6 +95,27 @@ void LoggerFactory::init_default_components(
     memory_logger->info(", Sys, Time, Node ID, Node Name, Node Type ,Total "
                         "Peak Memory,  Activation, Gradient, "
                         "Parameter, Optimizer, OOM");
+
+    // Initialize trace logger
+    auto trace_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+        log_config_path + "_trace.csv", 1024 * 1024 * 10 * 100, 10);
+    trace_sink->set_level(spdlog::level::info);
+    trace_logger = std::make_shared<spdlog::logger>("trace", trace_sink);
+    spdlog::register_logger(trace_logger);
+    // Set the header
+    trace_logger->info(",action,sys_id,tick,node_id,node_name,node_type");
+
+    // Initialize roofeline logger
+    auto roofline_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+        log_config_path + "_roofline.csv", 1024 * 1024 * 10 * 100, 10);
+    roofline_sink->set_level(spdlog::level::info);
+    roofline_logger =
+        std::make_shared<spdlog::logger>("roofline", roofline_sink);
+    spdlog::register_logger(roofline_logger);
+    // Set the header
+    roofline_logger->info(",sys_id,node_id,node_name,num_ops,tensor_size,perf,"
+                          "operational_intensity,"
+                          "elapsed_time,issue_tick,callback_tick");
 
     // Initialize system logger
     /*auto system_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(

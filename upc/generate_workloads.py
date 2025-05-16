@@ -84,6 +84,7 @@ class Model(Enum):
             case Model.GPT_2_Medium:
                 return [50257, 1024, 1024, 4096, 8, 1024, 16, 24]
             case Model.GPT_3_1300M:
+                #return [50257, 2048, 2048, 8192, [1,2,4,8,16], 2048, 16, 2]
                 return [50257, 2048, 2048, 8192, 4, 2048, 16, 24]
             case Model.GPT_Neo_2700M:
                 return [50257, 2560, 2560, 10240, 16, 2048, 32, 32]
@@ -135,7 +136,7 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
         f"--dout {dout} "
         f"--dmodel {dmodel} "
         f"--dff {dff} "
-        f"--batch {batch} "
+        f"--batch {batch} "#'{batch}' "
         f"--seq {seq} "
         f"--head {head} "
         f"--num_stacks {num_stacks} "
