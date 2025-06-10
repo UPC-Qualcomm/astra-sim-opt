@@ -40,7 +40,8 @@ def extract_runtime_results(log_path):
 def extract_runtime_results_dir(log_dir, output_dir):
     df = extract_runtime_results(log_dir)
     file_name = os.path.join(output_dir, os.path.splitext(log_dir)[0].split('/')[-1] + "_res.csv")
-    df.to_csv(file_name, index=False)
+    if not df.empty:
+        df.to_csv(file_name, index=False)
 
 def list_logs(root):
     files = os.listdir(root)
