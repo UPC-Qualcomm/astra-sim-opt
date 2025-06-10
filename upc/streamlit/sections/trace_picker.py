@@ -108,9 +108,9 @@ def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
     with col2:
         tp = st.text_input("Tensor Parallelism (TP)", "8")
     with col3:
-        sp = st.text_input("Pipeline Parallelism (SP)", "2")
+        sp = st.text_input("Sequance Parallelism (SP)", "2")
     with col4:
-        pp = st.text_input("Placement Parallelism (PP)", "4")
+        pp = st.text_input("Pipeline Parallelism (PP)", "4")
     with col5:
         sharding = st.checkbox("Sharding", value=False)
 
@@ -178,6 +178,7 @@ def get_model_and_config():
 
     return selected_model, selected_config
 
+@st.cache_data
 def get_all_parallelism_strategies_data(model, config, option):
     csv_files = get_all_matched_traces_file_names(model, config)
     records = []
@@ -185,6 +186,7 @@ def get_all_parallelism_strategies_data(model, config, option):
     for file in csv_files:
         df = pd.read_csv(file)
         df.fillna(0, inplace=True) #TODO: Remove after fixing the file generation
+       
         if option == 'slowest':
             mem, comp, comm = get_slowest_npu(df)
         elif option == 'average':
@@ -216,7 +218,7 @@ def get_all_parallelism_strategies_data(model, config, option):
 
     return pd.DataFrame(records)
 
-
+@st.cache_data
 def get_all_matched_traces_file_names(model, config):
     base_dir = os.path.join(_get_output_dir(), model, config)
     files = os.listdir(base_dir)
@@ -250,7 +252,7 @@ def get_fastest_npu(df):
 
 
 def get_averaged_npus(df):
-    max_npu = df["sys_id"].max()
+    max_npu = df["sys_id"].max() + 1
     mem_tot = 0
     comp_tot = 0
     comm_tot = 0
@@ -363,7 +365,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
     plots = []
 
     # Sort by parallelism columns
-    df_sorted = df.sort_values(by=['dp','tp','sp','pp','fsdp'], ascending=True).reset_index(drop=True)
+    df_sorted = df#.sort_values(by=['dp','tp','sp','pp','fsdp'], ascending=True).reset_index(drop=True)
 
     # Normalize 'total' globally and map to colors
     norm = plt.Normalize(df_sorted['total'].min(), df_sorted['total'].max())
@@ -384,13 +386,13 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
         chunk = df_sorted.iloc[start:end]
 
         file_names = chunk['file_name']
-        mem_values = chunk['mem'] / chunk['total'] * 100
-        comp_values = chunk['comp'] / chunk['total'] * 100
-        comm_values = chunk['comm'] / chunk['total'] * 100
+        mem_values = chunk['mem'] #/ chunk['total'] * 100
+        comp_values = chunk['comp']# / chunk['total'] * 100
+        comm_values = chunk['comm'] #/ chunk['total'] * 100
 
         x = np.arange(len(chunk))
 
-        fig, ax = plt.subplots(figsize=(12, 6))
+        fig, ax = plt.subplots(figsize=(12, 4))
 
         ax.bar(x, mem_values, label='Memory Bound OPs', color='skyblue')
         ax.bar(x, comp_values, bottom=mem_values, label='Compute Bound OPs', color='lightgreen')
@@ -400,12 +402,12 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
         ax.bar(x, comm_values, bottom=mem_values + comp_values, label='Communication', color=comm_colors)
 
         for xi, mem, comm, comp in zip(x, mem_values, comm_values, comp_values):
-            ax.text(xi, comp + mem + comm / 2, f"{comm:.1f}", ha='center', va='center', fontsize=8, color='black')
+            ax.text(xi, comp + mem + comm / 2, f"{comm/(comp+mem+comm) * 100 :.2f}", ha='center', va='center', fontsize=8, color='black')
 
         ax.set_xticks(x)
         ax.set_xticklabels(file_names, rotation=45, ha='right')
         ax.set_xlabel('Parallelism strategy: DP,TP,SP,PP,FSDP')
-        ax.set_ylabel('Time (%)')
+        ax.set_ylabel('Time (Cycles)')
         ax.set_title(f'Execution Breakdown per Experiment (Bars {start + 1} to {end}) - lighter color faster simulation')
         ax.legend()
 

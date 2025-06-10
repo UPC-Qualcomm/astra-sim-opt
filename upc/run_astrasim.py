@@ -44,12 +44,13 @@ def list_workloads(root):
     return filtered
 
 
-def run_astrasim(workload_path, system, network, memory, output_dir, network_log):
+def run_astrasim(workload_path, system, network, memory, output_dir, network_log, suffix=None):
     astrasim_root = (
         "/home/tomas/repositories/upc/astra-sim"
         if os.getlogin() == "tomas"
-        else "/home/mohammad/spain/experiments/astra-sim"
+        else "/media/mohammad/extension/experiments/astra-sim"
     )
+    #astrasim_root = os.getcwd()+'/..'
     if astrasim_root is None:
         raise Exception(
             f"please specify astrasim folder path at variable astrasim_root at "
@@ -67,6 +68,8 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
     os.makedirs(os.path.join(file_dir, output_dir), exist_ok=True)
     os.makedirs(os.path.join(file_dir, network_log), exist_ok=True)
     log = os.path.join(file_dir, output_dir, os.path.split(workload_path)[1])
+    if suffix is  not None:
+        log = log + suffix
     # with open(log, 'w') as outfile:
     #    pass
     network_log = os.path.join(
@@ -85,7 +88,8 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
     print(cmd)
     success = run_command(cmd)
     if success:
-        get_timings_df(f"{log}_trace.csv", f"{log}_trace_matched_timing.csv")
+        if os.path.getsize(f'{log}.err') == 0:
+            get_timings_df(f"{log}_trace.csv", f"{log}_trace_matched_timing.csv")
     if not success:
         return cmd
     return ""
@@ -134,7 +138,7 @@ if __name__ == "__main__":
         network_log=args.network_log,
     )
 
-    with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:
+    with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.70)) as pool:
         failed_cmds = pool.map(func, design_space)
         print("\n\nrunfails:")
         for cmd in failed_cmds:
