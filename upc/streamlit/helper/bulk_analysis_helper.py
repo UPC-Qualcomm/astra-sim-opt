@@ -35,8 +35,6 @@ def select_dim(
             key=f"{key_prefix}_selector",
         )
     with col1:
-        st.write(global_min)
-
         dim_val = st.select_slider(
             f"Select {selected_dim} value:",
             options=sorted(df[selected_dim].unique()),

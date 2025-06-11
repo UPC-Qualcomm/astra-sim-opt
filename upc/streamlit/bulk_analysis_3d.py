@@ -111,7 +111,7 @@ with col1:
             st.write("No local minima found for the selected configuration.")
 
 st.subheader("Local Minima Records on the entire data (unsliced):")
-st.dataframe(local_min_df_all_axis.sort_values('total'))
+st.dataframe(local_min_df_all_axis.sort_values("total"))
 
 st.markdown("---")
 
