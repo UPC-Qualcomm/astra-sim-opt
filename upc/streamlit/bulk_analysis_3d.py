@@ -117,7 +117,7 @@ st.markdown("---")
 
 tabs = [
     "### Dimension Reduction & Clustering & ML Models",
-    "### Best 10 Performing Examples",
+    "### Best Performing Examples",
 ]
 
 if "active_tab" not in st.session_state:

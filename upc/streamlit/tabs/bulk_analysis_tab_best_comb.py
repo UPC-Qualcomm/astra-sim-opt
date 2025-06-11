@@ -36,22 +36,28 @@ def render(df, selected_model, selected_config):
 
     st.title("AstraSim Bandwidth Sweep Runner")
 
-    run_button, intra_bw_list, inter_bw_list = bw_form.sweep_bw_form()
+    run_button, intra_bw_list, inter_bw_list, selected_config_names_list = (
+        bw_form.sweep_bw_form(selected_config, selected_model)
+    )
 
     st.info("Starting bandwidth sweep simulations...")
     parallelism_strategies = df_top["file_name"].tolist()
-    bw_run.intra_inter_simulations_run(
-        parallelism_strategies,
-        selected_config,
-        selected_model,
-        run_button,
-        intra_bw_list,
-        inter_bw_list,
-    )
 
-    st.markdown("---")
+    for config in selected_config_names_list:
+        bw_run.intra_inter_simulations_run(
+            parallelism_strategies,
+            config,
+            selected_model,
+            run_button,
+            intra_bw_list,
+            inter_bw_list,
+        )
 
-    bw_show.show_inter_intra_sim_res(parallelism_strategies, selected_model)
+        st.markdown("---")
+
+        bw_show.show_inter_intra_sim_res(parallelism_strategies, config, selected_model)
+
+        st.markdown("---")
 
 
 def get_exposed_comm_fig(df):
@@ -77,52 +83,3 @@ def get_exposed_comm_fig(df):
     ax.tick_params(axis="both", which="minor", labelsize=24)
 
     return fig
-
-
-@st.cache_data
-def run_bandwidth_sweep_parallel(
-    base_yml_path,
-    output_config_dir,
-    parallelism_strategies,
-    bw1_values,
-    bw2_values,
-    app_dir,
-    max_workers,
-    selected_config,
-    selected_model,
-):
-    combinations = list(
-        itertools.product(parallelism_strategies, bw1_values, bw2_values)
-    )
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(
-                bw_run.run_single_simulation,
-                base_yml_path,
-                output_config_dir,
-                parallelism_strategy,
-                bw1,
-                bw2,
-                app_dir,
-                selected_config,
-                selected_model,
-            )
-            for parallelism_strategy, bw1, bw2 in combinations
-        ]
-
-        for f in tqdm(
-            as_completed(futures), total=len(futures), desc="Running simulations"
-        ):
-            try:
-                f.result()
-            except Exception as e:
-                st.error(f"Simulation failed: {e}")
-
-    output = app_dir / "../../output" / selected_model
-    result = app_dir / "../../results" / selected_model
-    subprocess.run(
-        f"python ../gather_all_NPUs_results.py --sim_logfile {output}  --output_filename {result}",
-        shell=True,
-        cwd=None,
-    )

@@ -10,12 +10,14 @@ import plotly.graph_objects as go
 import streamlit as st
 
 
-def show_inter_intra_sim_res(parallelism_strategies, selected_model):
-    result = Path(__file__).parent / "../../results" / selected_model
+def show_inter_intra_sim_res(parallelism_strategies, selected_config, selected_model):
+    result_dir = (
+        Path(__file__).parent / "../../results" / selected_model / selected_config
+    )
 
     st.title("Execution vs Communication Cycles Analysis")
 
-    if not result.exists() or not any(result.iterdir()):
+    if not result_dir.exists() or not any(result_dir.iterdir()):
         st.warning("Results directory is empty. Please run simulations first.")
     else:
         all_data = []
@@ -23,7 +25,7 @@ def show_inter_intra_sim_res(parallelism_strategies, selected_model):
         for prefix in parallelism_strategies:
             st.subheader(f"Prefix: {prefix}")
 
-            df_filtered = get_filtered_df(result, prefix)
+            df_filtered = get_filtered_df(result_dir, prefix)
 
             if not df_filtered.empty:
                 df_filtered["total_cycles"] = df_filtered["execution_cycles"]
@@ -49,12 +51,12 @@ def show_inter_intra_sim_res(parallelism_strategies, selected_model):
             st.subheader("Raw Combined Data")
             st.dataframe(combined_df)
 
-            csv = combined_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "Download Combined Data as CSV",
-                data=csv,
-                file_name="combined_cycles_analysis.csv",
-            )
+            # csv = combined_df.to_csv(index=False).encode("utf-8")
+            # st.download_button(
+            #    "Download Combined Data as CSV",
+            #    data=csv,
+            #    file_name="combined_cycles_analysis.csv",
+            # )
 
 
 def plot_overlapped(df, prefix, chunk_size=30):

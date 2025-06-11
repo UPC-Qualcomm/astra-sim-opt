@@ -1,12 +1,17 @@
 import streamlit as st
+import os
+import sections.trace_picker as picker
 
-def sweep_bw_form():
+
+def sweep_bw_form(selected_config, selected_model):
     with st.form("bw_sweep_form"):
         st.subheader("Bandwidth Ranges Configuration")
 
         col1, col2 = st.columns(2)
         default_intra_bw = "600, 900, 1800, 3600, 7200"
         default_inter_bw = "200, 400, 800, 1600, 3200"
+        model_dir = os.path.join(picker._get_output_dir(), selected_model)
+        config_names = sorted(picker._get_config_names(model_dir))
 
         col1, col2 = st.columns(2)
 
@@ -20,6 +25,16 @@ def sweep_bw_form():
                 "Inter BW (GB/s) — comma-separated", value=default_inter_bw
             )
 
+        st.write("Select the set of network configurations:")
+        selected_configs = []
+        cols = st.columns(len(config_names))
+
+        for i, config in enumerate(config_names):
+            val = config == selected_config
+            with cols[i]:
+                if st.checkbox(config, value=val):
+                    selected_configs.append(config)
+
         try:
             intra_bw_list = [
                 int(x.strip()) for x in intra_bw_input.split(",") if x.strip()
@@ -27,11 +42,15 @@ def sweep_bw_form():
             inter_bw_list = [
                 int(x.strip()) for x in inter_bw_input.split(",") if x.strip()
             ]
+
+            if not selected_configs:
+                st.error("Please select at least one network configuration.")
+                run_button = False  # prevent proceeding
+
         except ValueError:
             st.error("Please enter valid comma-separated numbers.")
-            intra_bw_list, inter_bw_list = [], []
+            intra_bw_list, inter_bw_list, selected_configs = [], [], []
 
         run_button = st.form_submit_button("Run Simulations")
 
-    return run_button, intra_bw_list, inter_bw_list
-
+    return run_button, intra_bw_list, inter_bw_list, selected_configs

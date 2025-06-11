@@ -18,6 +18,8 @@ sys.path.append(parent_dir)
 
 from run_astrasim import run_astrasim
 
+DIR_NAME = "bw_study"
+
 
 def intra_inter_simulations_run(
     parallelism_strategies,
@@ -30,12 +32,20 @@ def intra_inter_simulations_run(
     app_dir = Path(__file__).parent
     if run_button:
         base_yml_path = picker._get_configs_dir() + "/" + selected_config + ".yml"
-        output_config_dir = picker._get_output_dir() + "/" + selected_config
+        output_dir = (
+            picker._get_output_dir()
+            + "/"
+            + selected_model
+            + "/"
+            + selected_config
+            + "/"
+            + DIR_NAME
+        )
         max_workers = os.cpu_count()
 
         run_bandwidth_sweep_parallel(
             base_yml_path=base_yml_path,
-            output_config_dir=output_config_dir,
+            output_dir=output_dir,
             parallelism_strategies=parallelism_strategies,
             bw1_values=intra_bw_list,
             bw2_values=inter_bw_list,
@@ -51,7 +61,7 @@ def intra_inter_simulations_run(
 @st.cache_data
 def run_bandwidth_sweep_parallel(
     base_yml_path,
-    output_config_dir,
+    output_dir,
     parallelism_strategies,
     bw1_values,
     bw2_values,
@@ -60,6 +70,8 @@ def run_bandwidth_sweep_parallel(
     selected_config,
     selected_model,
 ):
+    result_dir = app_dir / "../../results" / selected_model / selected_config / DIR_NAME
+
     combinations = list(
         itertools.product(parallelism_strategies, bw1_values, bw2_values)
     )
@@ -69,7 +81,8 @@ def run_bandwidth_sweep_parallel(
             executor.submit(
                 run_single_simulation,
                 base_yml_path,
-                output_config_dir,
+                output_dir,
+                result_dir,
                 parallelism_strategy,
                 bw1,
                 bw2,
@@ -88,10 +101,8 @@ def run_bandwidth_sweep_parallel(
             except Exception as e:
                 st.error(f"Simulation failed: {e}")
 
-    output = app_dir / "../../output" / selected_model
-    result = app_dir / "../../results" / selected_model
     subprocess.run(
-        f"python ../gather_all_NPUs_results.py --sim_logfile {output}  --output_filename {result}",
+        f"python ../gather_all_NPUs_results.py --sim_logfile {output_dir}  --output_filename {result_dir}",
         shell=True,
         cwd=None,
     )
@@ -99,8 +110,9 @@ def run_bandwidth_sweep_parallel(
 
 def run_single_simulation(
     base_yml_path,
-    output_config_dir,
-    model_name,
+    output_dir,
+    result_dir,
+    parallelism_strategy,
     bw1,
     bw2,
     app_dir,
@@ -109,34 +121,31 @@ def run_single_simulation(
 ):
     if bw1 > bw2:
         workload_configuration = (
-            app_dir / "../../workload" / selected_model / model_name
+            app_dir / "../../workload" / selected_model / parallelism_strategy
         )
         memory_config = app_dir / "../../configuration" / "RemoteMemory.json"
-        network_log = app_dir / "../../network_log" / selected_model
-        output = app_dir / "../../output" / selected_model
-        result = app_dir / "../../results" / selected_model
+        network_log = (
+            app_dir / "../../network_log" / selected_model / selected_config / DIR_NAME
+        )
         suffix = f"_bw_{bw1}_{bw2}"
 
-        for path in [output, result, network_log]:
-            new_path = path.with_name(path.name + suffix)
-            os.system(f"rm -rf {new_path}")
+        for path in [output_dir, result_dir, network_log]:
+            os.system(f"rm -rf {path}")
 
-        os.makedirs(output, exist_ok=True)
+        # delete_files_with_suffix([output_dir, result_dir, network_log], suffix)
+
+        os.makedirs(output_dir, exist_ok=True)
         os.makedirs(network_log, exist_ok=True)
-        os.makedirs(result, exist_ok=True)
+        os.makedirs(result_dir, exist_ok=True)
 
         with open(base_yml_path, "r") as f:
             config = yaml.safe_load(f)
 
-        config["bandwidth"] = [bw1, bw2]
+        config["bandwidth"] = [bw1] + [bw2] * (len(config["npus_count"]) - 1)
 
         output_config_path = (
-            app_dir
-            / "../../output"
-            / selected_model
-            / f"{model_name}_bw_{bw1}_{bw2}_network.yml"
+            output_dir + f"/{parallelism_strategy}_bw_{bw1}_{bw2}_network.yml"
         )
-        output_config_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_config_path, "w") as f:
             yaml.dump(
@@ -151,10 +160,19 @@ def run_single_simulation(
             system=str(app_dir / "../../configuration" / f"{selected_config}_sys.json"),
             network=str(output_config_path),
             memory=str(memory_config),
-            output_dir=str(output),
+            output_dir=str(output_dir),
             network_log=str(network_log),
             suffix=suffix,
         )
 
         if failed_cmd != "":
             raise RuntimeError(f"Simulation failed: {failed_cmd}")
+
+
+def delete_files_with_suffix(directories, suffix):
+    for dir_path in directories:
+        dir_path = Path(dir_path)
+        if dir_path.exists() and dir_path.is_dir():
+            for file_path in dir_path.iterdir():
+                if file_path.is_file() and suffix in file_path.name:
+                    file_path.unlink()
