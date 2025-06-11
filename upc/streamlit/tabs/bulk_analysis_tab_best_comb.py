@@ -99,33 +99,32 @@ def render(df, selected_model, selected_config):
     with st.form("bw_sweep_form"):
         st.subheader("Bandwidth Ranges Configuration")
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
+        default_intra_bw = "600, 900, 1800, 3600, 7200"
+        default_inter_bw = "200, 400, 800, 1600, 3200"
+
+        col1, col2 = st.columns(2)
+
         with col1:
-            bw1_min = st.number_input(
-                "BW1 Min (GB/s)", min_value=100, max_value=5000, value=900, step=50
-            )
-        with col2:
-            bw1_max = st.number_input(
-                "BW1 Max (GB/s)", min_value=100, max_value=5000, value=1800, step=50
-            )
-        with col3:
-            bw1_step = st.number_input(
-                "BW1 Step (GB/s)", min_value=100, max_value=5000, value=100, step=50
+            intra_bw_input = st.text_input(
+                "Intra BW (GB/s) — comma-separated", value=default_intra_bw
             )
 
-        col4, col5, col6 = st.columns(3)
-        with col4:
-            bw2_min = st.number_input(
-                "BW2 Min (GB/s)", min_value=50, max_value=2000, value=400, step=50
+        with col2:
+            inter_bw_input = st.text_input(
+                "Inter BW (GB/s) — comma-separated", value=default_inter_bw
             )
-        with col5:
-            bw2_max = st.number_input(
-                "BW2 Max (GB/s)", min_value=50, max_value=2000, value=1200, step=50
-            )
-        with col6:
-            bw2_step = st.number_input(
-                "BW2 Step (GB/s)", min_value=50, max_value=2000, value=100, step=50
-            )
+
+        try:
+            intra_bw_list = [
+                int(x.strip()) for x in intra_bw_input.split(",") if x.strip()
+            ]
+            inter_bw_list = [
+                int(x.strip()) for x in inter_bw_input.split(",") if x.strip()
+            ]
+        except ValueError:
+            st.error("Please enter valid comma-separated numbers.")
+            intra_bw_list, inter_bw_list = [], []
 
         run_button = st.form_submit_button("Run Simulations")
 
@@ -142,8 +141,8 @@ def render(df, selected_model, selected_config):
             base_yml_path=base_yml_path,
             output_config_dir=output_config_dir,
             parallelism_strategies=parallelism_strategies,
-            bw1_values=list(range(int(bw1_min), int(bw1_max) + 1, int(bw1_step))),
-            bw2_values=list(range(int(bw2_min), int(bw2_max) + 1, int(bw2_step))),
+            bw1_values=intra_bw_list,
+            bw2_values=inter_bw_list,
             app_dir=app_dir,
             max_workers=max_workers,
             selected_config=selected_config,
@@ -169,7 +168,6 @@ def render(df, selected_model, selected_config):
             df_filtered = get_filtered_df(result, prefix)
 
             if not df_filtered.empty:
-
                 df_filtered["total_cycles"] = df_filtered["execution_cycles"]
                 df_filtered["prefix"] = prefix
                 all_data.append(df_filtered)
@@ -199,6 +197,7 @@ def render(df, selected_model, selected_config):
                 data=csv,
                 file_name="combined_cycles_analysis.csv",
             )
+
 
 def get_exposed_comm_fig(df):
     comm_mean, comm_std, comm_gmean = (
@@ -359,6 +358,7 @@ def calculate_avg_bw_across_dims(selected_config):
 
     return average_bandwidth, bandwidths
 
+
 def calculate_data_size(df, avg_bw_across_dims):
     df["mean_data_size_nonoverlap"] = (
         df[df["node_type"].isin([5, 6, 7])]["exposed"] * avg_bw_across_dims
@@ -380,54 +380,57 @@ def run_single_simulation(
     selected_config,
     selected_model,
 ):
-    workload_configuration = app_dir / "../../workload" / selected_model / model_name
-    memory_config = app_dir / "../../configuration" / "RemoteMemory.json"
-    network_log = app_dir / "../../network_log" / selected_model
-    output = app_dir / "../../output" / selected_model
-    result = app_dir / "../../results" / selected_model
-    suffix = f"_bw_{bw1}_{bw2}"
+    if bw1 > bw2:
+        workload_configuration = (
+            app_dir / "../../workload" / selected_model / model_name
+        )
+        memory_config = app_dir / "../../configuration" / "RemoteMemory.json"
+        network_log = app_dir / "../../network_log" / selected_model
+        output = app_dir / "../../output" / selected_model
+        result = app_dir / "../../results" / selected_model
+        suffix = f"_bw_{bw1}_{bw2}"
 
-    for path in [output, result, network_log]:
-        new_path = path.with_name(path.name + suffix)
-        os.system(f"rm -rf {new_path}")
+        for path in [output, result, network_log]:
+            new_path = path.with_name(path.name + suffix)
+            os.system(f"rm -rf {new_path}")
 
-    os.makedirs(output, exist_ok=True)
-    os.makedirs(network_log, exist_ok=True)
-    os.makedirs(result, exist_ok=True)
+        os.makedirs(output, exist_ok=True)
+        os.makedirs(network_log, exist_ok=True)
+        os.makedirs(result, exist_ok=True)
 
-    with open(base_yml_path, "r") as f:
-        config = yaml.safe_load(f)
+        with open(base_yml_path, "r") as f:
+            config = yaml.safe_load(f)
 
-    config["bandwidth"] = [bw1, bw2]
+        config["bandwidth"] = [bw1, bw2]
 
-    output_config_path = (
-        app_dir
-        / "../../output"
-        / selected_model
-        / f"{model_name}_bw_{bw1}_{bw2}_network.yml"
-    )
-    output_config_path.parent.mkdir(parents=True, exist_ok=True)
+        output_config_path = (
+            app_dir
+            / "../../output"
+            / selected_model
+            / f"{model_name}_bw_{bw1}_{bw2}_network.yml"
+        )
+        output_config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_config_path, "w") as f:
-        yaml.dump(
-            config,
-            f,
-            default_flow_style=None,  
-            sort_keys=False,  
+        with open(output_config_path, "w") as f:
+            yaml.dump(
+                config,
+                f,
+                default_flow_style=None,
+                sort_keys=False,
+            )
+
+        failed_cmd = run_astrasim(
+            workload_path=str(workload_configuration),
+            system=str(app_dir / "../../configuration" / f"{selected_config}_sys.json"),
+            network=str(output_config_path),
+            memory=str(memory_config),
+            output_dir=str(output),
+            network_log=str(network_log),
+            suffix=suffix,
         )
 
-    failed_cmd = run_astrasim(
-        workload_path=str(workload_configuration),
-        system=str(app_dir / "../../configuration" / f"{selected_config}_sys.json"),
-        network=str(output_config_path),
-        memory=str(memory_config),
-        output_dir=str(output),
-        network_log=str(network_log),
-        suffix=suffix,
-    )
-
-    if failed_cmd != "":
-        raise RuntimeError(f"Simulation failed: {failed_cmd}")
+        if failed_cmd != "":
+            raise RuntimeError(f"Simulation failed: {failed_cmd}")
 
 
 @st.cache_data
@@ -559,7 +562,7 @@ def plot_overlapped(df, prefix, chunk_size=30):
 
 def plot_total_cycles_summary(all_data):
     unique_prefixes = all_data["prefix"].unique()
-    color_sequence = pc.qualitative.Set2 
+    color_sequence = pc.qualitative.Set2
     color_map = {
         prefix: color_sequence[i % len(color_sequence)]
         for i, prefix in enumerate(unique_prefixes)
@@ -586,7 +589,7 @@ def plot_total_cycles_summary(all_data):
 
     for _, row in min_points.iterrows():
         prefix = row["prefix"]
-        color = color_map[prefix]  
+        color = color_map[prefix]
 
         fig.add_trace(
             go.Scatter(
