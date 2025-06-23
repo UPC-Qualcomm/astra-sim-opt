@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 from tqdm import tqdm
 import streamlit as st
+import shutil
 
 # Custom Modules
 import sections.trace_picker as picker
@@ -18,8 +19,28 @@ sys.path.append(parent_dir)
 
 from run_astrasim import run_astrasim
 
+#TODO: Take into consideration the configuration dims
+
 DIR_NAME = "bw_study"
 
+def get_output_dir(selected_model, selected_config):
+    return (
+            picker._get_output_dir()
+            + "/"
+            + selected_model
+            + "/"
+            + selected_config
+            + "/"
+            + DIR_NAME
+        )
+
+def get_results_dir(selected_model, selected_config):
+    return Path(__file__).parent / "../../results" / selected_model / selected_config / DIR_NAME
+
+def get_network_dir(selected_model, selected_config):
+    return (
+            Path(__file__).parent / "../../network_log" / selected_model / selected_config / DIR_NAME
+        )
 
 def intra_inter_simulations_run(
     parallelism_strategies,
@@ -29,27 +50,15 @@ def intra_inter_simulations_run(
     intra_bw_list,
     inter_bw_list,
 ):
-    app_dir = Path(__file__).parent
     if run_button:
         base_yml_path = picker._get_configs_dir() + "/" + selected_config + ".yml"
-        output_dir = (
-            picker._get_output_dir()
-            + "/"
-            + selected_model
-            + "/"
-            + selected_config
-            + "/"
-            + DIR_NAME
-        )
         max_workers = os.cpu_count()
 
         run_bandwidth_sweep_parallel(
             base_yml_path=base_yml_path,
-            output_dir=output_dir,
             parallelism_strategies=parallelism_strategies,
             bw1_values=intra_bw_list,
             bw2_values=inter_bw_list,
-            app_dir=app_dir,
             max_workers=max_workers,
             selected_config=selected_config,
             selected_model=selected_model,
@@ -61,17 +70,15 @@ def intra_inter_simulations_run(
 @st.cache_data
 def run_bandwidth_sweep_parallel(
     base_yml_path,
-    output_dir,
     parallelism_strategies,
     bw1_values,
     bw2_values,
-    app_dir,
     max_workers,
     selected_config,
     selected_model,
 ):
-    result_dir = app_dir / "../../results" / selected_model / selected_config / DIR_NAME
-
+    result_dir = get_results_dir(selected_model, selected_config)
+    output_dir = get_output_dir(selected_model, selected_config)
     combinations = list(
         itertools.product(parallelism_strategies, bw1_values, bw2_values)
     )
@@ -81,12 +88,9 @@ def run_bandwidth_sweep_parallel(
             executor.submit(
                 run_single_simulation,
                 base_yml_path,
-                output_dir,
-                result_dir,
                 parallelism_strategy,
                 bw1,
                 bw2,
-                app_dir,
                 selected_config,
                 selected_model,
             )
@@ -110,27 +114,26 @@ def run_bandwidth_sweep_parallel(
 
 def run_single_simulation(
     base_yml_path,
-    output_dir,
-    result_dir,
     parallelism_strategy,
     bw1,
     bw2,
-    app_dir,
     selected_config,
     selected_model,
 ):
     if bw1 > bw2:
+
+        result_dir = get_results_dir(selected_model, selected_config)
+        output_dir = get_output_dir(selected_model, selected_config)
+        network_log = get_network_dir(selected_model, selected_config)
+        app_dir = Path(__file__).parent
         workload_configuration = (
             app_dir / "../../workload" / selected_model / parallelism_strategy
         )
         memory_config = app_dir / "../../configuration" / "RemoteMemory.json"
-        network_log = (
-            app_dir / "../../network_log" / selected_model / selected_config / DIR_NAME
-        )
         suffix = f"_bw_{bw1}_{bw2}"
-
-        for path in [output_dir, result_dir, network_log]:
-            os.system(f"rm -rf {path}")
+        #TODO: Creat a button to clean the dirs
+        #for path in [output_dir, result_dir, network_log]:
+        #    os.system(f"rm -rf {path}")
 
         # delete_files_with_suffix([output_dir, result_dir, network_log], suffix)
 
@@ -169,10 +172,14 @@ def run_single_simulation(
             raise RuntimeError(f"Simulation failed: {failed_cmd}")
 
 
-def delete_files_with_suffix(directories, suffix):
-    for dir_path in directories:
-        dir_path = Path(dir_path)
-        if dir_path.exists() and dir_path.is_dir():
-            for file_path in dir_path.iterdir():
-                if file_path.is_file() and suffix in file_path.name:
-                    file_path.unlink()
+def clean_sim_dirs(selected_model):
+    config_names = picker._get_config_names(os.path.join(picker._get_output_dir(), selected_model))
+    
+    for config in config_names:
+        result_dir = Path(get_results_dir(selected_model, config))
+        output_dir = Path(get_output_dir(selected_model, config))
+        network_log = Path(get_network_dir(selected_model, config))
+        
+        for dir_path in [result_dir, output_dir, network_log]:
+            if dir_path.exists() and dir_path.is_dir():
+                shutil.rmtree(dir_path)  

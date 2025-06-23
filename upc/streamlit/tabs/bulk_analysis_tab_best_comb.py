@@ -35,30 +35,43 @@ def render(df, selected_model, selected_config):
     best.best_combinations(df_top, selected_config, selected_model)
 
     st.title("AstraSim Bandwidth Sweep Runner")
-
+    all_configs = bw_form.get_configuration_options()
     run_button, intra_bw_list, inter_bw_list, selected_config_names_list = (
         bw_form.sweep_bw_form(selected_config, selected_model)
     )
 
+    #if st.button(f"Clean Simulation Directories for {selected_model}"):
+    #if run_button:
+    #    bw_run.clean_sim_dirs(selected_model)
+        #st.success(f"Cleaned simulation directories for {selected_model}.")
+
     st.info("Starting bandwidth sweep simulations...")
     parallelism_strategies = df_top["file_name"].tolist()
 
-    for config in selected_config_names_list:
-        bw_run.intra_inter_simulations_run(
-            parallelism_strategies,
-            config,
-            selected_model,
-            run_button,
-            intra_bw_list,
-            inter_bw_list,
-        )
+    st.subheader("Study the effect of the bandwidth over parallelism strategies")
+    all_res_dirs_configs = []
+    for config in all_configs:
+        if config in selected_config_names_list:
+            bw_run.intra_inter_simulations_run(
+                parallelism_strategies,
+                config,
+                selected_model,
+                run_button,
+                intra_bw_list,
+                inter_bw_list,
+            )
+
+        #st.markdown("---")
+        result_dir = bw_run.get_results_dir(selected_model, config)
+        #output_dir = bw_run.get_output_dir(selected_model, selected_config)
+        if result_dir.exists() and result_dir.is_dir():
+            bw_show.show_inter_intra_sim_res(parallelism_strategies, result_dir, config)
+            all_res_dirs_configs.append((result_dir, config))
 
         st.markdown("---")
-
-        bw_show.show_inter_intra_sim_res(parallelism_strategies, config, selected_model)
-
-        st.markdown("---")
-
+    st.subheader("Study the effect of the bandwidth over network configurations")
+    for parallelism_strategy in parallelism_strategies:
+        bw_show.show_res_across_configs(parallelism_strategy, all_res_dirs_configs)
 
 def get_exposed_comm_fig(df):
     comm_mean, comm_std, comm_gmean = (

@@ -1,6 +1,5 @@
 import streamlit as st
-import os
-import sections.trace_picker as picker
+from pathlib import Path
 
 
 def sweep_bw_form(selected_config, selected_model):
@@ -10,8 +9,7 @@ def sweep_bw_form(selected_config, selected_model):
         col1, col2 = st.columns(2)
         default_intra_bw = "600, 900, 1800, 3600, 7200"
         default_inter_bw = "200, 400, 800, 1600, 3200"
-        model_dir = os.path.join(picker._get_output_dir(), selected_model)
-        config_names = sorted(picker._get_config_names(model_dir))
+        config_names = get_configuration_options()
 
         col1, col2 = st.columns(2)
 
@@ -45,12 +43,19 @@ def sweep_bw_form(selected_config, selected_model):
 
             if not selected_configs:
                 st.error("Please select at least one network configuration.")
-                run_button = False  # prevent proceeding
+                run_button = False 
 
         except ValueError:
             st.error("Please enter valid comma-separated numbers.")
             intra_bw_list, inter_bw_list, selected_configs = [], [], []
 
         run_button = st.form_submit_button("Run Simulations")
-
+    
     return run_button, intra_bw_list, inter_bw_list, selected_configs
+
+
+def get_configuration_options():
+    config_dir = Path(__file__).parent / "../../configuration/"
+    config_dir = config_dir.resolve() 
+    config_files = [file.stem for file in config_dir.glob("*.yml")]
+    return sorted(config_files)
