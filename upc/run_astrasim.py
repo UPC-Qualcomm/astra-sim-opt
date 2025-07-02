@@ -4,6 +4,7 @@ import subprocess
 import multiprocessing
 import argparse
 import pandas as pd
+from intervaltree import IntervalTree
 
 def get_timings_df(csv_trace_file, output_file_name):
     df = pd.read_csv(csv_trace_file)
@@ -26,9 +27,121 @@ def get_timings_df(csv_trace_file, output_file_name):
     )
 
     # Add elapsed_time column
+
+    #merged_df["issue_tick"] = merged_df["issue_tick"].astype(int)
+    #merged_df["callback_tick"] = merged_df["callback_tick"].astype(int)
     merged_df["elapsed_time"] = merged_df["callback_tick"] - merged_df["issue_tick"]
     merged_df.fillna(0, inplace=True)
-    merged_df.to_csv(output_file_name)
+
+    #merged_df.to_csv(output_file_name)
+    # TODO: To optimize performance Add the exposed and overlaped amount of cycles to each node 
+    # Use best_combinatoin.py
+    num_sys = merged_df["sys_id"].max()
+
+    extended_data = []
+    for sys_id in range(num_sys+1):
+        results_comm = get_exposed(merged_df, sys_id, node_op_type="comm")
+        results_comp = get_exposed(merged_df, sys_id, node_op_type="comp")
+        results_merged = pd.concat([results_comm, results_comp])
+        results_merged["exposed_percent"] = (
+            100 * results_merged["exposed"] / results_merged["elapsed_time"]
+        )
+        results_merged["overlap_percent"] = (
+            100 * results_merged["overlap"] / results_merged["elapsed_time"]
+        )
+        extended_data.append(results_merged)
+
+    extended_data = pd.concat(extended_data, ignore_index=True)
+
+    extended_data.to_csv(output_file_name)
+
+def build_compute_interval_tree(nodes):
+    tree = IntervalTree()
+    for row in nodes.itertuples(index=False):
+        tree.addi(row.issue_tick, row.callback_tick, row.node_id)
+    tree.merge_overlaps()  # OPTIMIZED: merge once here
+    return tree
+
+def compute_overlap(tree, node_id, start, end):
+    overlaps = tree.overlap(start, end)
+    overlap_duration = 0
+    for o in overlaps:
+        if o.data != node_id:
+            overlap_start = max(start, o.begin)
+            overlap_end = min(end, o.end)
+            overlap_duration += max(0, overlap_end - overlap_start)
+    return overlap_duration
+
+def get_exposed(df, sys_id, node_op_type="comm"):
+    group = df[df["sys_id"] == sys_id]
+
+    if node_op_type == "comm":
+        main_nodes = group[group["node_type"].isin([5, 6, 7])]
+    elif node_op_type == "comp":
+        main_nodes = group[group["node_type"] == 4]
+    else:
+        raise ValueError("node_op_type must be either 'comm' or 'comp'")
+
+    comp_nodes = group[group["node_type"] == 4]
+    comm_nodes = group[group["node_type"].isin([5, 6, 7])]
+
+    comp_tree = build_compute_interval_tree(comp_nodes)
+    comm_tree = build_compute_interval_tree(comm_nodes)
+
+    results = []
+
+    for row in main_nodes.itertuples(index=False):
+        duration = row.elapsed_time
+
+        overlap_comp = compute_overlap(comp_tree, row.node_id, row.issue_tick, row.callback_tick)
+        overlap_comm = compute_overlap(comm_tree, row.node_id, row.issue_tick, row.callback_tick)
+
+        total_overlap = min(duration, overlap_comp + overlap_comm)
+
+        result = {
+            "sys_id": row.sys_id,
+            "node_id": row.node_id,
+            "node_name": row.node_name,
+            "node_type": row.node_type,
+            "elapsed_time": duration,
+            "exposed": duration - total_overlap,
+            "overlap": total_overlap,
+            "overlap_with_comp": overlap_comp,
+            "overlap_with_comm": overlap_comm,
+            "num_ops": row.num_ops,
+            "tensor_size": row.tensor_size,
+            "perf": row.perf,
+            "operational_intensity": row.operational_intensity,
+            "issue_tick": row.issue_tick,
+            "callback_tick": row.callback_tick,
+        }
+
+        results.append(result)
+
+    if results:
+        return pd.DataFrame.from_records(results)
+    else:
+        return pd.DataFrame(
+            columns=[
+                "sys_id",
+                "node_id",
+                "node_name",
+                "node_type",
+                "exposed",
+                "elapsed_time",
+                "overlap",
+                "overlap_with_comp",
+                "overlap_with_comm",
+                "exposed_with_comp",
+                "exposed_with_comm",
+                "num_ops",
+                "tensor_size",
+                "perf",
+                "operational_intensity",
+                "issue_tick",
+                "callback_tick",
+            ]
+        )
 
 def run_command(command, cwd=None):
     result = subprocess.run(command, shell=True, cwd=cwd)

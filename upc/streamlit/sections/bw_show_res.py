@@ -59,7 +59,7 @@ def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config
 
 
 def plot_overlapped(df, strategy, chunk_size=30):
-    df = df.sort_values(by="execution_cycles").reset_index(drop=True)
+    df = df.sort_values(by="exec_cycles").reset_index(drop=True)
     num_chunks = (len(df) + chunk_size - 1) // chunk_size
     figures = []
 
@@ -73,14 +73,14 @@ def plot_overlapped(df, strategy, chunk_size=30):
 
         ax.bar(
             index,
-            df_chunk["execution_cycles"],
+            df_chunk["exec_cycles"],
             0.4,
             color="skyblue",
             label="Exec Cycles",
         )
         ax.bar(
             index,
-            df_chunk["comm_cycles"],
+            df_chunk["exposed_comm_cycles"],
             0.4,
             color="red",
             alpha=0.6,
@@ -88,7 +88,7 @@ def plot_overlapped(df, strategy, chunk_size=30):
         )
 
         for i, (exec_c, comm_c) in enumerate(
-            zip(df_chunk["execution_cycles"], df_chunk["comm_cycles"])
+            zip(df_chunk["exec_cycles"], df_chunk["exposed_comm_cycles"])
         ):
             perc = (comm_c / exec_c) * 100 if exec_c != 0 else 0
             ax.text(i, comm_c / 2, f"{perc:.1f}%", ha="center", fontsize=8)
@@ -109,13 +109,16 @@ def plot_overlapped(df, strategy, chunk_size=30):
 def get_filtered_df(result_path, strategy):
     files = glob.glob(str(result_path / f"{strategy}_*.csv"))
     records = []
+    if not files:
+        st.write("No files found for strategy: " ,strategy)
+        return pd.DataFrame()
     for file in files:
         df = pd.read_csv(file)
         if (
-            "execution_cycles" in df.columns
-            and "exposed_communication_cycles" in df.columns
+            "exec_cycles" in df.columns
+            and "exposed_comm_cycles" in df.columns
         ):
-            min_row = df.loc[df["execution_cycles"].idxmin()]
+            min_row = df.loc[df["exec_cycles"].idxmin()]
 
             match = re.search(r"bw_(\d+)_(\d+)", file)
             intra_bw, inter_bw = (
@@ -127,14 +130,14 @@ def get_filtered_df(result_path, strategy):
                 {
                     "file_name": os.path.basename(file).replace(".csv", ""),
                     "bw_label": bw_label,
-                    "execution_cycles": min_row["execution_cycles"],
-                    "comm_cycles": min_row["exposed_communication_cycles"],
+                    "exec_cycles": min_row["exec_cycles"],
+                    "exposed_comm_cycles": min_row["exposed_comm_cycles"],
                     "intra_bw": intra_bw,
                     "inter_bw": inter_bw,
                 }
             )
     df_filtered = pd.DataFrame(records)
-    df_filtered["total_cycles"] = df_filtered["execution_cycles"]
+    df_filtered["total_cycles"] = df_filtered["exec_cycles"]
     df_filtered["strategy"] = strategy
     return df_filtered
 

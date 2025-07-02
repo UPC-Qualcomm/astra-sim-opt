@@ -172,8 +172,7 @@ def run_single_simulation(
             raise RuntimeError(f"Simulation failed: {failed_cmd}")
 
 
-def clean_sim_dirs(selected_model):
-    config_names = picker._get_config_names(os.path.join(picker._get_output_dir(), selected_model))
+def clean_sim_dirs(selected_model, config_names):
     
     for config in config_names:
         result_dir = Path(get_results_dir(selected_model, config))

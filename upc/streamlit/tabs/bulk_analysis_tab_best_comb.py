@@ -17,22 +17,26 @@ import helper.bw_run_sim as bw_run
 
 def render(df, selected_model, selected_config):
     options = list(range(1, len(df) + 1))
-    num = st.select_slider(
-        "Pick The Number of Best Experiments To Consider:", options=options, value=10
+    start, end = st.slider(
+        "Select Range of Experiment Rankings (by 'total') to Consider:",
+        min_value=min(options),
+        max_value=max(options),
+        value=(2, 10)
     )
-    df_top = df.sort_values(by="total", ascending=True).head(num)
-    st.subheader(f"Best {num} examples")
-    st.dataframe(df_top)
+    df_sorted = df.sort_values(by="total", ascending=True).reset_index(drop=True)
+    df_range = df_sorted.iloc[start-1:end]  
+    st.write(f"Showing experiments ranked from {start} to {end}:")
+    st.dataframe(df_range)
 
-    figs = picker.plot_experiments_bound_breakdown(df_top, chunk_size=32)
+    figs = picker.plot_experiments_bound_breakdown(df_range, chunk_size=32)
     for fig in figs:
         st.pyplot(fig)
 
-    st.pyplot(get_exposed_comm_fig(df_top))
+    st.pyplot(get_exposed_comm_fig(df_range))
 
     st.markdown("---")
 
-    best.best_combinations(df_top, selected_config, selected_model)
+    best.best_combinations(df_range, selected_config, selected_model)
 
     st.title("AstraSim Bandwidth Sweep Runner")
     all_configs = bw_form.get_configuration_options()
@@ -41,12 +45,12 @@ def render(df, selected_model, selected_config):
     )
 
     #if st.button(f"Clean Simulation Directories for {selected_model}"):
-    #if run_button:
-    #    bw_run.clean_sim_dirs(selected_model)
-        #st.success(f"Cleaned simulation directories for {selected_model}.")
+    if run_button:
+        bw_run.clean_sim_dirs(selected_model, selected_config_names_list)
+        st.success(f"Cleaned simulation directories for {selected_model}.")
 
     st.info("Starting bandwidth sweep simulations...")
-    parallelism_strategies = df_top["file_name"].tolist()
+    parallelism_strategies = df_range["file_name"].tolist()
 
     st.subheader("Study the effect of the bandwidth over parallelism strategies")
     all_res_dirs_configs = []

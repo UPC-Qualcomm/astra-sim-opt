@@ -182,7 +182,7 @@ def get_model_and_config():
 
 @st.cache_data
 def get_all_parallelism_strategies_data(model, config, option):
-    csv_files = get_all_matched_traces_file_names(model, config)
+    csv_files = get_files_list(os.path.join(_get_output_dir(), model, config), "_trace_matched_timing.csv")
     records = []
     
     for file in csv_files:
@@ -221,12 +221,11 @@ def get_all_parallelism_strategies_data(model, config, option):
     return pd.DataFrame(records)
 
 @st.cache_data
-def get_all_matched_traces_file_names(model, config):
-    base_dir = os.path.join(_get_output_dir(), model, config)
+def get_files_list(base_dir, end_with_str):
     files = os.listdir(base_dir)
     filtered = list()
     for file in files:
-        if file.endswith("_trace_matched_timing.csv"):
+        if file.endswith(end_with_str):
             filtered.append(os.path.join(base_dir, file))
     return filtered
 

@@ -34,7 +34,7 @@ def extract_runtime(log_path):
     pattern = r"(\d+) cycles, exposed communication (\d+) cycles."
 
     # Lists to store extracted values
-    execution_cycles = []
+    exec_cycles = []
     communication_cycles = []
     memory_ = []
     activation_ = []
@@ -78,7 +78,7 @@ def extract_runtime(log_path):
             ##optimizer,
             ##is_oom
         ) in matches:
-            execution_cycles.append(int(exec_cycles))
+            exec_cycles.append(int(exec_cycles))
             communication_cycles.append(int(comm_cycles))
             ##memory_.append(int(memory))
             ##activation_.append(int(activation))
@@ -86,9 +86,9 @@ def extract_runtime(log_path):
             ##parameter_.append(int(parameter))
             ##optimizer_.append(int(optimizer))
 
-        # print("Execution Cycles:", execution_cycles)
+        # print("Execution Cycles:", exec_cycles)
         # print("Communication Cycles:", communication_cycles)
-        exec_cycles = max(execution_cycles) 
+        exec_cycles = max(exec_cycles) 
         comm_cycles = max(communication_cycles)
         ##memory = sum(memory_) / len(memory_)
         ##activation = sum(activation_) / len(activation_)
