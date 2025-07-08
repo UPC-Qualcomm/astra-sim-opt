@@ -124,11 +124,12 @@ def collect_summary(df, sys_id):
     }
 
 
-def extract_runtime_results_dir(log_dir, output_dir):
+def extract_runtime_results_dir(log_dir, output_dir, file_identifier):
     df = extract_runtime_results(log_dir)
-    file_name = os.path.join(output_dir, os.path.splitext(log_dir)[0].split('/')[-1][:9] + "_res.csv")
+    file_name = os.path.basename(log_dir).replace(file_identifier,  "_res.csv")
+    path = os.path.join(output_dir, file_name)
     if not df.empty:
-        df.to_csv(file_name, index=False)
+        df.to_csv(path, index=False)
 
 def list_logs(root, endwith_str):
     files = os.listdir(root)
@@ -191,9 +192,10 @@ if __name__ == "__main__":
     elif os.path.isdir(args.sim_logfile):
         os.makedirs(args.output_filename,  exist_ok=True)
         #runtimes_dfs, filenames = extract_runtime_results_dir(args.sim_logfile)
-        logs = list_logs(args.sim_logfile, "_trace_matched_timing.csv")
+        file_identifier = "_trace_matched_timing.csv"
+        logs = list_logs(args.sim_logfile, file_identifier)
         with multiprocessing.Pool() as pool:
-            pool.starmap(extract_runtime_results_dir, [(log, args.output_filename) for log in logs])
+            pool.starmap(extract_runtime_results_dir, [(log, args.output_filename, file_identifier) for log in logs])
 
     else:
         raise ValueError(f"{args.sim_logfile} is neither a file nor a directory.")
