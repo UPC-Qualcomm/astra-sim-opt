@@ -79,9 +79,25 @@ def compute_summary_stats(merged_df, selected_files):
 
 def add_topology_and_min_exec_cycles(merged_df):
     """Add columns for topology with lowest exec_cycles and its value per config."""
+    TOPOLOGY_PRIORITY = ['FullyConnected', 'Switch', 'Ring', 'Dragonfly', 'DGX_H100', 'DGX1', '2D_Torus', '3D_Torus']
+
     exec_cols = [col for col in merged_df.columns if col.endswith('_exec_cycles')]
-    merged_df['topology'] = merged_df[exec_cols].idxmin(axis=1).str.replace('_exec_cycles', '')
+
+    # Function to pick the topology per row with priority
+    def get_best_topology(row):
+        min_value = row[exec_cols].min()
+        # Get topologies with min value
+        min_topologies = [col.replace('_exec_cycles', '') for col in exec_cols if row[col] == min_value]
+        # Pick the one with highest priority
+        for topo in TOPOLOGY_PRIORITY:
+            if topo in min_topologies:
+                return topo
+        return min_topologies[0]  # fallback if none found in priority list
+
+    # Apply function per row
+    merged_df['topology'] = merged_df.apply(get_best_topology, axis=1)
     merged_df['min_exec_cycles_value'] = merged_df[exec_cols].min(axis=1)
+
     return merged_df
 
 
