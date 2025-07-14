@@ -16,9 +16,9 @@ def run_command(command, cwd=None):
 
 def get_design_space(
     num_npus=64,
-    dp={1, 2, 4, 8, 16},
-    mp={1, 2, 4, 8, 16},
-    pp={1, 2, 4, 8, 16},
+    dp={1, 2, 4, 8, 16, 32, 64},
+    mp={1, 2, 4, 8, 16, 32, 64},
+    pp={1, 2, 4, 8, 16, 32, 64},
     sharded={True, False},
 ):
     design_space = list()
@@ -35,9 +35,9 @@ def get_design_space(
 
 def get_design_space_no_sp(
     num_npus=64,
-    dp={1, 2, 4, 8, 16},
-    mp={1, 2, 4, 8, 16},
-    pp={1, 2, 4, 8, 16},
+    dp={1, 2, 4, 8, 16, 32, 64},
+    mp={1, 2, 4, 8, 16, 32, 64},
+    pp={1, 2, 4, 8, 16, 32, 64},
     sharded={True, False},
 ):
     design_space = list()
@@ -66,6 +66,12 @@ class Model(Enum):
     PaLM_540B = 11
     GPT_4_Estimated_over_1T = 12
     Default = 13
+    LLaMA_3_70B = 14
+    Model_100B = 15
+    Model_120B = 16
+    llama_8B = 17
+    GPT_30B = 18
+    GPT_40B = 19
 
     @staticmethod
     def get_model_params(model):
@@ -85,15 +91,29 @@ class Model(Enum):
                 return [50257, 1024, 1024, 4096, 8, 1024, 16, 24]
             case Model.GPT_3_1300M:
                 #return [50257, 2048, 2048, 8192, [1,2,4,8,16], 2048, 16, 2]
-                return [50257, 2048, 2048, 8192, 4, 2048, 16, 24]
+                # llama 8B return [30522, 4096, 4096, 16384, 1, 8192, 32, 32]
+                #return [32005, 32005, 8192, 22016, 1, 4096, 64, 80]
+                return [50257, 2048, 2048, 8192, 32, 2048, 16, 24]
             case Model.GPT_Neo_2700M:
                 return [50257, 2560, 2560, 10240, 16, 2048, 32, 32]
+            case Model.llama_8B:
+                return [30522, 4096, 4096, 16384, 32, 256, 32, 32]
             case Model.FLAN_T5_XXL_11B:
                 return [32128, 4096, 4096, 10240, 16, 512, 64, 24]
             case Model.OPT_13B:
                 return [50257, 5120, 5120, 20480, 8, 2048, 40, 40]
             case Model.GPT_NeoX_20B:
                 return [50257, 6144, 6144, 24576, 4, 2048, 64, 44]
+            case Model.GPT_30B:
+                return [50257, 6144, 6144, 24576, 1, 2048, 32, 48]
+            case Model.GPT_40B:
+                return [50257, 8192, 8192, 32768, 1, 2048, 16, 32]
+            case Model.LLaMA_3_70B:
+                return [30522, 30522, 8192, 32768, 32, 2048, 64, 80]
+            case Model.Model_100B:
+                return [32000, 32000, 9216, 36864, 64, 2048, 72, 88]
+            case Model.Model_120B:
+                return [32000, 32000, 10240, 40960, 64, 2048, 80, 96]
             case Model.GPT_3_175B:
                 return [50257, 12288, 12288, 49152, 1, 2048, 96, 96]
             case Model.PaLM_540B:
@@ -121,6 +141,7 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
     )
     dp, mp, ssp, pp, sharded = design_point
 
+    print(dp,mp,ssp,pp)
     din, dout, dmodel, dff, batch, seq, head, num_stacks = Model.get_model_params(model)
 
     cmd = (
@@ -149,7 +170,7 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
         "extern",
         "symbolic_tensor_graph",
     )
-    print(cmd)
+    #print(cmd)
     run_command(cmd, cwd)
 
 if __name__ == "__main__":
@@ -183,7 +204,7 @@ if __name__ == "__main__":
     design_space = get_design_space(num_npus, dp, mp, pp, sharded)
     #design_space = get_design_space_no_sp(num_npus, dp, mp, pp, sharded)
     func = partial(generate_instance, model=Model(int(model)), folder_name=folder_name)
-
-    with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:
+    
+    with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.70)) as pool:
         results = list(tqdm(pool.imap_unordered(func, design_space), total=len(design_space)))
 

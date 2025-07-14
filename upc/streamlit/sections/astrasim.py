@@ -24,7 +24,6 @@ def run_astrasim(params):
 
     paths = _compute_paths(params, config_dir, sim_dir)
     col1, col2 = st.columns(2)
-    trace_file_name = ""
     with col1:
         if configs:
             net_content, sys_content = _load_config_files(
@@ -42,17 +41,9 @@ def run_astrasim(params):
                 returncode, elapsed_time = _run_astrasim_bin(
                     paths, temp_sys_path, temp_net_path, params["temp_dir"]
                 )
-                trace_file_name, csv_trace_file, output_file = _get_file_paths(
-                    sim_dir,
-                    params["dp"],
-                    params["tp"],
-                    params["sp"],
-                    params["pp"],
-                    params["sharding_val"],
-                )
                 if "df_matched" not in st.session_state:
                     st.session_state.df_matched = tv.get_timings_df(
-                        csv_trace_file, output_file
+                        paths['trace_file'], paths["timed_trace"]
                     )
                 _handle_sim_result(returncode, elapsed_time, paths, updated_sys_content)
         else:
@@ -63,7 +54,8 @@ def run_astrasim(params):
         "sim_dir": sim_dir,
         "log": paths["log"],
         "res_log": paths["res_log"],
-        "trace_file_name": trace_file_name,
+        "trace_file_name": os.path.basename(paths["trace_file"]),
+        "timed_trace": paths["timed_trace"]
     }
 
 
@@ -101,6 +93,8 @@ def _compute_paths(params, config_dir, sim_dir):
         sim_dir,
         f"{params['dp']}_{params['tp']}_{params['sp']}_{params['pp']}_{params['sharding_val']}",
     )
+    trace_file_name = f"{log}_trace.csv"
+    timed_trace_file_name = f"{log}_trace_matched_timing.csv"
     memory = os.path.join(config_dir, "RemoteMemory.json")
     network_log = workload + ".csv"
     res_log = f"{log}_res.csv"
@@ -111,6 +105,8 @@ def _compute_paths(params, config_dir, sim_dir):
         "memory": memory,
         "network_log": network_log,
         "res_log": res_log,
+        "trace_file": trace_file_name,
+        "timed_trace": timed_trace_file_name
     }
 
 
@@ -180,18 +176,10 @@ def _handle_sim_result(returncode, elapsed_time, paths, updated_sys_content):
         )
         collect_res_cmd = (
             f"python ../gather_all_NPUs_results.py "
-            f"--sim_logfile {paths['log']}.log  --output_filename {paths['res_log']}"
+            f"--sim_logfile {paths['timed_trace']}  --output_filename {paths['res_log']}"
         )
         subprocess.run(collect_res_cmd, shell=True, cwd=None)
         st.session_state.show_npu_plots = True
         parsed_sys_config = json.loads(updated_sys_content)
         st.session_state.peak_perf = parsed_sys_config.get("peak-perf", 300)
         st.session_state.peak_bw = parsed_sys_config.get("local-mem-bw", 2000)
-
-
-def _get_file_paths(sim_dir, dp, tp, sp, pp, sharding_val):
-    trace_file_name = f"{dp}_{tp}_{sp}_{pp}_{sharding_val}_trace.csv"
-    timed_file_name = f"{dp}_{tp}_{sp}_{pp}_{sharding_val}_trace_matched_timing.csv"
-    csv_trace_file = os.path.join(sim_dir, trace_file_name)
-    timed_file = os.path.join(sim_dir, timed_file_name)
-    return trace_file_name, csv_trace_file, timed_file

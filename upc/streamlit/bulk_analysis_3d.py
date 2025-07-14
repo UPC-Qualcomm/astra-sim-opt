@@ -5,13 +5,21 @@ import helper.bulk_analysis_helper as helper
 # Custom Modules
 from tabs.bulk_analysis_tab_dim_red_clus_ml import render as render_tab1
 from tabs.bulk_analysis_tab_best_comb import render as render_tab2
+import sections.report as report
 
 st.set_page_config(page_title="Bulk analysis", layout="wide")
 
 st.title("Parallelism Strategy - Execution time Breakdown")
 
+#TODO: 
+# 1- Get model only
+# 2- Show report on all availalbe topologies
+# 3- Show report on all available BWs (TODO: Generate the gather results for bw_bw)
+# 4- Let the user select the config and show the rest of the work
 selected_model, selected_config = picker.get_model_and_config()
 picker.set_session_peak_perf_bw(selected_config)
+
+report.analysis_across_topologies(selected_model)
 
 st.markdown("---")
 
@@ -43,6 +51,7 @@ with col0:
     local_min_df_all_axis = helper.find_local_minima_all_axis(
         df[df["fsdp"] == selected_fsdp], "dp", "tp", "sp", "pp", value_col="total"
     )
+    st.write(local_min_df_all_axis)
     global_min_idx = local_min_df_all_axis["total"].idxmin()
 
     slider_dim1, slider_value1 = helper.select_dim(
@@ -111,13 +120,14 @@ with col1:
             st.write("No local minima found for the selected configuration.")
 
 st.subheader("Local Minima Records on the entire data (unsliced):")
-st.dataframe(local_min_df_all_axis.sort_values('total'))
+st.dataframe(local_min_df_all_axis.sort_values("total"))
+
 
 st.markdown("---")
 
 tabs = [
     "### Dimension Reduction & Clustering & ML Models",
-    "### Best 10 Performing Examples",
+    "### Best Performing Examples",
 ]
 
 if "active_tab" not in st.session_state:

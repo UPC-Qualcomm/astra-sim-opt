@@ -6,8 +6,8 @@ import numpy as np
 def plot_sim_results(csv_file):
     df = pd.read_csv(csv_file)
     df["sys_id"] = df["sys_id"].astype(int)
-    df["execution_cycles"] = df["execution_cycles"].astype(float)
-    df["exposed_communication_cycles"] = df["exposed_communication_cycles"].astype(
+    df["exec_cycles"] = df["exec_cycles"].astype(float)
+    df["exposed_comm_cycles"] = df["exposed_comm_cycles"].astype(
         float
     )
 
@@ -16,8 +16,8 @@ def plot_sim_results(csv_file):
     num_chunks = (len(df) + chunk_size - 1) // chunk_size
 
     # Overall averages (absolute cycles)
-    avg_exec = df["execution_cycles"].mean()
-    avg_exposed = df["exposed_communication_cycles"].mean()
+    avg_exec = df["exec_cycles"].mean()
+    avg_exposed = df["exposed_comm_cycles"].mean()
 
     # Percentages for labeling
     avg_exposed_pct = 100 * avg_exposed / avg_exec
@@ -30,12 +30,12 @@ def plot_sim_results(csv_file):
         y_pos = np.arange(len(chunk))
 
         # Base exec cycles
-        ax.bar(y_pos, chunk["execution_cycles"], color="royalblue", label="Exec Cycles")
+        ax.bar(y_pos, chunk["exec_cycles"], color="royalblue", label="Exec Cycles")
 
         # Overlay comm cycles
         ax.bar(
             y_pos,
-            chunk["exposed_communication_cycles"],
+            chunk["exposed_comm_cycles"],
             color="tomato",
             label="Comm Cycles",
         )

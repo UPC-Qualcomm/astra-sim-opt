@@ -73,7 +73,7 @@ def plot_elapsed_times(
         alt.Chart(df)
         .mark_bar()
         .encode(
-            x=alt.X("elapsed_time:Q", title="Elapsed Time"),
+            x=alt.X("elapsed_time:Q", title="Time (Cycles)"),
             y=alt.Y(
                 "node_name:N",
                 sort=alt.SortField(field="elapsed_time", order="descending"),
@@ -129,17 +129,17 @@ def plot_overlapped_blocks(df: pd.DataFrame, npu) -> alt.Chart:
         alt.Chart(df)
         .mark_bar()
         .encode(
-            x=alt.X("start:Q", title="Timestamp"),
+            x=alt.X("start:Q", title="Time (Cycles)"),
             x2="end:Q",
             y=alt.Y("node_type:N", title="Node Type"),
-            color="node_type:N",  # Different color for each node_type
+            color=alt.Color("node_type:N", legend=alt.Legend(title=None)),  # Different color for each node_type
         )
         .configure_axis(
             grid=False,  # Remove the grid lines
             ticks=False,
         )
         .properties(
-            height=400, width=800, title=f"Duration of Blocks by Node Type - NPU {npu}"
+            height=450, width=800, title=f"Duration of Blocks by Node Type - NPU {npu}"
         )
     )
 

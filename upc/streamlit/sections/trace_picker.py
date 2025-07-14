@@ -73,7 +73,9 @@ def _get_configs_dir():
 
 def _get_config_names(model_dir):
     return [
-        d for d in os.listdir(model_dir) if os.path.isdir(os.path.join(model_dir, d))
+        d for d in os.listdir(model_dir)
+        if os.path.isdir(os.path.join(model_dir, d))
+        and any(os.path.isfile(os.path.join(model_dir, d, f)) for f in os.listdir(os.path.join(model_dir, d)))
     ]
 
 
@@ -180,7 +182,7 @@ def get_model_and_config():
 
 @st.cache_data
 def get_all_parallelism_strategies_data(model, config, option):
-    csv_files = get_all_matched_traces_file_names(model, config)
+    csv_files = get_files_list(os.path.join(_get_output_dir(), model, config), "_trace_matched_timing.csv")
     records = []
     
     for file in csv_files:
@@ -219,12 +221,11 @@ def get_all_parallelism_strategies_data(model, config, option):
     return pd.DataFrame(records)
 
 @st.cache_data
-def get_all_matched_traces_file_names(model, config):
-    base_dir = os.path.join(_get_output_dir(), model, config)
+def get_files_list(base_dir, end_with_str):
     files = os.listdir(base_dir)
     filtered = list()
     for file in files:
-        if file.endswith("_trace_matched_timing.csv"):
+        if file.endswith(end_with_str):
             filtered.append(os.path.join(base_dir, file))
     return filtered
 
@@ -366,7 +367,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
 
     # Sort by parallelism columns
     df_sorted = df#.sort_values(by=['dp','tp','sp','pp','fsdp'], ascending=True).reset_index(drop=True)
-
+    num_npus = int(df_sorted['dp'].head(1)) * int(df_sorted['tp'].head(1)) * int(df_sorted['sp'].head(1)) * int(df_sorted['pp'].head(1))
     # Normalize 'total' globally and map to colors
     norm = plt.Normalize(df_sorted['total'].min(), df_sorted['total'].max())
     cmap = plt.cm.Reds
@@ -378,7 +379,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
     total_colors = cmap(norm(df_sorted['total'].clip(low, high)))
 
     num_chunks = math.ceil(len(df_sorted) / chunk_size)
-
+    
     for i in range(num_chunks):
         start = i * chunk_size
         end = min((i + 1) * chunk_size, len(df_sorted))
@@ -399,7 +400,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
 
         # Use global color mapping for comm bars
         comm_colors = total_colors[start:end]
-        ax.bar(x, comm_values, bottom=mem_values + comp_values, label='Communication', color=comm_colors)
+        ax.bar(x, comm_values, bottom=mem_values + comp_values, label='Exposed Communication (%)', color='lightcoral')#comm_colors)
 
         for xi, mem, comm, comp in zip(x, mem_values, comm_values, comp_values):
             ax.text(xi, comp + mem + comm / 2, f"{comm/(comp+mem+comm) * 100 :.2f}", ha='center', va='center', fontsize=8, color='black')
@@ -408,7 +409,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
         ax.set_xticklabels(file_names, rotation=45, ha='right')
         ax.set_xlabel('Parallelism strategy: DP,TP,SP,PP,FSDP')
         ax.set_ylabel('Time (Cycles)')
-        ax.set_title(f'Execution Breakdown per Experiment (Bars {start + 1} to {end}) - lighter color faster simulation')
+        ax.set_title(f'Execution Breakdown per Experiment - #NPUs is {num_npus} (Experiments {start + 1} to {end})')# - lighter color faster simulation')
         ax.legend()
 
         fig.tight_layout()
