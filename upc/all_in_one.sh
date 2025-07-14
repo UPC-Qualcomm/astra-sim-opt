@@ -59,8 +59,8 @@ model_num=5
 #model_num=18
 
 
-#folder_name="GPT_40B"
-#model_num=19
+folder_name="GPT_40B"
+model_num=19
 
 workload_configuration="./workload/"${folder_name}
 memory_config="./configuration/RemoteMemory.json"
@@ -98,20 +98,20 @@ python run_astrasim.py \
 #DGX_H100
 python run_astrasim.py \
     --workload_dir $workload_configuration \
-    --system ./configuration/DGX_H100_sys.json \
-    --network ./configuration/DGX_H100.yml \
+    --system ./configuration/FoldedClos_sys.json \
+    --network ./configuration/FoldedClos.yml \
     --memory $memory_config  \
-    --output_dir ${output}DGX_H100 \
-    --network_log ${network_log}DGX_H100
+    --output_dir ${output}FoldedClos \
+    --network_log ${network_log}FoldedClos
 
 #DGX1
-python run_astrasim.py \
-    --workload_dir $workload_configuration \
-    --system ./configuration/DGX1_sys.json \
-    --network ./configuration/DGX1.yml \
-    --memory $memory_config  \
-    --output_dir ${output}DGX1 \
-    --network_log ${network_log}DGX1
+#python run_astrasim.py \
+#    --workload_dir $workload_configuration \
+#    --system ./configuration/DGX1_sys.json \
+#    --network ./configuration/DGX1.yml \
+#    --memory $memory_config  \
+#    --output_dir ${output}DGX1 \
+#    --network_log ${network_log}DGX1
 
 #Dragonfly
 python run_astrasim.py \
@@ -131,7 +131,7 @@ python run_astrasim.py \
     --output_dir ${output}FullyConnected \
     --network_log ${network_log}FullyConnected
 
-#Ring
+##Ring
 python run_astrasim.py \
     --workload_dir $workload_configuration \
     --system ./configuration/Ring_sys.json \
@@ -161,11 +161,11 @@ python gather_all_NPUs_results.py --sim_logfile ${output}3D_Torus  --output_file
 
 #DGX_H100
 #python gather_results.py --sim_logfiles_dir ${output}DGX_H100 --output_filename ${result}DGX_H100.csv
-python gather_all_NPUs_results.py --sim_logfile ${output}DGX_H100  --output_filename ${result}DGX_H100
+python gather_all_NPUs_results.py --sim_logfile ${output}FoldedClos  --output_filename ${result}FoldedClos
 
 #DGX1
 #python gather_results.py --sim_logfiles_dir ${output}DGX1 --output_filename ${result}DGX1.csv
-python gather_all_NPUs_results.py --sim_logfile ${output}DGX1  --output_filename ${result}DGX1
+#python gather_all_NPUs_results.py --sim_logfile ${output}DGX1  --output_filename ${result}DGX1
 
 #Dragonfly
 #python gather_results.py --sim_logfiles_dir ${output}Dragonfly --output_filename ${result}Dragonfly.csv

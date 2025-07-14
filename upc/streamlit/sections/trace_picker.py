@@ -367,7 +367,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
 
     # Sort by parallelism columns
     df_sorted = df#.sort_values(by=['dp','tp','sp','pp','fsdp'], ascending=True).reset_index(drop=True)
-
+    num_npus = int(df_sorted['dp'].head(1)) * int(df_sorted['tp'].head(1)) * int(df_sorted['sp'].head(1)) * int(df_sorted['pp'].head(1))
     # Normalize 'total' globally and map to colors
     norm = plt.Normalize(df_sorted['total'].min(), df_sorted['total'].max())
     cmap = plt.cm.Reds
@@ -379,7 +379,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
     total_colors = cmap(norm(df_sorted['total'].clip(low, high)))
 
     num_chunks = math.ceil(len(df_sorted) / chunk_size)
-
+    
     for i in range(num_chunks):
         start = i * chunk_size
         end = min((i + 1) * chunk_size, len(df_sorted))
@@ -400,7 +400,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
 
         # Use global color mapping for comm bars
         comm_colors = total_colors[start:end]
-        ax.bar(x, comm_values, bottom=mem_values + comp_values, label='Communication', color=comm_colors)
+        ax.bar(x, comm_values, bottom=mem_values + comp_values, label='Exposed Communication (%)', color='lightcoral')#comm_colors)
 
         for xi, mem, comm, comp in zip(x, mem_values, comm_values, comp_values):
             ax.text(xi, comp + mem + comm / 2, f"{comm/(comp+mem+comm) * 100 :.2f}", ha='center', va='center', fontsize=8, color='black')
@@ -409,7 +409,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
         ax.set_xticklabels(file_names, rotation=45, ha='right')
         ax.set_xlabel('Parallelism strategy: DP,TP,SP,PP,FSDP')
         ax.set_ylabel('Time (Cycles)')
-        ax.set_title(f'Execution Breakdown per Experiment (Bars {start + 1} to {end}) - lighter color faster simulation')
+        ax.set_title(f'Execution Breakdown per Experiment - #NPUs is {num_npus} (Experiments {start + 1} to {end})')# - lighter color faster simulation')
         ax.legend()
 
         fig.tight_layout()

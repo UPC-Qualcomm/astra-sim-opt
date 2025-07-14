@@ -146,12 +146,12 @@ def extract_slowest_npu(logs, output_filename):
     for log in logs:
         df = pd.read_csv(log)
         slowest_row = df[df["sys_id"] == df["sys_id"].min()].copy()
-
+        
         file_base = os.path.splitext(log)[0].split('/')[-1]
         parallelism_str = file_base  # or file_base[:9] if format is fixed
 
         parallelism_list = parallelism_str.split("_")
-        slowest_row["dp_mp_sp_pp_sharded"] = parallelism_str
+        slowest_row["dp_mp_sp_pp_sharded"] = f'{parallelism_list[0]}_{parallelism_list[1]}_{parallelism_list[2]}_{parallelism_list[3]}_{parallelism_list[4]}'
         slowest_row["dp"] = parallelism_list[0]
         slowest_row["mp"] = parallelism_list[1]
         slowest_row["sp"] = parallelism_list[2]

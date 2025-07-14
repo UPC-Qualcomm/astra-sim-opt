@@ -40,8 +40,9 @@ def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config
             
             summary_fig = get_total_cycles_plot(
                 combined_df,
-                title=f"Total Cycles vs Bandwidth for Different Parallelism Strategies - Network config {selected_config}",
+                title=f"Total Cycles vs Bandwidth for Different Parallelism Strategies - Network Config: {selected_config}, #NPU=DP*TP*SP*PP",
                 group_by="strategy",
+                legend_title='DP, TP, SP, PP, FSDP', 
             )
             st.plotly_chart(
                 summary_fig, use_container_width=True, key=f"plot_{selected_config}"
@@ -143,12 +144,19 @@ def get_filtered_df(result_path, strategy):
 
 
 def get_total_cycles_plot(
-    all_data,
+    df,
     title,
     group_by="strategy",
+    legend_title='',
     y_label="Total Cycles",
-    x_label="Intra_Inter Bandwidth (GB/s)",
+    x_label="Intra, Inter - Bandwidth (GB/s)",
 ):
+    all_data = df.copy()
+
+    all_data["bw_label"] = all_data["bw_label"].str.split("_").apply(
+        lambda parts: f"Intra: {parts[0]}, Inter: {parts[1]}"
+    )
+
     unique_groups = all_data[group_by].unique()
     color_sequence = pc.qualitative.Set2
     color_map = {
@@ -166,7 +174,7 @@ def get_total_cycles_plot(
         labels={
             "bw_label": x_label,
             "total_cycles": y_label,
-            group_by: group_by.replace("_", " ").title(),
+            group_by: legend_title,
         },
         color_discrete_map=color_map,
     )
@@ -192,7 +200,22 @@ def get_total_cycles_plot(
             )
         )
 
-    fig.update_layout(xaxis_tickangle=-45, height=600, hovermode="x unified")
+    # Layout updates
+    fig.update_layout(
+        xaxis_tickangle=-45,
+        height=600,
+        hovermode="x unified",
+        title_font=dict(size=18),
+        legend_font=dict(size=18),
+        xaxis=dict(
+            title_font=dict(size=18),
+            tickfont=dict(size=14),
+        ),
+        yaxis=dict(
+            title_font=dict(size=18),
+            tickfont=dict(size=14),
+        ),
+    )
 
     return fig
 
@@ -219,11 +242,13 @@ def show_res_across_configs(parallelism_strategy, res_dirs_configs):
     all_data = combine_data_across_config(parallelism_strategy, res_dirs_configs)
 
     combined_df = get_combined_df(all_data, group_by="config")
-
+    dp , tp, sp, pp, fsdp = parallelism_strategy.split('_')
+    npu_count = int(dp) * int(tp) * int(sp) * int(pp)
     fig = get_total_cycles_plot(
         combined_df,
-        title=f"Total Cycles vs Bandwidth for Different Network configs - Parallelism Strategy {parallelism_strategy}",
+        title=f"Total Cycles vs Bandwidth for Different Network Configs - Parallelism Strategy DP:{dp}, TP:{tp}, SP{sp}, PP:{pp}, FSDP:{fsdp} and #NPUs = {npu_count}",
         group_by="config",
+        #legend_title='Topology', 
     )
 
     st.plotly_chart(fig, use_container_width=True, key=f"plot_{parallelism_strategy}")
