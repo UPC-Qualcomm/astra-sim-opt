@@ -59,8 +59,8 @@ model_num=5
 #model_num=18
 
 
-folder_name="GPT_40B"
-model_num=19
+# folder_name="GPT_40B"
+# model_num=19
 
 workload_configuration="./workload/"${folder_name}
 memory_config="./configuration/RemoteMemory.json"
@@ -69,58 +69,58 @@ network_log="./network_log/"${folder_name}"/"
 output="./output/"${folder_name}"/"
 result="./results/"${folder_name}"/"
 
-rm -rf $output
-rm -rf $result
-rm -rf $workload_configuration
-rm -rf $network_log
+#rm -rf $output
+#rm -rf $result
+#rm -rf $workload_configuration
+#rm -rf $network_log
 #
 #
-python generate_workloads.py --model $model_num --folder_name $folder_name
+#python generate_workloads.py --model $model_num --folder_name $folder_name
 
 #2D_Torus
-python run_astrasim.py \
-    --workload_dir $workload_configuration \
-    --system ./configuration/2D_Torus_sys.json \
-    --network ./configuration/2D_Torus.yml \
-    --memory $memory_config \
-    --output_dir ${output}2D_Torus \
-    --network_log ${network_log}2D_Torus
+# python run_astrasim.py \
+#     --workload_dir $workload_configuration \
+#     --system ./configuration/2D_Torus_sys.json \
+#     --network ./configuration/2D_Torus.yml \
+#     --memory $memory_config \
+#     --output_dir ${output}2D_Torus \
+#     --network_log ${network_log}2D_Torus
 
-#3D_Torus
-python run_astrasim.py \
-    --workload_dir $workload_configuration \
-    --system ./configuration/3D_Torus_sys.json \
-    --network ./configuration/3D_Torus.yml \
-    --memory $memory_config  \
-    --output_dir ${output}3D_Torus \
-    --network_log ${network_log}3D_Torus
+# #3D_Torus
+# python run_astrasim.py \
+#     --workload_dir $workload_configuration \
+#     --system ./configuration/3D_Torus_sys.json \
+#     --network ./configuration/3D_Torus.yml \
+#     --memory $memory_config  \
+#     --output_dir ${output}3D_Torus \
+#     --network_log ${network_log}3D_Torus
 
-#DGX_H100
-python run_astrasim.py \
-    --workload_dir $workload_configuration \
-    --system ./configuration/FoldedClos_sys.json \
-    --network ./configuration/FoldedClos.yml \
-    --memory $memory_config  \
-    --output_dir ${output}FoldedClos \
-    --network_log ${network_log}FoldedClos
+# #DGX_H100
+# python run_astrasim.py \
+#     --workload_dir $workload_configuration \
+#     --system ./configuration/FoldedClos_sys.json \
+#     --network ./configuration/FoldedClos.yml \
+#     --memory $memory_config  \
+#     --output_dir ${output}FoldedClos \
+#     --network_log ${network_log}FoldedClos
 
-#DGX1
-#python run_astrasim.py \
-#    --workload_dir $workload_configuration \
-#    --system ./configuration/DGX1_sys.json \
-#    --network ./configuration/DGX1.yml \
-#    --memory $memory_config  \
-#    --output_dir ${output}DGX1 \
-#    --network_log ${network_log}DGX1
+# #DGX1
+# #python run_astrasim.py \
+# #    --workload_dir $workload_configuration \
+# #    --system ./configuration/DGX1_sys.json \
+# #    --network ./configuration/DGX1.yml \
+# #    --memory $memory_config  \
+# #    --output_dir ${output}DGX1 \
+# #    --network_log ${network_log}DGX1
 
-#Dragonfly
-python run_astrasim.py \
-    --workload_dir $workload_configuration \
-    --system ./configuration/Dragonfly_sys.json \
-    --network ./configuration/Dragonfly.yml \
-    --memory $memory_config  \
-    --output_dir ${output}Dragonfly \
-    --network_log ${network_log}Dragonfly
+# #Dragonfly
+# python run_astrasim.py \
+#     --workload_dir $workload_configuration \
+#     --system ./configuration/Dragonfly_sys.json \
+#     --network ./configuration/Dragonfly.yml \
+#     --memory $memory_config  \
+#     --output_dir ${output}Dragonfly \
+#     --network_log ${network_log}Dragonfly
 
 #FullyConnected
 python run_astrasim.py \
@@ -150,26 +150,26 @@ python run_astrasim.py \
     --network_log ${network_log}Switch
 
 
-#Collect results
-#2D_Torus
-#python gather_results.py --sim_logfiles_dir ${output}2D_Torus --output_filename ${result}2D_Torus.csv
-python gather_all_NPUs_results.py --sim_logfile ${output}2D_Torus  --output_filename ${result}2D_Torus
+# #Collect results
+# #2D_Torus
+# #python gather_results.py --sim_logfiles_dir ${output}2D_Torus --output_filename ${result}2D_Torus.csv
+# python gather_all_NPUs_results.py --sim_logfile ${output}2D_Torus  --output_filename ${result}2D_Torus
 
-#3D_Torus
-#python gather_results.py --sim_logfiles_dir ${output}3D_Torus --output_filename ${result}3D_Torus.csv
-python gather_all_NPUs_results.py --sim_logfile ${output}3D_Torus  --output_filename ${result}3D_Torus
+# #3D_Torus
+# #python gather_results.py --sim_logfiles_dir ${output}3D_Torus --output_filename ${result}3D_Torus.csv
+# python gather_all_NPUs_results.py --sim_logfile ${output}3D_Torus  --output_filename ${result}3D_Torus
 
-#DGX_H100
-#python gather_results.py --sim_logfiles_dir ${output}DGX_H100 --output_filename ${result}DGX_H100.csv
-python gather_all_NPUs_results.py --sim_logfile ${output}FoldedClos  --output_filename ${result}FoldedClos
+# #DGX_H100
+# #python gather_results.py --sim_logfiles_dir ${output}DGX_H100 --output_filename ${result}DGX_H100.csv
+# python gather_all_NPUs_results.py --sim_logfile ${output}FoldedClos  --output_filename ${result}FoldedClos
 
-#DGX1
-#python gather_results.py --sim_logfiles_dir ${output}DGX1 --output_filename ${result}DGX1.csv
-#python gather_all_NPUs_results.py --sim_logfile ${output}DGX1  --output_filename ${result}DGX1
+# #DGX1
+# #python gather_results.py --sim_logfiles_dir ${output}DGX1 --output_filename ${result}DGX1.csv
+# #python gather_all_NPUs_results.py --sim_logfile ${output}DGX1  --output_filename ${result}DGX1
 
-#Dragonfly
-#python gather_results.py --sim_logfiles_dir ${output}Dragonfly --output_filename ${result}Dragonfly.csv
-python gather_all_NPUs_results.py --sim_logfile ${output}Dragonfly  --output_filename ${result}Dragonfly
+# #Dragonfly
+# #python gather_results.py --sim_logfiles_dir ${output}Dragonfly --output_filename ${result}Dragonfly.csv
+# python gather_all_NPUs_results.py --sim_logfile ${output}Dragonfly  --output_filename ${result}Dragonfly
 
 #FullyConnected
 #python gather_results.py --sim_logfiles_dir ${output}FullyConnected --output_filename ${result}FullyConnected.csv

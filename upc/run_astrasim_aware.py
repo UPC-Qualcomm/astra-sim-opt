@@ -4,8 +4,8 @@ import subprocess
 import multiprocessing
 import argparse
 import pandas as pd
-from intervaltree import IntervalTree
 import getpass
+from intervaltree import IntervalTree
 
 def get_timings_df(csv_trace_file, output_file_name):
     df = pd.read_csv(csv_trace_file)
@@ -31,6 +31,8 @@ def get_timings_df(csv_trace_file, output_file_name):
 
     #merged_df["issue_tick"] = merged_df["issue_tick"].astype(int)
     #merged_df["callback_tick"] = merged_df["callback_tick"].astype(int)
+    print(merged_df.columns)
+    
     merged_df["elapsed_time"] = merged_df["callback_tick"] - merged_df["issue_tick"]
     merged_df.fillna(0, inplace=True)
 
@@ -176,7 +178,7 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
     file_dir = os.path.split(os.path.abspath(__file__))[0]
     astrasim_bin = os.path.join(
         astrasim_root,
-        "build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware",
+        "build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware",
     )
 
     system = os.path.join(file_dir, system)
