@@ -1,30 +1,28 @@
 import streamlit as st
 import subprocess
 import time
-import generate_single_workload as gen
-
-import streamlit as st
-import subprocess
-import time
-import generate_single_workload as gen
-
+import scripts.generate_single_workload as gen
+import os
 
 def generate_workload():
     st.title("Generate a workload trace")
     temp_dir = "temp/"
 
     # --- Form Section ---
-    (selected_model_name, params_list, dp, tp, sp, pp, sharding, submitted) = (
-        _workload_form()
+    models_names = _get_models_names()
+    selected_model_name = st.selectbox("Choose a pre-defined model:", models_names)
+    (params_list, dp, tp, sp, pp, sharding, submitted) = (
+        _workload_form(selected_model_name)
     )
 
     sharding_val = "1" if sharding else "0"
 
     # --- Submission Section ---
     if submitted:
-        _clear_session_and_temp(temp_dir)
+        _clear_session_state()
+        _clear_temp_dir(temp_dir)
         _run_trace_generation(
-            selected_model_name, [dp, tp, sp, pp, sharding], params_list
+            selected_model_name, [dp, tp, sp, pp, sharding], params_list, temp_dir
         )
 
     # --- Return parameters for downstream use ---
@@ -39,13 +37,13 @@ def generate_workload():
         "selected_model_name": selected_model_name,
     }
 
+def _get_models_names():   
+    return list(gen.model_display_names.values())
 
-def _workload_form():
+def _workload_form(selected_model_name):
     with st.form("model_config_form"):
         st.subheader("Model parameters")
         display_to_model = {v: k for k, v in gen.model_display_names.items()}
-        model_names = list(gen.model_display_names.values())
-        selected_model_name = st.selectbox("Choose a pre-defined model:", model_names)
         selected_model = display_to_model[selected_model_name]
 
         params_list = gen.Model.get_model_params(selected_model)
@@ -58,12 +56,23 @@ def _workload_form():
             "seq",
             "head",
             "num_stacks",
+        ]   
+
+        params_labels = [                 
+            "Input Embedding Size",            
+            "Output Embedding Size",            
+            "Model Feature Size",
+            "FFN Feature Size",
+            "Global Batch Size",
+            "Sequance Length",
+            "Number of Heads",
+            "Number of Layers"
         ]
         cols = st.columns(len(param_names))
         for i, col in enumerate(cols):
             with col:
                 params_list[i] = st.number_input(
-                    param_names[i], value=params_list[i], key=f"{param_names[i]}_input"
+                    label=params_labels[i], value=params_list[i], key=f"{param_names[i]}_input"
                 )
 
         st.subheader("Parallelism strategy")
@@ -77,22 +86,24 @@ def _workload_form():
         with col4:
             pp = st.text_input("Pipeline Parallelism (PP)", 4)
         with col5:
-            sharding = st.checkbox("Sharding", value=False)
+            sharding = st.checkbox("Sharding (FSDP)", value=False)
 
         submitted = st.form_submit_button("🚀 Run Model")
 
-    return (selected_model_name, params_list, dp, tp, sp, pp, sharding, submitted)
+    return (params_list, dp, tp, sp, pp, sharding, submitted)
 
 
-def _clear_session_and_temp(temp_dir):
+def _clear_session_state():
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+
+def _clear_temp_dir(temp_dir):
     subprocess.run(f"rm -rf {temp_dir}*", shell=True, cwd=None)
 
 
-def _run_trace_generation(selected_model_name, parallelism, params_list):
+def _run_trace_generation(selected_model_name, parallelism, params_list, temp_dir):
     with st.spinner(f"Generating a trace for `{selected_model_name}`..."):
         start_time = time.time()
-        gen.generate_trace(parallelism, params_list)
+        gen.generate_trace(parallelism, params_list, temp_dir)
         elapsed_time = time.time() - start_time
     st.success(f"✅ Trace generation completed in {elapsed_time:.2f} seconds.")

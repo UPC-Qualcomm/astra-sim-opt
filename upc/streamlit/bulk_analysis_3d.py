@@ -19,7 +19,8 @@ st.title("Parallelism Strategy - Execution time Breakdown")
 selected_model, selected_config = picker.get_model_and_config()
 picker.set_session_peak_perf_bw(selected_config)
 
-report.analysis_across_topologies(selected_model)
+fig, selected_topo, _ = report.analysis_across_topologies(selected_model)
+st.pyplot(fig)
 
 st.markdown("---")
 
@@ -27,10 +28,9 @@ col1, col2 = st.columns([11, 2])
 with col2:
     option = st.radio(
         "Select Bound Analysis Option:",
-        options=["slowest", "fastest", "average"],
+        options=["slowest", "average"],
         format_func=lambda x: {
             "slowest": "Slowest NPU",
-            "fastest": "Fastest NPU",
             "average": "Average Across all NPUs",
         }[x],
     )

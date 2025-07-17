@@ -9,7 +9,7 @@ import time
 import subprocess
 import json
 import streamlit as st
-import sections.generate_workload as gen
+import upc.ref_streamlit.sections.generate_workload as gen
 import sections.astrasim as astra
 import sections.trace_viewer as viewer
 import sections.trace_picker as picker

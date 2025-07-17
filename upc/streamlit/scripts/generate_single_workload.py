@@ -1,10 +1,7 @@
 #!/usr/bin/python3
 import os
 import subprocess
-import multiprocessing
-import argparse
 from enum import Enum
-from tqdm import tqdm
 
 
 def run_command(command, cwd=None):
@@ -85,12 +82,11 @@ model_display_names = {
 }
 
 
-def generate_trace(parallelism_strategy, parameters):
-    root = os.path.join(os.path.split(os.path.abspath(__file__))[0], "temp")
+def generate_trace(parallelism_strategy, parameters, temp_dir):
+    root = os.path.join(os.path.split(os.path.abspath(__file__))[0], "../"+temp_dir)
 
     dp, mp, ssp, pp, sharded = parallelism_strategy
     din, dout, dmodel, dff, batch, seq, head, num_stacks = parameters
-
     cmd = (
         f"python main.py "
         f"--output_dir {root} "
@@ -113,9 +109,9 @@ def generate_trace(parallelism_strategy, parameters):
     )
     cwd = os.path.join(
         os.path.split(os.path.abspath(__file__))[0],
-        "../..",
+        "../../..",
         "extern",
         "symbolic_tensor_graph",
     )
-    # print(cmd)
+    #print(cmd)
     run_command(cmd, cwd)

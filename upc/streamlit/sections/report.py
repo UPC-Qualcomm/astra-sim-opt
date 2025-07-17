@@ -111,7 +111,8 @@ def get_summary_plot(summary_df, figsize=(10, 3)):
     
     # Move legend outside right
     ax.legend(title='Breakdown Components', bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    
+
+    ax.tick_params(axis='x', labelrotation=45)
     #ax.grid(axis='y', linestyle='--', alpha=0.7)
     fig.tight_layout()
 
@@ -122,7 +123,7 @@ def get_compare_topology_per_range(merged_df, start_idx, end_idx, configs_sorted
     labels = ['Overlap', 'Exposed Comm', 'Exposed Comp']
     colors = ['blue', 'lightcoral', 'lightgreen']
 
-    selected_configs = configs_sorted[start_idx:end_idx+1]
+    selected_configs = configs_sorted[start_idx:end_idx]
     valid_configs = []
     for config in selected_configs:
         config_rows = merged_df[merged_df['dp_mp_sp_pp_sharded'] == config]
@@ -173,6 +174,7 @@ def get_compare_topology_per_range(merged_df, start_idx, end_idx, configs_sorted
 
         ax.set_xticks(indices)
         ax.set_xticklabels(compare_df['topology'], fontsize=13)
+        ax.tick_params(axis='x', labelrotation=45)
         ax.set_ylabel('Cycles', fontsize=16)
         ax.set_xlabel('Topology', fontsize=14)
 
@@ -235,13 +237,13 @@ def count_best_topologies(merged_df):
 def analysis_across_topologies(selected_model):
     gathered_res_dir = Path(__file__).parent / "../../results" / selected_model
     gathered_res_files = picker.get_files_list(gathered_res_dir, ".csv")
-    st.title("Results Report")
+    st.subheader("Results Report")
 
     # Extract experiment names
     file_names = sorted([os.path.splitext(os.path.basename(f))[0] for f in gathered_res_files])
 
     # Experiment selection checkboxes (in one row)
-    st.subheader("Select The Topologies to Include")
+    st.text("Select The Topologies to Include")
     cols = st.columns(len(file_names))
     selected_files = []
     for i, name in enumerate(file_names):
@@ -268,22 +270,22 @@ def analysis_across_topologies(selected_model):
     stats_df = compute_summary_stats(merged_df, selected_files)
     fig = get_summary_plot(stats_df)
     st.pyplot(fig)
-    st.header("Summary Statistics per Topology - ordered by avg_exec (lower to higher)")
-    st.dataframe(stats_df.sort_values('avg_exec (s)'))
+    #**#st.header("Summary Statistics per Topology - ordered by avg_exec (lower to higher)")
+    #**#st.dataframe(stats_df.sort_values('avg_exec (s)'))
 
     # Identify per-config best topology and min exec_cycles
     min_df = add_topology_and_min_exec_cycles(merged_df)
 
     # Count Best-Performing Topologies
     counts_df = count_best_topologies(min_df)
-    st.header("Number of times each topology had the lowest exec_cycles")
+    st.subheader("Number of times each topology had the lowest simulation time")
     st.dataframe(counts_df)
 
     # Top-N Best Experiments with Slider
-    st.header("Top Experiments (Parallelism Strategies) with Lowest exec_cycles")
+    st.subheader("Top Experiments (Parallelism Strategies) with Lowest simulation time")
     n_range = st.slider(
         "Select range of experiments to display:",
-        0, min_df["dp_mp_sp_pp_sharded"].nunique(), (0, 5), step=1
+        0, min_df["dp_mp_sp_pp_sharded"].nunique(), (0, 4), step=1
     )
 
     n_start, n_end = n_range
@@ -298,4 +300,6 @@ def analysis_across_topologies(selected_model):
         merged_df, n_start, n_end, configs_sorted, selected_files
     )
 
-    st.pyplot(fig)
+    parallelsim_strategies_list = merged_df["dp_mp_sp_pp_sharded"].unique()
+
+    return fig, selected_files, parallelsim_strategies_list

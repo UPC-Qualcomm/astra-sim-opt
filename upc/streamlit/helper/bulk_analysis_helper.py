@@ -357,7 +357,7 @@ def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
             zaxis_title="Total",
         ),
         title="3D Plot: UMAP Components 1 & 2 vs Total",
-        height=700,
+        height=550,
         width=900,
     )
     return fig
@@ -409,8 +409,8 @@ def get_2d_pca_fig(df, cols):
             zaxis_title="Total",
         ),
         title="3D Plot: PCA Components 1 & 2 vs Total",
-        height=700,
-        width=900,
+        height=550,
+        width=800,
     )
     return fig
 

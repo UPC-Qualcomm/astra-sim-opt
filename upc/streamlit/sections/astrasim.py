@@ -5,12 +5,6 @@ import subprocess
 import json
 import time
 import simulation_res as sr
-
-import streamlit as st
-import os
-from pathlib import Path
-import subprocess
-import json
 import trace_visualization as tv
 
 
@@ -19,7 +13,7 @@ def run_astrasim(params):
     config_dir, sim_dir = _setup_dirs(params["temp_dir"])
     configs = _get_config_names(config_dir)
 
-    st.subheader("Configuration")
+    st.subheader("Network Configuration")
     selected_config_name = st.selectbox("Select a config", configs)
 
     paths = _compute_paths(params, config_dir, sim_dir)
@@ -64,7 +58,6 @@ def visualize_simulation_results(sim_outputs):
         st.session_state.show_npu_plots = False
 
     if st.session_state.show_npu_plots:
-        st.title("📊 Visualize the exposed communications for all NPUs")
         plots = sr.plot_sim_results(sim_outputs["res_log"])
         for pl in plots:
             st.write(pl)

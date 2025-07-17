@@ -28,7 +28,7 @@ def sweep_bw_form(selected_config, selected_model):
         cols = st.columns(len(config_names))
 
         for i, config in enumerate(config_names):
-            val = config == selected_config
+            val = config in selected_config
             with cols[i]:
                 if st.checkbox(config, value=val):
                     selected_configs.append(config)

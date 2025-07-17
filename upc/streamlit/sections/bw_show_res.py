@@ -31,9 +31,6 @@ def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config
                 # for fig in figures:
                 #    st.pyplot(fig)
 
-            else:
-                st.write(f"No matching files found for strategy {strategy}.")
-
         if all_data:
             combined_df = get_combined_df(all_data, group_by="strategy")
             ###st.subheader(f"Total Cycles Comparison Across Bandwidth Settings - Network config {selected_config}")
@@ -240,18 +237,20 @@ def complete_missing_points(all_data, group_by="strategy"):
 
 def show_res_across_configs(parallelism_strategy, res_dirs_configs):
     all_data = combine_data_across_config(parallelism_strategy, res_dirs_configs)
+    if all_data:
+        combined_df = get_combined_df(all_data, group_by="config")
+        dp , tp, sp, pp, fsdp = parallelism_strategy.split('_')
+        npu_count = int(dp) * int(tp) * int(sp) * int(pp)
+        fig = get_total_cycles_plot(
+            combined_df,
+            title=f"Total Cycles vs Bandwidth for Different Network Configs - Parallelism Strategy DP:{dp}, TP:{tp}, SP{sp}, PP:{pp}, FSDP:{fsdp} and #NPUs = {npu_count}",
+            group_by="config",
+            #legend_title='Topology', 
+        )
 
-    combined_df = get_combined_df(all_data, group_by="config")
-    dp , tp, sp, pp, fsdp = parallelism_strategy.split('_')
-    npu_count = int(dp) * int(tp) * int(sp) * int(pp)
-    fig = get_total_cycles_plot(
-        combined_df,
-        title=f"Total Cycles vs Bandwidth for Different Network Configs - Parallelism Strategy DP:{dp}, TP:{tp}, SP{sp}, PP:{pp}, FSDP:{fsdp} and #NPUs = {npu_count}",
-        group_by="config",
-        #legend_title='Topology', 
-    )
-
-    st.plotly_chart(fig, use_container_width=True, key=f"plot_{parallelism_strategy}")
+        st.plotly_chart(fig, use_container_width=True, key=f"plot_{parallelism_strategy}")
+    else:
+        st.warning(f"No data found for the parallelsim strategy {parallelism_strategy}")
 
 
 def combine_data_across_config(parallelism_strategy, res_dirs_configs):

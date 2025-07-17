@@ -1,0 +1,117 @@
+import streamlit as st
+import sections.trace_viewer as tv
+import sections.trace_picker as picker
+import sections.report as report
+import sections.bw_form as bw_form
+import helper.bw_run_sim as bw_run
+import sections.bw_show_res as bw_show
+
+st.set_page_config(layout="wide")
+
+st.subheader("Exploration: Interconnect Network Topology")
+# Generate Workload
+base_dir = picker._get_output_dir()
+selected_model = picker.model_selector(base_dir)
+
+fig, selected_topologies, parallelsim_strategies_list = (
+    report.analysis_across_topologies(selected_model)
+)
+st.pyplot(fig)
+
+st.markdown("---")
+
+###selected_config = picker.config_selector(base_dir, selected_model)
+
+tabs = st.tabs(
+    ["Explore Various Interconnect Network Bandwidths", "Detailed Trace Visualization"]
+)
+
+with tabs[0]:
+    all_configs = bw_form.get_configuration_options()
+
+    ##parallelism_strategies = df_ranged["file_name"].tolist()
+    parallelism_strategies = st.multiselect(
+        "Select Parallelsim Strategies (dp_tp_sp_pp_fsdp)", parallelsim_strategies_list
+    )
+    if not parallelism_strategies:
+        st.warning(
+            "Please select the parallelism strategies you want to include in the exploration."
+        )
+    else:
+        sim_mode = st.radio(
+            "Select Exploration Mode", ["Saved Data", "Generate New Data"]
+        )
+
+        if sim_mode == "Saved Data":
+            st.subheader("Exploration Using Saved Data")
+
+            all_res_dirs_configs = []
+
+            st.subheader(
+                "Study the effect of the bandwidth over parallelism strategies"
+            )
+            for config in all_configs:
+                if config in selected_topologies:
+                    result_dir = bw_run.get_results_dir(selected_model, config)
+                    if result_dir.exists() and result_dir.is_dir():
+                        bw_show.show_inter_intra_sim_res(
+                            parallelism_strategies, result_dir, config
+                        )
+                        all_res_dirs_configs.append((result_dir, config))
+
+                        st.markdown("---")
+
+            if all_res_dirs_configs:
+                st.subheader(
+                    "Study the effect of the bandwidth over network topologies"
+                )
+                for parallelism_strategy in parallelism_strategies:
+                    bw_show.show_res_across_configs(
+                        parallelism_strategy, all_res_dirs_configs
+                    )
+
+        else:
+            st.subheader("Exploration With New Generated Data")
+            run_button, intra_bw_list, inter_bw_list, selected_config_names_list = (
+                bw_form.sweep_bw_form(selected_topologies, selected_model)
+            )
+            all_res_dirs_configs = []
+            for config in all_configs:
+                if config in selected_config_names_list:
+                    bw_run.intra_inter_simulations_run(
+                        parallelism_strategies,
+                        config,
+                        selected_model,
+                        run_button,
+                        intra_bw_list,
+                        inter_bw_list,
+                    )
+
+                result_dir = bw_run.get_results_dir(selected_model, config)
+                if result_dir.exists() and result_dir.is_dir():
+                    bw_show.show_inter_intra_sim_res(
+                        parallelism_strategies, result_dir, config
+                    )
+                    all_res_dirs_configs.append((result_dir, config))
+
+                st.markdown("---")
+            st.subheader(
+                "Study the effect of the bandwidth over network configurations"
+            )
+            for parallelism_strategy in parallelism_strategies:
+                bw_show.show_res_across_configs(
+                    parallelism_strategy, all_res_dirs_configs
+                )
+with tabs[1]:
+    try:
+        selected_config = picker.config_selector(base_dir, selected_model)
+        sim_outputs = picker.set_sim_input(selected_model, selected_config)
+    except:
+        st.error("File Not Found.")
+
+    try:
+        st.markdown("---")
+        if "df_matched" in st.session_state:
+            tv.render_sim_ouput_section(sim_outputs)
+    except:
+        st.error("Results File is Not Available.")

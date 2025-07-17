@@ -1,18 +1,10 @@
 import streamlit as st
-import os
-import pandas as pd
 import numpy as np
 import trace_visualization as tv
 import roofline_visualization as rv
 import time
-import streamlit as st
-import os
-import pandas as pd
-import numpy as np
-import time
-import trace_visualization as tv
-import roofline_visualization as rv
 import io
+from . import astrasim as astra
 
 def trace_viewer(sim_outputs):
     st.title("📊 Trace Visualization Viewer")
@@ -20,7 +12,8 @@ def trace_viewer(sim_outputs):
     if "df_matched" not in st.session_state:
         st.warning("The simulation trace is not available yet.")
     else:
-        npu, max_npu = _load_and_select_npu(st.session_state.df_matched)
+        max_npu = int(st.session_state.df_matched["sys_id"].max())
+        npu = _load_and_select_npu(max_npu)
         _show_basic_plots(st.session_state.df_matched, npu)
         _plot_selector(st.session_state.df_matched, npu, max_npu)
 
@@ -42,12 +35,11 @@ def _detect_file_change(csv_trace_file):
         st.session_state.selected_timestep = None
 
 
-def _load_and_select_npu(df):
-    max_npu = int(df["sys_id"].max())
-    npu = st.number_input("NPU index", min_value=0, max_value=max_npu, value=0, step=1)
+def _load_and_select_npu(max_npu, idx = "default"):
+    npu = st.number_input("NPU index", min_value=0, max_value=max_npu, value=0, step=1, key=f"npu_idx_{idx}")
     if "active_plot" not in st.session_state:
         st.session_state.active_plot = None
-    return npu, max_npu
+    return npu
 
 
 def _show_basic_plots(df, npu):
@@ -211,7 +203,6 @@ def _timestep_controls(timesteps):
             "Select a timestep",
             options=timesteps,
             value=timesteps[st.session_state.timestep_idx],
-            label_visibility="collapsed",
         )
         if selected_timestep != timesteps[st.session_state.timestep_idx]:
             st.session_state.timestep_idx = int(
@@ -250,3 +241,67 @@ def _show_timestep_plot_and_table(df, timesteps):
         time.sleep(1)
         next_step(timesteps)
         st.rerun()
+
+
+def render_sim_ouput_section(sim_outputs):
+    st.markdown("### Simulation Visualizations")
+    tabs = st.tabs([
+        "Exposed Communication per NPU",
+        "Chakra Traces",
+        "Chakra Nodes Plot",
+        "Roofline Model",
+    ])
+
+    with tabs[0]:
+        st.subheader("Exposed Communication per NPU")
+        astra.visualize_simulation_results(sim_outputs)
+
+    with tabs[1]:
+        st.subheader("Chakra Trace")
+        _init_session_state()
+        if "df_matched" not in st.session_state:
+            st.warning("The simulation trace is not available yet.")
+        else:
+            option = st.radio("View Mode", ["Per NPU", "All NPUs"])
+            max_npu = int(st.session_state.df_matched["sys_id"].max())
+            if option == "Per NPU":
+                npu = _load_and_select_npu(max_npu, "trace")
+                _show_basic_plots(st.session_state.df_matched, npu)
+            else:
+                st.write("Showing Chakra Trace for all NPUs")
+                for n in range(max_npu):
+                    st.altair_chart(
+                        tv.plot_one_npu(st.session_state.df_matched, n, plot_blocks=True, plot_times=False),
+                        use_container_width=True,
+                    )
+
+    with tabs[2]:
+        st.subheader("Chakra Nodes Timing Plot")
+        max_npu = int(st.session_state.df_matched["sys_id"].max())
+        npu = _load_and_select_npu(max_npu, "timing")
+        st.altair_chart(tv.plot_one_npu(st.session_state.df_matched, npu, plot_blocks=False, plot_times=True))
+
+    with tabs[3]:
+        st.subheader("Roofline Model")
+
+        max_npu = int(st.session_state.df_matched["sys_id"].max())
+        col0, col1 = st.columns(2)
+        with col0:
+            npu = _load_and_select_npu(max_npu, "roofline")
+        with col1:  
+            plot_mode = st.radio("Select Mode", ["2D", "Averaged over time - 3D", "Averaged over time - 2D", "On individual time steps"])
+
+        if plot_mode == "2D":
+            _show_2d_roofline(st.session_state.df_matched, npu)
+        elif plot_mode == "Averaged over time - 3D":
+            time_window = st.number_input(
+                    "Averaging Time Window (cycles)", value=10000, step=1000, key="time_window_3d"
+                )
+            _show_3d_roofline(st.session_state.df_matched, npu, time_window)
+        elif plot_mode == "Averaged over time - 2D":
+            time_window = st.number_input(
+                "Averaging Time Window (cycles)", value=10000, step=1000, key="time_window_2d"
+            )
+            _show_2d_roofline_over_time(st.session_state.df_matched, npu, time_window)
+        else:
+            _show_2d_roofline_timestep(st.session_state.df_matched, npu)

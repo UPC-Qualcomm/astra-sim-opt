@@ -7,7 +7,7 @@ import helper.bulk_analysis_helper as helper
 
 
 def render(df):
-    st.subheader("Dimension reduction")
+    #**#st.subheader("Dimension reduction")
 
     col0, col1, col2 = st.columns(3)
     with col0:
@@ -61,44 +61,44 @@ def render(df):
 
     st.markdown("---")
 
-    st.subheader("Cluster the data points based on dimension reduction method.")
+    #**#st.subheader("Cluster the data points based on dimension reduction method.")
 
-    cluster_algo = ["KMeans", "DBSCAN"]
-    clustering_method = st.selectbox("Select a clustering method method", cluster_algo)
+    #**#cluster_algo = ["KMeans", "DBSCAN"]
+    #**#clustering_method = st.selectbox("Select a clustering method method", cluster_algo)
 
-    if clustering_method == "KMeans":
-        labels_1d, labels_2d = helper.cluster_kmeans(df_map, n_clusters=15)
-    elif clustering_method == "DBSCAN":
-        labels_1d, labels_2d = helper.cluster_dbscan(
-            df_map, eps=0.35, min_samples=6, metric="euclidean"
-        )
-    else:
-        labels_1d, labels_2d = [], []
+    #**#if clustering_method == "KMeans":
+    #**#    labels_1d, labels_2d = helper.cluster_kmeans(df_map, n_clusters=15)
+    #**#elif clustering_method == "DBSCAN":
+    #**#    labels_1d, labels_2d = helper.cluster_dbscan(
+    #**#        df_map, eps=0.35, min_samples=6, metric="euclidean"
+    #**#    )
+    #**#else:
+    #**#    labels_1d, labels_2d = [], []
 
-    df_map["cluster_2d"] = labels_2d
-    df_map["cluster_1d"] = labels_1d
+    #**#df_map["cluster_2d"] = labels_2d
+    #**#df_map["cluster_1d"] = labels_1d
 
-    col0, col1 = st.columns(2)
-    with col0:
-        st.pyplot(helper.get_1d_clustering_fig(df_map, labels_1d))
+    #**#col0, col1 = st.columns(2)
+    #**#with col0:
+    #**#    st.pyplot(helper.get_1d_clustering_fig(df_map, labels_1d))
 
-    with col1:
-        st.plotly_chart(helper.get_2d_clustering_fig(df_map), use_container_width=True)
+    #**#with col1:
+    #**#    st.plotly_chart(helper.get_2d_clustering_fig(df_map), use_container_width=True)
 
-    st.write("## Average Total per Cluster - sorted - best are (lowest_average)")
-    best_1d_clusters = helper.get_best_1d_clusters(df_map)
-    best_2d_clusters = helper.get_best_2d_clusters(df_map)
+    #**#st.write("## Average Total per Cluster - sorted - best are (lowest_average)")
+    #**#best_1d_clusters = helper.get_best_1d_clusters(df_map)
+    #**#best_2d_clusters = helper.get_best_2d_clusters(df_map)
 
-    col0, col1 = st.columns(2)
-    with col0:
-        st.write(best_1d_clusters)
+    #**#col0, col1 = st.columns(2)
+    #**#with col0:
+    #**#    st.write(best_1d_clusters)
 
-    with col1:
-        st.write(best_2d_clusters)
+    #**#with col1:
+    #**#    st.write(best_2d_clusters)
 
-    st.markdown("---")
+    #**#st.markdown("---")
 
-    st.title("Fit the data to an ML model")
+    st.subheader("Fit The Data to an ML model")
 
     col0, col1 = st.columns(2)
     with col0:
@@ -114,8 +114,8 @@ def render(df):
     else:
         df_ml = df
 
-    st.write("Data Preview:")
-    st.dataframe(df_ml)
+    #**#st.write("Data Preview:")
+    #**#st.dataframe(df_ml)
 
     features = ["dp", "tp", "sp", "pp"]
     target = "total"
@@ -139,17 +139,17 @@ def render(df):
 
     merged_df = pd.concat([metric_rf, metric_xgb, metric_mlp], ignore_index=True)
 
-    st.subheader("📈 ML Model Performance")
+    st.subheader("ML Model Performance")
     st.dataframe(merged_df)
 
-    st.subheader("🔍 Feature Importance (RF & XGB)")
+    st.subheader("Feature Importance (RF & XGB)")
     col0, col1 = st.columns(2)
     with col0:
         st.write("Random Forest:")
         fig, perm_rf_df = helper.plot_feature_importance(
             best_rf, features, "Feature Importances (Random Forest)"
         )
-        st.dataframe(perm_rf_df)
+        #**#st.dataframe(perm_rf_df)
         st.pyplot(fig)
 
     with col1:
@@ -157,30 +157,30 @@ def render(df):
         fig, perm_xgb_df = helper.plot_feature_importance(
             best_xgb, features, "Feature Importances (XGBoost)"
         )
-        st.dataframe(perm_xgb_df)
+        #**#st.dataframe(perm_xgb_df)
         st.pyplot(fig)
 
-    st.subheader("🔀 Permutation Feature Importance")
-    col0, col1 = st.columns(2)
-    with col0:
-        st.write("Random Forest:")
-        fig, perm_rf_df = helper.plot_permutation_importance(
-            best_rf, X_test, y_test, features, "Permutation Importance (Random Forest)"
-        )
-        st.dataframe(perm_rf_df)
-        st.pyplot(fig)
+    #**#st.subheader("🔀 Permutation Feature Importance")
+    #**#col0, col1 = st.columns(2)
+    #**#with col0:
+        #**#st.write("Random Forest:")
+        #**#fig, perm_rf_df = helper.plot_permutation_importance(
+        #**#    best_rf, X_test, y_test, features, "Permutation Importance (Random Forest)"
+        #**#)
+        #**#st.dataframe(perm_rf_df)
+        #**#st.pyplot(fig)
 
-    with col1:
-        st.write("XGBoost:")
-        fig, perm_xgb_df = helper.plot_permutation_importance(
-            best_xgb, X_test, y_test, features, "Permutation Importance (XGBoost)"
-        )
-        st.dataframe(perm_xgb_df)
-        st.pyplot(fig)
+    #**#with col1:
+        #**#st.write("XGBoost:")
+        #**#fig, perm_xgb_df = helper.plot_permutation_importance(
+        #**#    best_xgb, X_test, y_test, features, "Permutation Importance (XGBoost)"
+        #**#)
+        #**#st.dataframe(perm_xgb_df)
+        #**#st.pyplot(fig)
 
     possible_degree_val = df["dp"].unique()
 
-    st.subheader("📊 Partial Dependence Plots")
+    st.subheader("Partial Dependence Plots")
     col0, col1 = st.columns(2)
     with col0:
         st.write("Random Forest:")

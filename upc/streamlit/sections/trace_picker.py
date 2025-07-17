@@ -19,40 +19,7 @@ def trace_picker():
     selected_model, selected_config = _model_and_config_selection(BASE_MODELS_DIR)
 
     if selected_model and selected_config:
-        _parallelism_startegy_form(selected_model, selected_config, BASE_MODELS_DIR)
-
-        if "csv_trace_file" in st.session_state and os.path.isfile(
-            st.session_state["csv_trace_file"]
-        ):
-            csv_trace_file = st.session_state["csv_trace_file"]
-            trace_file_name = st.session_state["trace_file_name"]
-            res_file = st.session_state["res_file"]
-            log_file = st.session_state["log_file"]
-            res_path = st.session_state["res_path"]
-
-            _detect_file_change(csv_trace_file)
-
-            st.success(f"✅ Found trace file: `{trace_file_name}`")
-
-            set_session_peak_perf_bw(selected_config)
-
-            dp, tp, sp, pp, sharding_val, _ = Path(csv_trace_file).stem.split("_")
-
-            st.session_state.show_npu_plots = True
-            return {
-                "sim_dir": os.path.join(
-                    BASE_MODELS_DIR, selected_model, selected_config
-                ),
-                "log": log_file,
-                "res_log": res_file,
-                "dp": dp,
-                "tp": tp,
-                "sp": sp,
-                "pp": pp,
-                "sharding_val": sharding_val,
-            }
-        else:
-            st.warning("Please submit the configuration to proceed.")
+        return set_sim_input(selected_model, selected_config)
     else:
         st.error(
             f"❌ The combination you entered does not correspond to an existing trace file: `{trace_file_name}`"
@@ -86,38 +53,49 @@ def _get_model_names(base_model_dir):
         if os.path.isdir(os.path.join(base_model_dir, d))
     ]
 
+def model_selector(base_model_dir):
+    model_names = _get_model_names(base_model_dir)
+    return st.selectbox("Select a Model", model_names)
+
+def config_selector(base_model_dir, selected_model):
+    model_dir = os.path.join(base_model_dir, selected_model)
+    config_names = _get_config_names(model_dir)
+    return st.selectbox("Select a Configuration", config_names)
 
 def _model_and_config_selection(base_model_dir):
     col_model, col_config = st.columns([1, 1])
     with col_model:
-        model_names = _get_model_names(base_model_dir)
-        selected_model = st.selectbox("Select a Model", model_names)
+        selected_model = model_selector(base_model_dir)
 
     with col_config:
         selected_config = None
         if selected_model:
-            model_dir = os.path.join(base_model_dir, selected_model)
-            config_names = _get_config_names(model_dir)
-            selected_config = st.selectbox("Select a Configuration", config_names)
+            selected_config = config_selector(base_model_dir, selected_model)
 
     return selected_model, selected_config
 
 
 def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        dp = st.text_input("Data Parallelism (DP)", "1")
-    with col2:
-        tp = st.text_input("Tensor Parallelism (TP)", "8")
-    with col3:
-        sp = st.text_input("Sequance Parallelism (SP)", "2")
-    with col4:
-        pp = st.text_input("Pipeline Parallelism (PP)", "4")
-    with col5:
-        sharding = st.checkbox("Sharding", value=False)
+    st.write("Select the parallelsim degrees:")
+    power2_options = [2**i for i in range(0, 11)] 
 
-    sharding_val = 0
-    if st.button("Submit"):
+    with st.form("parallelism_form"):
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            dp = st.selectbox("Data Parallelism (DP)", power2_options, index=0)
+        with col2:
+            tp = st.selectbox("Tensor Parallelism (TP)", power2_options, index=3)  
+        with col3:
+            sp = st.selectbox("Sequence Parallelism (SP)", power2_options, index=1)
+        with col4:
+            pp = st.selectbox("Pipeline Parallelism (PP)", power2_options, index=2)
+        with col5:
+            sharding = st.checkbox("Sharding", value=False)
+
+        submitted = st.form_submit_button("Submit")
+
+    if submitted:
+        # Clear session state (if needed)
         for key in st.session_state.keys():
             del st.session_state[key]
 
@@ -132,7 +110,7 @@ def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
         )
         res_file = os.path.join(res_path, f"{file_base}_res.csv")
         log_file = os.path.join(base_dir, f"{file_base}.log")
-        
+
         _set_session_df(base_dir, file_base, csv_trace_file)
 
         st.session_state.update(
@@ -220,7 +198,6 @@ def get_all_parallelism_strategies_data(model, config, option):
 
     return pd.DataFrame(records)
 
-@st.cache_data
 def get_files_list(base_dir, end_with_str):
     files = os.listdir(base_dir)
     filtered = list()
@@ -448,3 +425,42 @@ def plot_with_total_color_total(df, degree):
     ax.tick_params(axis='both', labelsize=18)
     ax.set_title(f'Total Cycles vs {degree.upper()} Degree', fontsize=18)
     return fig
+
+
+def set_sim_input(selected_model, selected_config):
+    base_dir = _get_output_dir()
+    _parallelism_startegy_form(selected_model, selected_config, base_dir)
+
+    if "csv_trace_file" in st.session_state and os.path.isfile(
+        st.session_state["csv_trace_file"]
+    ):
+        csv_trace_file = st.session_state["csv_trace_file"]
+        trace_file_name = st.session_state["trace_file_name"]
+        res_file = st.session_state["res_file"]
+        log_file = st.session_state["log_file"]
+        res_path = st.session_state["res_path"]
+
+        _detect_file_change(csv_trace_file)
+
+        st.success(f"✅ Found trace file: `{trace_file_name}`")
+
+        set_session_peak_perf_bw(selected_config)
+
+        dp, tp, sp, pp, sharding_val, _ = Path(csv_trace_file).stem.split("_")
+
+        st.session_state.show_npu_plots = True
+
+        return {
+            "sim_dir": os.path.join(
+                base_dir, selected_model, selected_config
+            ),
+            "log": log_file,
+            "res_log": res_file,
+            "dp": dp,
+            "tp": tp,
+            "sp": sp,
+            "pp": pp,
+            "sharding_val": sharding_val,
+        }
+    else:
+        st.warning("Please submit the configuration to proceed.")
