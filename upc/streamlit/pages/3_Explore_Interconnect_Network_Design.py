@@ -21,6 +21,23 @@ st.pyplot(fig)
 st.markdown("---")
 
 ###selected_config = picker.config_selector(base_dir, selected_model)
+st.markdown("""
+    <style>
+    .stTabs [data-baseweb="tab"] {
+        background-color: #e0e7ff !important;  /* Light blue */
+        color: #222 !important;
+        font-weight: bold;
+        font-size: 1.2em;
+        border-radius: 8px 8px 0 0;
+        margin-right: 4px;
+        padding: 10px 24px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #6366f1 !important; /* Indigo */
+        color: #fff !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 tabs = st.tabs(
     ["Explore Various Interconnect Network Bandwidths", "Detailed Trace Visualization"]

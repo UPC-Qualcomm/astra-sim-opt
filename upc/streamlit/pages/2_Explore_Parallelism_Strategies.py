@@ -3,6 +3,7 @@ import sections.trace_viewer as tv
 import sections.trace_picker as picker
 import helper.bulk_analysis_helper as helper
 from tabs.bulk_analysis_tab_dim_red_clus_ml import render as render_tab1
+from tabs.system_throughput import render_system_throughput as render_tab2
 
 st.set_page_config(layout="wide")
 
@@ -169,4 +170,4 @@ with tabs[1]:
         st.error("Results File is Not Available.")
 
 with tabs[2]:
-    st.warning("Under Deveopment.")
+    render_tab2(df)
