@@ -89,7 +89,7 @@ def _workload_form(selected_model_name):
             sharding = st.checkbox("Sharding (FSDP)", value=False)
 
         submitted = st.form_submit_button("🚀 Run Model")
-
+        params_list[4] = [params_list[4]]   
     return (params_list, dp, tp, sp, pp, sharding, submitted)
 
 

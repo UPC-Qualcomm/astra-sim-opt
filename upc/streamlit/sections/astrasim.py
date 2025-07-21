@@ -78,14 +78,22 @@ def _compute_paths(params, config_dir, sim_dir):
     as_bin = (
         "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware"
     )
+    prefix = f"{params['dp']}_{params['tp']}_{params['sp']}_{params['pp']}_{params['sharding_val']}"
+    temp_path = Path(params["temp_dir"])
+    base_file_name = prefix
+    for f in temp_path.iterdir():
+        if f.is_file() and f.name.startswith(prefix):
+            base_file_name = f.name.rsplit(".", 2)[0]  
+            break
     workload = os.path.join(
         params["temp_dir"],
-        f"{params['dp']}_{params['tp']}_{params['sp']}_{params['pp']}_{params['sharding_val']}",
+        base_file_name,
     )
     log = os.path.join(
         sim_dir,
-        f"{params['dp']}_{params['tp']}_{params['sp']}_{params['pp']}_{params['sharding_val']}",
+        base_file_name,
     )
+    # Find base file name in parent of temp_dir
     trace_file_name = f"{log}_trace.csv"
     timed_trace_file_name = f"{log}_trace_matched_timing.csv"
     memory = os.path.join(config_dir, "RemoteMemory.json")
@@ -99,7 +107,8 @@ def _compute_paths(params, config_dir, sim_dir):
         "network_log": network_log,
         "res_log": res_log,
         "trace_file": trace_file_name,
-        "timed_trace": timed_trace_file_name
+        "timed_trace": timed_trace_file_name,
+        "base_file_name": base_file_name
     }
 
 

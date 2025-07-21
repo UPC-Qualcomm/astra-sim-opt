@@ -76,35 +76,83 @@ def _model_and_config_selection(base_model_dir):
 
 
 def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
-    st.write("Select the parallelsim degrees:")
-    power2_options = [2**i for i in range(0, 11)] 
+    st.write("Select the parallelism strategy:")
 
-    with st.form("parallelism_form"):
-        col1, col2, col3, col4, col5 = st.columns(5)
-        with col1:
-            dp = st.selectbox("Data Parallelism (DP)", power2_options, index=0)
-        with col2:
-            tp = st.selectbox("Tensor Parallelism (TP)", power2_options, index=3)  
-        with col3:
-            sp = st.selectbox("Sequence Parallelism (SP)", power2_options, index=1)
-        with col4:
-            pp = st.selectbox("Pipeline Parallelism (PP)", power2_options, index=2)
-        with col5:
-            sharding = st.checkbox("Sharding", value=False)
+    # Directory containing trace files
+    base_dir = os.path.join(base_model_dir, selected_model, selected_config)
+    # List all files ending with _trace_matched_timing.csv
+    trace_files = [
+        f for f in os.listdir(base_dir)
+        if f.endswith("_trace_matched_timing.csv")
+    ]
 
-        submitted = st.form_submit_button("Submit")
+    # Extract strategy part before .seq (e.g., "4_1_2_8_0")
+    strategies = []
+    strategy_map = {}
+    seq_batch_map = {}
+    for f in trace_files:
+        strategy = f.split('.seq')[0]
+        if strategy not in strategies:
+            strategies.append(strategy)
+            strategy_map[strategy] = []
+        strategy_map[strategy].append(f)
+        # Extract seq and batch values
+        parts = f.split('.')
+        seq_val = None
+        batch_val = None
+        for part in parts:
+            if part.startswith('seq_'):
+                seq_val = part.split('_')[1]
+            if part.startswith('batch_'):
+                batch_val = part.split('_')[1]
+        if strategy not in seq_batch_map:
+            seq_batch_map[strategy] = []
+        seq_batch_map[strategy].append((seq_val, batch_val, f))
 
-    if submitted:
+    # Format strategies for display
+    display_strategies = []
+    strategy_display_map = {}
+    for strat in strategies:
+        dp, tp, sp, pp, fsdp = strat.split("_")
+        display = f"DP:{dp}, TP:{tp}, SP:{sp}, PP:{pp}, FSDP:{fsdp}"
+        display_strategies.append(display)
+        strategy_display_map[display] = strat
+
+    if not display_strategies:
+        st.warning("No trace files found for this model/config.")
+        return
+
+    selected_display_strategy = st.selectbox("Parallelism Strategy", display_strategies)
+    selected_strategy = strategy_display_map[selected_display_strategy]
+
+    # Get all seq/batch for selected strategy
+    seq_batch_list = seq_batch_map[selected_strategy]
+
+    # If only one file, just show it
+    if len(seq_batch_list) == 1:
+        seq_val, batch_val, selected_file = seq_batch_list[0]
+        st.write(f"Only one trace file found: seq={seq_val}, batch={batch_val}")
+    else:
+        # Show all possible seq/batch values
+        options = [
+            f"seq={seq}, batch={batch}" for seq, batch, _ in seq_batch_list
+        ]
+        selected_option = st.selectbox("Select seq/batch", options)
+        idx = options.index(selected_option)
+        selected_file = seq_batch_list[idx][2]
+
+    submitted = st.button("Submit")
+
+    if submitted and selected_file:
         # Clear session state (if needed)
-        for key in st.session_state.keys():
+        for key in list(st.session_state.keys()):
             del st.session_state[key]
 
-        sharding_val = "1" if sharding else "0"
-        file_base = f"{dp}_{tp}_{sp}_{pp}_{sharding_val}"
-        trace_file_name = f"{file_base}_trace.csv"
-
-        base_dir = os.path.join(base_model_dir, selected_model, selected_config)
+        # Parse parallelism degrees from strategy
+        dp, tp, sp, pp, sharding_val = selected_strategy.split("_")
+        trace_file_name = selected_file
         csv_trace_file = os.path.join(base_dir, trace_file_name)
+        file_base = selected_file.split("_trace_matched_timing")[0]
         res_path = os.path.abspath(
             os.path.join(os.getcwd(), f"../results/{selected_model}/{selected_config}/")
         )
@@ -139,7 +187,7 @@ def _set_session_df(base_dir, file_base, csv_trace_file):
     timed_csv = os.path.join(base_dir, timed_file_name)
     if "df_matched" not in st.session_state:
         #TODO
-        st.session_state.df_matched = tv.get_timings_df(csv_trace_file, timed_csv) #pd.read_csv(timed_csv)  
+        st.session_state.df_matched = pd.read_csv(csv_trace_file)#tv.get_timings_df(csv_trace_file, timed_csv) #pd.read_csv(timed_csv)  
 
 def set_session_peak_perf_bw(selected_config):
     CONFIGS_DIR = _get_configs_dir()
@@ -178,7 +226,7 @@ def get_all_parallelism_strategies_data(model, config, option):
         
         base_name = os.path.basename(file)
         clean_name = base_name.split('_trace')[0]
-        dp, tp, sp, pp, fsdp = clean_name.split('_')
+        dp, tp, sp, pp, fsdp = clean_name.split('.')[0].split('_')
         total = mem + comp + comm
         records.append({
             'file_name': clean_name,
@@ -363,7 +411,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
 
         chunk = df_sorted.iloc[start:end]
 
-        file_names = chunk['file_name']
+        file_names = chunk['file_name'].str.split('.').str[0]  # Use only the base name without suffix
         mem_values = chunk['mem'] #/ chunk['total'] * 100
         comp_values = chunk['comp']# / chunk['total'] * 100
         comm_values = chunk['comm'] #/ chunk['total'] * 100
@@ -446,7 +494,7 @@ def set_sim_input(selected_model, selected_config):
 
         set_session_peak_perf_bw(selected_config)
 
-        dp, tp, sp, pp, sharding_val, _ = Path(csv_trace_file).stem.split("_")
+        dp, tp, sp, pp, sharding_val = Path(csv_trace_file).stem.split('.')[0].split("_")
 
         st.session_state.show_npu_plots = True
 

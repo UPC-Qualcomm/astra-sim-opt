@@ -158,9 +158,15 @@ def list_workloads(root):
 
 
 def run_astrasim(workload_path, system, network, memory, output_dir, network_log, suffix=None):
-    astrasim_root = os.environ.get("ASTRA_SIM")
-    if astrasim_root is None:
-        raise RuntimeError("ASTRA_SIM is not set.")
+    #astrasim_root = os.environ.get("ASTRA_SIM")
+    #if astrasim_root is None:
+    #    raise RuntimeError("ASTRA_SIM is not set.")
+
+    astrasim_root = (
+        "/home/tomas/repositories/upc/astra-sim"
+        if os.getlogin() == "tomas"
+        else "/media/mohammad/extension/experiments/astra-sim"
+    )
     #astrasim_root = os.getcwd()+'/..'
     if astrasim_root is None:
         raise Exception(

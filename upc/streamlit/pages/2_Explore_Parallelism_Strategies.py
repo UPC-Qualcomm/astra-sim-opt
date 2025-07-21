@@ -41,8 +41,26 @@ for fig in figs:
     st.pyplot(fig)
 
 st.markdown("---")
+# Custom CSS for colored tab backgrounds
+st.markdown("""
+    <style>
+    .stTabs [data-baseweb="tab"] {
+        background-color: #e0e7ff !important;  /* Light blue */
+        color: #222 !important;
+        font-weight: bold;
+        font-size: 1.2em;
+        border-radius: 8px 8px 0 0;
+        margin-right: 4px;
+        padding: 10px 24px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #6366f1 !important; /* Indigo */
+        color: #fff !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-tabs = st.tabs(["Visualization & ML Analysis", "Detailed Trace Visualization", "System Throughput"])
+tabs = st.tabs([f"**{name}**" for name in ["Visualization & ML Analysis", "Detailed Trace Visualization", "System Throughput"]])
 
 with tabs[0]:
     st.subheader(
@@ -141,12 +159,8 @@ with tabs[0]:
 
     
 with tabs[1]:
-    try:
-        sim_outputs = picker.set_sim_input(selected_model, selected_config)
-
-    except:
-        st.error("File Not Found.")
-
+    
+    sim_outputs = picker.set_sim_input(selected_model, selected_config)
     try:
         st.markdown("---")
         if "df_matched" in st.session_state:
