@@ -1,17 +1,7 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-import sections.trace_picker as picker
-import helper.bw_run_sim as bw_run
-    
-# Get the output dir of a model and config
-# Get all the output files
-# Show Get the number of tokens from the file name 
 
 def render_system_throughput(df):
-    #results_dir = bw_run.get_results_dir(selected_model, selected_config)
-    #csv_files = picker.get_files_list(results_dir, "_res.csv")
-    #parallelism_strategies = parallelism_strategies_selector(df["filename"].unique())
-    #df_filtered = get_filtered_data(df, parallelism_strategies)
     df_sys = df.copy()
     calculate_num_tokens(df_sys)
     compute_sys_throughput(df_sys)

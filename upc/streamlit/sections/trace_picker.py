@@ -42,7 +42,6 @@ def _get_config_names(model_dir):
     return [
         d for d in os.listdir(model_dir)
         if os.path.isdir(os.path.join(model_dir, d))
-        and any(os.path.isfile(os.path.join(model_dir, d, f)) for f in os.listdir(os.path.join(model_dir, d)))
     ]
 
 

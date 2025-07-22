@@ -204,7 +204,8 @@ if __name__ == "__main__":
         # Filter the slowest NPU data in all the experiments the belong to a topology.
         print(args.output_filename)
         logs = list_logs(args.output_filename, "_res.csv")
-        extract_slowest_npu(logs, args.output_filename+".csv")
+        out_filename = args.output_filename + ".csv" if len(args.output_filename.split("/")) == 4 else args.output_filename + args.output_filename.split("/")[3] + ".csv"
+        extract_slowest_npu(logs, out_filename)
     else:
         raise ValueError(f"{args.sim_logfile} is neither a file nor a directory.")
 
