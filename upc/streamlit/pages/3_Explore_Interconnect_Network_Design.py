@@ -13,9 +13,11 @@ st.subheader("Exploration: Interconnect Network Topology")
 base_dir = picker._get_output_dir()
 selected_model = picker.model_selector(base_dir)
 
-fig, selected_topologies, parallelsim_strategies_list = (
+fig, selected_topologies, df = (
     report.analysis_across_topologies(selected_model)
 )
+
+
 st.pyplot(fig)
 
 st.markdown("---")
@@ -47,17 +49,24 @@ with tabs[0]:
     all_configs = bw_form.get_configuration_options()
 
     ##parallelism_strategies = df_ranged["file_name"].tolist()
-    parallelism_strategies = st.multiselect(
-        "Select Parallelsim Strategies (dp_tp_sp_pp_fsdp)", parallelsim_strategies_list
+    parallelism_options = df["dp_mp_sp_pp_sharded"].tolist()
+    selected_parallelism = st.multiselect(
+        "Select Parallelism Strategies (dp_mp_sp_pp_sharded)", parallelism_options
     )
-    if not parallelism_strategies:
+    if len(selected_parallelism) == 0:
         st.warning(
             "Please select the parallelism strategies you want to include in the exploration."
         )
     else:
-        sim_mode = st.radio(
-            "Select Exploration Mode", ["Saved Data", "Generate New Data"]
-        )
+        parallelism_strategies = df[df["dp_mp_sp_pp_sharded"].isin(selected_parallelism)]["file_name"].unique()
+        col0, col1 = st.columns(2)
+        with col0:
+            sim_mode = st.radio(
+                "Select Exploration Mode", ["Saved Data", "Generate New Data"]
+            )
+        with col1:
+            plot_type = st.radio("Select Plot Type", ["2D", "3D"])
+            is_3d = plot_type == "3D"
 
         if sim_mode == "Saved Data":
             st.subheader("Exploration Using Saved Data")
@@ -67,12 +76,13 @@ with tabs[0]:
             st.subheader(
                 "Study the effect of the bandwidth over parallelism strategies"
             )
+            
             for config in all_configs:
                 if config in selected_topologies:
                     result_dir = bw_run.get_results_dir(selected_model, config)
                     if result_dir.exists() and result_dir.is_dir():
                         bw_show.show_inter_intra_sim_res(
-                            parallelism_strategies, result_dir, config
+                            parallelism_strategies, result_dir, config, is_3d
                         )
                         all_res_dirs_configs.append((result_dir, config))
 
@@ -84,7 +94,7 @@ with tabs[0]:
                 )
                 for parallelism_strategy in parallelism_strategies:
                     bw_show.show_res_across_configs(
-                        parallelism_strategy, all_res_dirs_configs
+                        parallelism_strategy, all_res_dirs_configs, is_3d
                     )
 
         else:
@@ -107,7 +117,7 @@ with tabs[0]:
                 result_dir = bw_run.get_results_dir(selected_model, config)
                 if result_dir.exists() and result_dir.is_dir():
                     bw_show.show_inter_intra_sim_res(
-                        parallelism_strategies, result_dir, config
+                        parallelism_strategies, result_dir, config, is_3d
                     )
                     all_res_dirs_configs.append((result_dir, config))
 
@@ -117,7 +127,7 @@ with tabs[0]:
             )
             for parallelism_strategy in parallelism_strategies:
                 bw_show.show_res_across_configs(
-                    parallelism_strategy, all_res_dirs_configs
+                    parallelism_strategy, all_res_dirs_configs, is_3d
                 )
 with tabs[1]:
     try:

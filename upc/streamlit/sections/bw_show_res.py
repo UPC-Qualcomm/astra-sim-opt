@@ -11,11 +11,11 @@ import streamlit as st
 import numpy as np
 
 
-def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config):
+def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config, is_3d=False):
     ###st.title("Execution vs Communication Cycles Analysis")
 
     if not result_dir.exists() or not any(result_dir.iterdir()):
-        st.warning("Results directory is empty. Please run simulations first.")
+        st.warning(f"Results directory {result_dir.parts[-2]} is empty. Please run simulations first.")
     else:
         all_data = []
 
@@ -34,13 +34,20 @@ def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config
         if all_data:
             combined_df = get_combined_df(all_data, group_by="strategy")
             ###st.subheader(f"Total Cycles Comparison Across Bandwidth Settings - Network config {selected_config}")
-            
-            summary_fig = get_total_cycles_plot(
-                combined_df,
-                title=f"Total Cycles vs Bandwidth for Different Parallelism Strategies - Network Config: {selected_config}, #NPU=DP*TP*SP*PP",
-                group_by="strategy",
-                legend_title='DP, TP, SP, PP, FSDP', 
-            )
+            if is_3d:
+                summary_fig = get_total_cycles_plot_3d(
+                    combined_df,
+                    title=f"Total Cycles vs Bandwidth for Different Parallelism Strategies - Network Config: {selected_config}, #NPU=DP*TP*SP*PP",
+                    group_by="strategy",
+                    legend_title='DP, TP, SP, PP, FSDP',
+                )
+            else:
+                summary_fig = get_total_cycles_plot(
+                    combined_df,
+                    title=f"Total Cycles vs Bandwidth for Different Parallelism Strategies - Network Config: {selected_config}, #NPU=DP*TP*SP*PP",
+                    group_by="strategy",
+                    legend_title='DP, TP, SP, PP, FSDP',
+                )
             st.plotly_chart(
                 summary_fig, use_container_width=True, key=f"plot_{selected_config}"
             )
@@ -108,7 +115,7 @@ def get_filtered_df(result_path, strategy):
     files = glob.glob(str(result_path / f"{strategy}_*.csv"))
     records = []
     if not files:
-        st.write("No files found for strategy: " ,strategy)
+        st.warning(f"No files found for strategy: {strategy.split('.')[0]}")
         return pd.DataFrame()
     for file in files:
         df = pd.read_csv(file)
@@ -136,7 +143,7 @@ def get_filtered_df(result_path, strategy):
             )
     df_filtered = pd.DataFrame(records)
     df_filtered["total_cycles"] = df_filtered["exec_cycles"]
-    df_filtered["strategy"] = strategy
+    df_filtered["strategy"] = strategy.split(".")[0] 
     return df_filtered
 
 
@@ -216,6 +223,66 @@ def get_total_cycles_plot(
 
     return fig
 
+def get_total_cycles_plot_3d(
+    df,
+    title,
+    group_by="strategy",
+    legend_title='',
+    z_label="Total Cycles",
+    x_label="Intra Bandwidth (GB/s)",
+    y_label="Inter Bandwidth (GB/s)",
+):
+    all_data = df.copy()
+
+    # Ensure intra_bw and inter_bw are numeric
+    all_data["intra_bw"] = pd.to_numeric(all_data["intra_bw"], errors="coerce")
+    all_data["inter_bw"] = pd.to_numeric(all_data["inter_bw"], errors="coerce")
+
+    unique_groups = all_data[group_by].unique()
+    color_sequence = pc.qualitative.Set2
+    color_map = {
+        group: color_sequence[i % len(color_sequence)]
+        for i, group in enumerate(unique_groups)
+    }
+
+    traces = []
+    for group in unique_groups:
+        group_df = all_data[all_data[group_by] == group]
+        traces.append(
+            go.Scatter3d(
+                x=group_df["intra_bw"],
+                y=group_df["inter_bw"],
+                z=group_df["total_cycles"],
+                mode="markers",
+                marker=dict(size=7, color=color_map[group]),
+                line=dict(color=color_map[group], width=4),
+                name=str(group),
+                text=[
+                    f"{group_by}: {group}<br>Intra BW: {x}<br>Inter BW: {y}<br>Total Cycles: {z:.0f}"
+                    for x, y, z in zip(group_df["intra_bw"], group_df["inter_bw"], group_df["total_cycles"])
+                ],
+                hoverinfo="text",
+            )
+        )
+
+    layout = go.Layout(
+        scene=dict(
+            xaxis=dict(title=x_label, backgroundcolor='rgba(240,240,240,0.8)', gridcolor='gray', showbackground=True),
+            yaxis=dict(title=y_label, backgroundcolor='rgba(240,240,240,0.8)', gridcolor='gray', showbackground=True),
+            zaxis=dict(title=z_label, backgroundcolor='rgba(240,240,240,0.8)', gridcolor='gray', showbackground=True),
+            camera=dict(eye=dict(x=-2.0, y=2.0, z=1.2)),
+        ),
+        title=title,
+        margin=dict(l=10, r=10, b=10, t=50),
+        height=700,
+        legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.7)', bordercolor='black', borderwidth=1),
+        showlegend=True,
+    )
+
+    fig = go.Figure(data=traces, layout=layout)
+    fig.update_layout(template='plotly_white')
+    return fig
+
 
 def complete_missing_points(all_data, group_by="strategy"):
     all_prefixes = all_data[group_by].unique()
@@ -235,18 +302,26 @@ def complete_missing_points(all_data, group_by="strategy"):
     return all_data
 
 
-def show_res_across_configs(parallelism_strategy, res_dirs_configs):
+def show_res_across_configs(parallelism_strategy, res_dirs_configs, is_3d=False):
     all_data = combine_data_across_config(parallelism_strategy, res_dirs_configs)
     if all_data:
         combined_df = get_combined_df(all_data, group_by="config")
-        dp , tp, sp, pp, fsdp = parallelism_strategy.split('_')
+        dp , tp, sp, pp, fsdp = parallelism_strategy.split('.')[0].split('_')
         npu_count = int(dp) * int(tp) * int(sp) * int(pp)
-        fig = get_total_cycles_plot(
-            combined_df,
-            title=f"Total Cycles vs Bandwidth for Different Network Configs - Parallelism Strategy DP:{dp}, TP:{tp}, SP{sp}, PP:{pp}, FSDP:{fsdp} and #NPUs = {npu_count}",
-            group_by="config",
-            #legend_title='Topology', 
-        )
+        if is_3d:
+            fig = get_total_cycles_plot_3d(
+                combined_df,
+                title=f"Total Cycles vs Bandwidth for Different Network Configs - Parallelism Strategy DP:{dp}, TP:{tp}, SP{sp}, PP:{pp}, FSDP:{fsdp} and #NPUs = {npu_count}",
+                group_by="config",
+                #legend_title='Topology',
+            )
+        else:
+            fig = get_total_cycles_plot(
+                combined_df,
+                title=f"Total Cycles vs Bandwidth for Different Network Configs - Parallelism Strategy DP:{dp}, TP:{tp}, SP{sp}, PP:{pp}, FSDP:{fsdp} and #NPUs = {npu_count}",
+                group_by="config",
+                #legend_title='Topology', 
+            )
 
         st.plotly_chart(fig, use_container_width=True, key=f"plot_{parallelism_strategy}")
     else:

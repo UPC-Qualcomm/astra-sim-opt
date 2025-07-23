@@ -18,7 +18,7 @@ def load_and_prepare_file(file_path, selected_files):
         return None
 
     df = pd.read_csv(file_path)
-    df = df[["dp_mp_sp_pp_sharded", "exec_cycles", "comm_cycles", "exposed_comm_cycles", "comp_cycles", "exposed_comp_cycles"]]
+    df = df[["dp_mp_sp_pp_sharded", "exec_cycles", "comm_cycles", "exposed_comm_cycles", "comp_cycles", "exposed_comp_cycles", "seq", "batch"]]
 
     df["exec_cycles"] = df["exec_cycles"] / 1e9
     df["comm_cycles"] = df["comm_cycles"] / 1e9
@@ -26,6 +26,7 @@ def load_and_prepare_file(file_path, selected_files):
     df["comp_cycles"] = df["comp_cycles"] / 1e9
     df["exposed_comp_cycles"] = df["exposed_comp_cycles"] / 1e9
     df["topology"] = file_name
+    df["file_name"] = df["dp_mp_sp_pp_sharded"]+".seq_"+ df["seq"].astype(str) + ".batch_" + df["batch"].astype(str)
 
     return df
 
@@ -265,7 +266,7 @@ def analysis_across_topologies(selected_model):
 
     # Merge DataFrames
     merged_df = merge_dataframes(df_list)
-
+    
     # Compute Summary Statistics
     stats_df = compute_summary_stats(merged_df, selected_files)
     fig = get_summary_plot(stats_df)
@@ -300,6 +301,4 @@ def analysis_across_topologies(selected_model):
         merged_df, n_start, n_end, configs_sorted, selected_files
     )
 
-    parallelsim_strategies_list = merged_df["dp_mp_sp_pp_sharded"].unique()
-
-    return fig, selected_files, parallelsim_strategies_list
+    return fig, selected_files, merged_df.sort_values('exec_cycles')
