@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-python -m venv astraenv
+python3 -m venv astraenv
 
 source astraenv/bin/activate
 
@@ -29,3 +29,5 @@ echo "export ASTRA_SIM_BIN=${ASTRA_SIM_BIN}" >> "${HOME}/.bashrc"
 cd ./extern/graph_frontend/chakra/
 
 pip3 install .
+
+pip3 install streamlit==1.45.0
