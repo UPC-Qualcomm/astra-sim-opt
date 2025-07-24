@@ -281,9 +281,10 @@ def analysis_across_topologies(selected_model):
     counts_df = count_best_topologies(min_df)
     st.subheader("Number of times each topology had the lowest simulation time")
     st.dataframe(counts_df)
-
+    
+    min_df = min_df[min_df["topology"] == counts_df["Topology"][0]]
     # Top-N Best Experiments with Slider
-    st.subheader("Top Experiments (Parallelism Strategies) with Lowest simulation time")
+    st.subheader(f"Top Experiments (Parallelism Strategies) with Lowest simulation time in the best topology - {counts_df['Topology'][0]}")
     n_range = st.slider(
         "Select range of experiments to display:",
         0, min_df["dp_mp_sp_pp_sharded"].nunique(), (0, 4), step=1
@@ -292,7 +293,7 @@ def analysis_across_topologies(selected_model):
     n_start, n_end = n_range
     top_configs = get_top_n_configs(min_df, n_start, n_end)
 
-    st.subheader(f"Top experiments from {n_start} to {n_end}")
+    #st.subheader(f"Top experiments from {n_start} to {n_end}")
     st.dataframe(top_configs)
 
     configs_sorted = merged_df[merged_df['topology'] == counts_df["Topology"][0]].sort_values('exec_cycles')['dp_mp_sp_pp_sharded'].unique().tolist()
@@ -301,4 +302,4 @@ def analysis_across_topologies(selected_model):
         merged_df, n_start, n_end, configs_sorted, selected_files
     )
 
-    return fig, selected_files, merged_df.sort_values('exec_cycles')
+    return fig, selected_files, merged_df[merged_df["topology"] == counts_df["Topology"][0]].sort_values('exec_cycles')

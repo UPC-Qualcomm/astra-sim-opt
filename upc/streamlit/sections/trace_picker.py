@@ -20,10 +20,10 @@ def trace_picker():
 
     if selected_model and selected_config:
         return set_sim_input(selected_model, selected_config)
-    else:
-        st.error(
-            f"❌ The combination you entered does not correspond to an existing trace file: `{trace_file_name}`"
-        )
+    #else:
+    #    st.error(
+    #        f"❌ The combination you entered does not correspond to an existing trace file: `{trace_file_name}`"
+    #    )
 
     return -1
 

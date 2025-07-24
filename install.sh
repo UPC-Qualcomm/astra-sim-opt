@@ -22,6 +22,7 @@ git submodule update --init --recursive
 ./build/astra_analytical/build.sh
 
 ASTRA_SIM_BIN=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware
+echo "export ASTRA_SIM_BIN=${ASTRA_SIM_BIN}" >> "${HOME}/.bashrc"
 
 ./build/astra_ns3/build.sh -c
 

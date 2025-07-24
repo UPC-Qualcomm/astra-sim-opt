@@ -55,6 +55,9 @@ def get_timings_df(csv_trace_file, output_file_name):
 
     extended_data.to_csv(output_file_name)
 
+    
+    os.remove(csv_trace_file)
+
 def build_compute_interval_tree(nodes):
     tree = IntervalTree()
     for row in nodes.itertuples(index=False):
@@ -162,22 +165,8 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
     #if astrasim_root is None:
     #    raise RuntimeError("ASTRA_SIM is not set.")
 
-    astrasim_root = (
-        "/home/tomas/repositories/upc/astra-sim"
-        if os.getlogin() == "tomas"
-        else "/media/mohammad/extension/experiments/astra-sim"
-    )
-    #astrasim_root = os.getcwd()+'/..'
-    if astrasim_root is None:
-        raise Exception(
-            f"please specify astrasim folder path at variable astrasim_root at "
-            f"{__file__}:run_astrasim()"
-        )
+    astrasim_bin = os.environ.get("ASTRA_SIM_BIN")
     file_dir = os.path.split(os.path.abspath(__file__))[0]
-    astrasim_bin = os.path.join(
-        astrasim_root,
-        "build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware",
-    )
 
     system = os.path.join(file_dir, system)
     network = os.path.join(file_dir, network)

@@ -48,10 +48,12 @@ tabs = st.tabs(
 with tabs[0]:
     all_configs = bw_form.get_configuration_options()
 
-    ##parallelism_strategies = df_ranged["file_name"].tolist()
-    parallelism_options = df["dp_mp_sp_pp_sharded"].tolist()
+    df_sorted = df.sort_values(by="exec_cycles", ascending=True).iloc[0:10]
+    parallelism_options = df_sorted["dp_mp_sp_pp_sharded"].tolist()
     selected_parallelism = st.multiselect(
-        "Select Parallelism Strategies (dp_mp_sp_pp_sharded)", parallelism_options
+        f"Select Parallelism Strategies (dp_mp_sp_pp_sharded) - Top {len(parallelism_options)} is available",
+        parallelism_options,
+        default=parallelism_options
     )
     if len(selected_parallelism) == 0:
         st.warning(
