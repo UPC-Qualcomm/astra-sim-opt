@@ -162,12 +162,10 @@ with tabs[0]:
 with tabs[1]:
     
     sim_outputs = picker.set_sim_input(selected_model, selected_config)
-    try:
-        st.markdown("---")
-        if "df_matched" in st.session_state:
-            tv.render_sim_ouput_section(sim_outputs)
-    except:
-        st.error("Results File is Not Available.")
+    
+    st.markdown("---")
+    if "df_matched" in st.session_state:
+        tv.render_sim_ouput_section(sim_outputs)
 
 with tabs[2]:
     render_tab2(df)

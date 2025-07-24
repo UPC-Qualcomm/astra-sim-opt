@@ -145,7 +145,7 @@ def plot_overlapped_blocks(df: pd.DataFrame, npu) -> alt.Chart:
 
     return chart.interactive()
 
-
+@st.cache_data
 def plot_one_npu(df, npu=0, plot_blocks=True, plot_times=False):
     df_0 = df.query(f"sys_id == {npu}")
     df_0_comp = pd.DataFrame.from_dict(

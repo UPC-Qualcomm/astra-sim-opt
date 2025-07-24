@@ -142,5 +142,3 @@ with tabs[1]:
     st.markdown("---")
     if "df_matched" in st.session_state:
         tv.render_sim_ouput_section(sim_outputs)
-    else:
-        st.error("Results File is Not Available.")

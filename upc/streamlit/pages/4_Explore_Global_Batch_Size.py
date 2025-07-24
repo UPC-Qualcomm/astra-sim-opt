@@ -6,22 +6,26 @@ import math
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
+@st.cache_data
 def load_batch_data(selected_model, selected_config, batch_size_dir="batch_study"):
     batch_res_file = f"../results/{selected_model}/{selected_config}/{batch_size_dir}/{selected_config}.csv"
     df = pd.read_csv(batch_res_file).sort_values(by="exec_cycles", ascending=True)
     return df
 
+@st.cache_data
 def get_unique_strategies_and_batches(df):
     strategies = df["dp_mp_sp_pp_sharded"].unique()
     batches = sorted(df['batch'].astype(int).unique())
     return strategies, batches
 
+@st.cache_data
 def filter_and_prepare_df(df, selected_strategies, selected_batch_sizes):
     df = df[df["dp_mp_sp_pp_sharded"].isin(selected_strategies) & df["batch"].isin(selected_batch_sizes)]
     df["overlap"] = df['exec_cycles'] - df['exposed_comm_cycles'] - df['exposed_comp_cycles']
     df["strategy"] = df["dp_mp_sp_pp_sharded"]
     return df
 
+@st.cache_data
 def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, selected_config):
     labels = ['Overlap', 'Exposed Comm', 'Exposed Comp']
     colors = ['blue', 'lightcoral', 'lightgreen']
@@ -70,6 +74,7 @@ def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, sel
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     st.pyplot(fig)
 
+@st.cache_data
 def plot_3d_simulation_time_breakdown(df, selected_batch_sizes, selected_model, selected_config):
     strategies = df['strategy'].unique()
     strategy_indices = {strategy: i for i, strategy in enumerate(strategies)}

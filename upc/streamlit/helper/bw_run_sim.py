@@ -33,10 +33,10 @@ def get_output_dir(selected_model, selected_config):
             + "/"
             + DIR_NAME
         )
-
+@st.cache_data
 def get_results_dir(selected_model, selected_config):
     return Path(__file__).parent / "../../results" / selected_model / selected_config / DIR_NAME
-
+@st.cache_data
 def get_network_dir(selected_model, selected_config):
     return (
             Path(__file__).parent / "../../network_log" / selected_model / selected_config / DIR_NAME

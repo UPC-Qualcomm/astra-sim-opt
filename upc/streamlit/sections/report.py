@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 # Custom Modules
 import sections.trace_picker as picker
 
-
+@st.cache_data
 def load_and_prepare_file(file_path, selected_files):
     """Load result CSV, convert cycles to seconds, and rename columns."""
     file_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -30,12 +30,12 @@ def load_and_prepare_file(file_path, selected_files):
 
     return df
 
-
+@st.cache_data
 def merge_dataframes(df_list):
     """Merge multiple DataFrames on 'dp_mp_sp_pp_sharded'."""
     return pd.concat(df_list, ignore_index=True) #reduce(lambda left, right: pd.merge(left, right, on="dp_mp_sp_pp_sharded", how="inner"), df_list)
 
-
+@st.cache_data
 def compute_summary_stats(merged_df, selected_files):
     """Compute avg, std, and geomean for exec, comm, and comp cycles."""
     summary_stats = []
@@ -72,6 +72,7 @@ def compute_summary_stats(merged_df, selected_files):
 
     return pd.DataFrame(summary_stats)
 
+@st.cache_data
 def get_summary_plot(summary_df, figsize=(10, 3)):
     summary_df['avg_overlap (s)'] = summary_df['avg_exec (s)'] - summary_df['avg_exposed_comm (s)'] - summary_df['avg_exposed_comp (s)']
     summary_df = summary_df.sort_values('topology')
@@ -119,7 +120,7 @@ def get_summary_plot(summary_df, figsize=(10, 3)):
 
     return fig
 
-
+@st.cache_data
 def get_compare_topology_per_range(merged_df, start_idx, end_idx, configs_sorted, selected_files):
     labels = ['Overlap', 'Exposed Comm', 'Exposed Comp']
     colors = ['blue', 'lightcoral', 'lightgreen']
@@ -192,7 +193,7 @@ def get_compare_topology_per_range(merged_df, start_idx, end_idx, configs_sorted
     fig.tight_layout()
     return fig
 
-
+@st.cache_data
 def add_topology_and_min_exec_cycles(merged_df):
     """Add columns for topology with lowest exec_cycles and its value per config."""
 
@@ -218,7 +219,7 @@ def add_topology_and_min_exec_cycles(merged_df):
 
     return min_exec_cycles_df
 
-
+@st.cache_data
 def get_top_n_configs(merged_df, n_start, n_end):
     """Identify top N configs (by range) with lowest exec_cycles and their topology."""
     top_configs = merged_df.nsmallest(n_end, 'min_exec_cycles_value')[
@@ -227,7 +228,7 @@ def get_top_n_configs(merged_df, n_start, n_end):
 
     return top_configs
 
-
+@st.cache_data
 def count_best_topologies(merged_df):
     """Count how many times each topology had the best exec_cycles."""
     counts = merged_df['topology'].value_counts().reset_index()
