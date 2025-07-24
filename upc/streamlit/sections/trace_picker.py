@@ -171,7 +171,6 @@ def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
             }
         )
 
-
 def _detect_file_change(csv_trace_file):
     if (
         "last_trace_file" not in st.session_state
@@ -245,6 +244,7 @@ def get_all_parallelism_strategies_data(model, config, option):
 
     return pd.DataFrame(records)
 
+@st.cache_data
 def get_files_list(base_dir, end_with_str):
     files = os.listdir(base_dir)
     filtered = list()
@@ -253,6 +253,7 @@ def get_files_list(base_dir, end_with_str):
             filtered.append(os.path.join(base_dir, file))
     return filtered
 
+@st.cache_data
 def get_slowest_npu(df):
     max_tick = df['callback_tick'].max()
     slowest_npu = df.loc[df['callback_tick'] == max_tick, 'sys_id'].iloc[0]
@@ -264,6 +265,7 @@ def get_slowest_npu(df):
             bw=st.session_state.peak_bw,
         )
 
+@st.cache_data
 def get_fastest_npu(df):
     max_callback = df.groupby('sys_id')['callback_tick'].max().reset_index()
     fastest_npu = max_callback.loc[max_callback['callback_tick'].idxmin(), 'sys_id']
@@ -275,7 +277,7 @@ def get_fastest_npu(df):
             bw=st.session_state.peak_bw,
         )
 
-
+@st.cache_data
 def get_averaged_npus(df):
     max_npu = df["sys_id"].max() + 1
     mem_tot = 0

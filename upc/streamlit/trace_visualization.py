@@ -58,7 +58,7 @@ def get_timings_df(csv_trace_file, output_file_name) -> pd.DataFrame:
 
     return merged_df
 
-
+@st.cache_data
 def plot_elapsed_times(
     df: pd.DataFrame, npu, sys_id: int = 0, max_height: int = 600
 ) -> alt.Chart:
@@ -96,7 +96,7 @@ def plot_elapsed_times(
         .interactive()
     )
 
-
+@st.cache_data
 def get_overlapped_blocks(df: pd.DataFrame) -> dict[str, list[int]]:
     """df should be filtered by sys_id and node_type."""
     df_sorted = df.sort_values("issue_tick")
@@ -123,7 +123,7 @@ def get_overlapped_blocks(df: pd.DataFrame) -> dict[str, list[int]]:
     blocks["end"].append(prev_end)
     return blocks
 
-
+@st.cache_data
 def plot_overlapped_blocks(df: pd.DataFrame, npu) -> alt.Chart:
     chart = (
         alt.Chart(df)

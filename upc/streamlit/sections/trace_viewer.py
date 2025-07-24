@@ -105,7 +105,7 @@ def _plot_selector(df, npu, max_npu):
     elif st.session_state.active_plot == "roofline_2d_timestep":
         _show_2d_roofline_timestep(df, npu)
 
-
+@st.cache_data
 def _show_3d_roofline(df, npu, time_window):
     st.subheader("Visualize 3D roofline model.")
     st.plotly_chart(
@@ -118,19 +118,23 @@ def _show_3d_roofline(df, npu, time_window):
         )
     )
 
-
+@st.cache_data
 def _show_2d_roofline(df, npu):
     st.subheader("Visualize 2D roofline model.")
-    st.altair_chart(
-        rv.get_2d_roofline_plot_normal(
-            df,
-            npu,
-            perf=st.session_state.peak_perf,
-            bw=st.session_state.peak_bw,
-        )
-    )
+    
+    buf = io.BytesIO()
+    rv.get_2d_roofline_plot_normal(
+        df,
+        npu,
+        perf=st.session_state.peak_perf,
+        bw=st.session_state.peak_bw,
+    ).save(buf, format='png')
+    buf.seek(0)
+    png_bytes = buf.read()
+    st.image(png_bytes)
+    
 
-
+@st.cache_data
 def _show_2d_roofline_over_time(df, npu, time_window):
     st.subheader("Visualize 2D roofline model overtime.")
     st.altair_chart(
@@ -142,7 +146,6 @@ def _show_2d_roofline_over_time(df, npu, time_window):
             bw=st.session_state.peak_bw,
         )
     )
-
 
 def _show_2d_roofline_timestep(df, npu):
     st.subheader("Visualize 2D roofline model based on a timestep.")

@@ -47,11 +47,11 @@ def select_dim(
 def get_dims():
     return ["dp", "tp", "pp", "sp"]
 
-
+@st.cache_data
 def get_remaining_dims(dims, excluded_dim):
     return [d for d in dims if d != excluded_dim]
 
-
+@st.cache_data
 def find_local_minima(df, x_dim, y_dim, z_dim, value_col="total"):
     local_minima = []
     discrete_dims = ["dp", "tp", "pp", "sp"]
@@ -99,7 +99,7 @@ def find_local_minima_all_axis(df, x_dim, y_dim, z_dim, t_dim, value_col="total"
 
     return pd.DataFrame(local_minima)
 
-
+@st.cache_data
 def get_neighbors(val, dim, df, discrete_dims):
     unique_vals = df[dim].unique()
     if dim in discrete_dims:
@@ -112,7 +112,7 @@ def get_neighbors(val, dim, df, discrete_dims):
     else:
         return []
 
-
+@st.cache_data
 def selected_dims_3d_fig(
     df, local_min_df, x_dim, y_dim, z_dim, color_dim, global_min=-1
 ):
@@ -260,7 +260,7 @@ def select_umap_components(df_len):
 
     return min_dist, n_neighbors, metric
 
-
+@st.cache_data
 def get_1d_umap_fig(df, min_dist, n_neighbors, metric):
     df_cols_val = df[df.columns[:-1]].values
 
@@ -285,7 +285,7 @@ def get_1d_umap_fig(df, min_dist, n_neighbors, metric):
 
     return fig
 
-
+@st.cache_data
 def get_1d_pca_fig(df):
     df_cols_val = df[df.columns[:-1]].values
 
@@ -304,7 +304,7 @@ def get_1d_pca_fig(df):
 
     return fig
 
-
+@st.cache_data
 def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
     df_cols_val = df[cols].values
 
@@ -362,7 +362,7 @@ def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
     )
     return fig
 
-
+@st.cache_data
 def get_2d_pca_fig(df, cols):
     df_cols_val = df[cols].values
 
@@ -414,7 +414,7 @@ def get_2d_pca_fig(df, cols):
     )
     return fig
 
-
+@st.cache_data
 def cluster_kmeans(df, n_clusters=15):
     X_2d = StandardScaler().fit_transform(df[["dim_1", "dim_2"]])
     kmeans_2d = KMeans(n_clusters=n_clusters)
@@ -426,7 +426,7 @@ def cluster_kmeans(df, n_clusters=15):
 
     return labels_1d, labels_2d
 
-
+@st.cache_data
 def cluster_dbscan(df, eps=0.35, min_samples=6, metric="euclidean"):
     X_2d = StandardScaler().fit_transform(df[["dim_1", "dim_2"]])
     db_2d = DBSCAN(eps=eps, min_samples=min_samples, metric=metric).fit(X_2d)
@@ -438,7 +438,7 @@ def cluster_dbscan(df, eps=0.35, min_samples=6, metric="euclidean"):
 
     return labels_1d, labels_2d
 
-
+@st.cache_data
 def get_1d_clustering_fig(df, labels):
     fig, ax = plt.subplots(figsize=(12, 8))
     palette = sns.color_palette("viridis", n_colors=len(set(labels)))
@@ -457,7 +457,7 @@ def get_1d_clustering_fig(df, labels):
 
     return fig
 
-
+@st.cache_data
 def get_2d_clustering_fig(df):
     fig = plt.figure(figsize=(12, 8))
     fig.add_subplot(111, projection="3d")
@@ -512,15 +512,15 @@ def get_2d_clustering_fig(df):
     )
     return fig
 
-
+@st.cache_data
 def get_best_1d_clusters(df):
     return df.groupby("cluster_1d")["total"].mean().sort_values()
 
-
+@st.cache_data
 def get_best_2d_clusters(df):
     return df.groupby("cluster_2d")["total"].mean().sort_values()
 
-
+@st.cache_data
 def ml_random_forest(df, X_train, X_test, y_train, y_test):
     param_dist = {
         "n_estimators": [100, 300, 500],
@@ -555,15 +555,15 @@ def ml_random_forest(df, X_train, X_test, y_train, y_test):
 
     return best_rf, preds_rf, metric
 
-
+@st.cache_data
 def ml_xgboost(df, X_train, X_test, y_train, y_test):
     X = pd.concat([X_train, X_test], ignore_index=True)
     y = pd.concat([y_train, y_test], ignore_index=True)
 
     xgb = XGBRegressor(
         random_state=42,
-        n_estimators=1000,
-        max_depth=7,
+        n_estimators=100,
+        max_depth=5,
         eta=0.1,
         subsample=0.7,
         colsample_bytree=0.8,
@@ -590,7 +590,7 @@ def ml_xgboost(df, X_train, X_test, y_train, y_test):
 
     return xgb, preds_xgb, metric
 
-
+@st.cache_data
 def ml_mlp(df, X_train, X_test, y_train, y_test):
     mlp = MLPRegressor(
         hidden_layer_sizes=(64, 32), activation="relu", max_iter=1000, random_state=42
@@ -614,7 +614,6 @@ def ml_mlp(df, X_train, X_test, y_train, y_test):
 
     return mlp, preds_mlp, metric
 
-
 def plot_feature_importance(model, features, title):
     """Plot and display model-based feature importances."""
     importance = pd.Series(model.feature_importances_, index=features).sort_values(
@@ -630,7 +629,7 @@ def plot_feature_importance(model, features, title):
 
     return fig, importance_df
 
-
+@st.cache_data
 def plot_permutation_importance(model, X_test, y_test, features, title):
     """Plot and display permutation feature importances."""
     perm = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42)
@@ -642,7 +641,6 @@ def plot_permutation_importance(model, X_test, y_test, features, title):
     ax.set_title(title)
 
     return fig, perm_df
-
 
 def compute_and_plot_pdp(model, X_test, features, title, degree_val):
     """Compute and plot partial dependence for a single model"""

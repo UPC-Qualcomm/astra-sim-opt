@@ -138,9 +138,9 @@ with tabs[1]:
     except:
         st.error("File Not Found.")
 
-    try:
-        st.markdown("---")
-        if "df_matched" in st.session_state:
-            tv.render_sim_ouput_section(sim_outputs)
-    except:
+    
+    st.markdown("---")
+    if "df_matched" in st.session_state:
+        tv.render_sim_ouput_section(sim_outputs)
+    else:
         st.error("Results File is Not Available.")

@@ -133,11 +133,11 @@ def render(df):
     best_xgb, preds_xgb, metric_xgb = helper.ml_xgboost(
         df_ml, X_train, X_test, y_train, y_test
     )
-    best_mlp, preds_mlp, metric_mlp = helper.ml_mlp(
-        df_ml, X_train, X_test, y_train, y_test
-    )
+    ##best_mlp, preds_mlp, metric_mlp = helper.ml_mlp(
+    ##    df_ml, X_train, X_test, y_train, y_test
+    ##)
 
-    merged_df = pd.concat([metric_rf, metric_xgb, metric_mlp], ignore_index=True)
+    merged_df = pd.concat([metric_rf, metric_xgb], ignore_index=True)
 
     st.subheader("ML Model Performance")
     st.dataframe(merged_df)

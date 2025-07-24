@@ -52,7 +52,7 @@ def run_astrasim(params):
         "timed_trace": paths["timed_trace"]
     }
 
-
+@st.cache_data
 def visualize_simulation_results(sim_outputs):
     if "show_npu_plots" not in st.session_state:
         st.session_state.show_npu_plots = False
