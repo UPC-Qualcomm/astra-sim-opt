@@ -9,11 +9,19 @@ import trace_visualization as tv
 
 
 def run_astrasim(params):
-    st.title("Run AstraSim")
+    st.header(
+        "Run AstraSim",
+        help=(
+            "This section allows you to run AstraSim on the generated workload trace.\n"
+            "- Choose a network configuration from the available options.\n"
+            "- Modify the system and network configurations if needed.\n"
+            "- Click **Run AstraSim** to execute the simulation."
+        )
+    )
     config_dir, sim_dir = _setup_dirs(params["temp_dir"])
     configs = _get_config_names(config_dir)
 
-    st.subheader("Network Configuration")
+    st.subheader("Simulation Configuration")
     selected_config_name = st.selectbox("Select a config", configs)
 
     paths = _compute_paths(params, config_dir, sim_dir)
@@ -164,8 +172,9 @@ def _run_astrasim_bin(paths, temp_sys_path, temp_net_path, temp_dir):
         start_time = time.time()
         returncode = subprocess.run(cmd, shell=True, cwd=None).returncode
         elapsed_time = time.time() - start_time
-        for key in st.session_state.keys():
-            del st.session_state[key]
+        #for key in list(st.session_state.keys()):
+        #    if key != 'submitted':
+        #        del st.session_state[key]
     return returncode, elapsed_time
 
 

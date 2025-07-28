@@ -239,7 +239,13 @@ def count_best_topologies(merged_df):
 def analysis_across_topologies(selected_model):
     gathered_res_dir = Path(__file__).parent / "../../results" / selected_model
     gathered_res_files = picker.get_files_list(gathered_res_dir, ".csv")
-    st.subheader("Results Report")
+    st.subheader(
+        "Results Report",
+        help=(
+            "This section provides a comprehensive report on simulation results across different interconnect network topologies.\n"
+            "- Summary statistics for average execution time, exposed communication time, and overlapped time across available parallelism strategies."
+        )
+    )
 
     # Extract experiment names
     file_names = sorted([os.path.splitext(os.path.basename(f))[0] for f in gathered_res_files])
@@ -280,12 +286,25 @@ def analysis_across_topologies(selected_model):
 
     # Count Best-Performing Topologies
     counts_df = count_best_topologies(min_df)
-    st.subheader("Number of times each topology had the lowest simulation time")
+    st.subheader(
+        "Topologies score",
+        help=(
+            "This section shows how many times each topology had the lowest simulation time across various parallelism strategies.\n"
+            "- Helps in identifying the most effective interconnect network designs."
+        )
+    )
     st.dataframe(counts_df)
     
     min_df = min_df[min_df["topology"] == counts_df["Topology"][0]]
     # Top-N Best Experiments with Slider
-    st.subheader(f"Top Experiments (Parallelism Strategies) with Lowest simulation time in the best topology - {counts_df['Topology'][0]}")
+    st.subheader(
+        f"Top Parallelism Strategies with Lowest Simulation Time in Best Topology: {counts_df['Topology'][0]}",
+        help=(
+            "This section highlights the parallelism strategies that achieved the lowest simulation time "
+            "within the best-performing topology.\n"
+            "- Use this to identify the most efficient parallelism configurations for your workload."
+        )
+    )
     n_range = st.slider(
         "Select range of experiments to display:",
         0, min_df["dp_mp_sp_pp_sharded"].nunique(), (0, 4), step=1

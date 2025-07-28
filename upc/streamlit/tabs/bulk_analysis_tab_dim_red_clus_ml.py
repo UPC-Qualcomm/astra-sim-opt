@@ -98,7 +98,14 @@ def render(df):
 
     #**#st.markdown("---")
 
-    st.subheader("Fit The Data to an ML model")
+    st.subheader(
+        "Fit The Data to an ML model",
+        help=(
+            "Fit the data to a machine learning model to predict simulation time based on parallelism strategies.\n"
+            "- Select whether to split the dataset based on FSDP value.\n"
+            "- Apply Random Forest and XGBoost models and view various metrics."
+        ),
+    )
 
     col0, col1 = st.columns(2)
     with col0:
@@ -139,10 +146,10 @@ def render(df):
 
     merged_df = pd.concat([metric_rf, metric_xgb], ignore_index=True)
 
-    st.subheader("ML Model Performance")
+    st.subheader("ML Model Performance", help=("View the performance metrics of the machine learning models."))
     st.dataframe(merged_df)
 
-    st.subheader("Feature Importance (RF & XGB)")
+    st.subheader("Feature Importance (RF & XGB)", help=("View the feature importance over the simulation time."))
     col0, col1 = st.columns(2)
     with col0:
         st.write("Random Forest:")
@@ -180,7 +187,14 @@ def render(df):
 
     possible_degree_val = df["dp"].unique()
 
-    st.subheader("Partial Dependence Plots")
+    st.subheader(
+        "Partial Dependence Plots",
+        help=(
+            "View the partial dependence plots for the Random Forest and XGBoost models.\n"
+            "- These plots show the relationship between the features and the target variable (simulation time).\n"
+            "- Helps in understanding how each feature affects the prediction."
+        ),
+    )
     col0, col1 = st.columns(2)
     with col0:
         st.write("Random Forest:")

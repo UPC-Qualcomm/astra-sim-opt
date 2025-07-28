@@ -5,21 +5,17 @@ import sections.trace_viewer as tv
 
 st.set_page_config(layout="wide")
 
-# Generate Workload
+# Generate Workload and Run AstraSim in a pipeline
 params = gen.generate_workload()
 
-
-st.markdown("---")
-
-# Run AstraSim
-sim_outputs = astra.run_astrasim(params)
-
-
-st.markdown("---")
-
-if "df_matched" not in st.session_state:
-    st.warning("Data is not loaded")
-
+if st.session_state.get("submitted") is not None:
+    st.markdown("---")
+    sim_outputs = astra.run_astrasim(params)
+    st.markdown("---")
+    if "df_matched" not in st.session_state:
+        st.warning("Data is not loaded yet. Please run the simulation first.")
+    else:
+        # Visualization Tabs
+        tv.render_sim_ouput_section(sim_outputs)
 else:
-    # Visualization Tabs
-    tv.render_sim_ouput_section(sim_outputs)
+    st.warning("Failed to generate workload.")

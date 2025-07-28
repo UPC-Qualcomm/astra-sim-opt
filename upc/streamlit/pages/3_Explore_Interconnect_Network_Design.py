@@ -8,7 +8,12 @@ import sections.bw_show_res as bw_show
 
 st.set_page_config(layout="wide")
 
-st.subheader("Exploration: Interconnect Network Topology")
+st.subheader(
+    "Exploration: Interconnect Network Topology",
+    help=(
+        "Explore how different interconnect network designs affect simulation time for the selected GPT model."
+    )
+)
 # Generate Workload
 base_dir = picker._get_output_dir()
 selected_model = picker.model_selector(base_dir)
