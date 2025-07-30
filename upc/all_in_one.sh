@@ -84,7 +84,8 @@ python run_astrasim.py \
     --network ./configuration/2D_Torus.yml \
     --memory $memory_config \
     --output_dir ${output}2D_Torus \
-    --network_log ${network_log}2D_Torus
+    --network_log ${network_log}2D_Torus \
+    --sim_type "analytical_unaware"
 
 #3D_Torus
 python run_astrasim.py \
@@ -93,7 +94,8 @@ python run_astrasim.py \
     --network ./configuration/3D_Torus.yml \
     --memory $memory_config  \
     --output_dir ${output}3D_Torus \
-    --network_log ${network_log}3D_Torus
+    --network_log ${network_log}3D_Torus \
+    --sim_type "analytical_unaware"
 
 #DGX_H100
 python run_astrasim.py \
@@ -102,7 +104,8 @@ python run_astrasim.py \
     --network ./configuration/FoldedClos.yml \
     --memory $memory_config  \
     --output_dir ${output}FoldedClos \
-    --network_log ${network_log}FoldedClos
+    --network_log ${network_log}FoldedClos \
+    --sim_type "analytical_unaware"
 
 #DGX1
 #python run_astrasim.py \
@@ -111,7 +114,8 @@ python run_astrasim.py \
 #    --network ./configuration/DGX1.yml \
 #    --memory $memory_config  \
 #    --output_dir ${output}DGX1 \
-#    --network_log ${network_log}DGX1
+#    --network_log ${network_log}DGX1 \
+#    --sim_type "analytical_unaware"
 
 #Dragonfly
 python run_astrasim.py \
@@ -120,7 +124,8 @@ python run_astrasim.py \
     --network ./configuration/Dragonfly.yml \
     --memory $memory_config  \
     --output_dir ${output}Dragonfly \
-    --network_log ${network_log}Dragonfly
+    --network_log ${network_log}Dragonfly \
+    --sim_type "analytical_unaware"
 
 #FullyConnected
 python run_astrasim.py \
@@ -129,7 +134,8 @@ python run_astrasim.py \
     --network ./configuration/FullyConnected.yml \
     --memory $memory_config  \
     --output_dir ${output}FullyConnected \
-    --network_log ${network_log}FullyConnected
+    --network_log ${network_log}FullyConnected \
+    --sim_type "analytical_unaware"
 
 ##Ring
 python run_astrasim.py \
@@ -138,7 +144,8 @@ python run_astrasim.py \
     --network ./configuration/Ring.yml \
     --memory $memory_config  \
     --output_dir ${output}Ring \
-    --network_log ${network_log}Ring
+    --network_log ${network_log}Ring \
+    --sim_type "analytical_unaware"
 
 #Switch
 python run_astrasim.py \
@@ -147,7 +154,8 @@ python run_astrasim.py \
     --network ./configuration/Switch.yml \
     --memory $memory_config  \
     --output_dir ${output}Switch \
-    --network_log ${network_log}Switch
+    --network_log ${network_log}Switch \
+    --sim_type "analytical_unaware"
 
 
 #Collect results
