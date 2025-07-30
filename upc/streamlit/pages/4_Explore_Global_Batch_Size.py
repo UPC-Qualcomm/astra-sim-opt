@@ -198,7 +198,14 @@ def plot_3d_simulation_time_breakdown(df, selected_batch_sizes, selected_model, 
     st.plotly_chart(fig, use_container_width=True)
 
 st.set_page_config(layout="wide")
-st.subheader("Exploration: Global Batch Size")
+st.subheader(
+    "Exploration: Global Batch Size",
+    help=(
+        "This section allows you to explore the impact of different global batch sizes on the simulation time for the chosen model and configuration.\n"
+        "- Analyze how varying batch sizes affect the performance metrics.\n"
+        "- Understand the trade-offs between batch size and simulation time."
+    )
+)
 
 BATCH_SIZE_DIR = "batch_study"
 selected_model, selected_config = picker.get_model_and_config()

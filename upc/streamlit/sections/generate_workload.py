@@ -5,7 +5,15 @@ import scripts.generate_single_workload as gen
 import os
 
 def generate_workload():
-    st.title("Generate a workload trace")
+    
+    st.header(
+        "Generate Workload Trace",
+        help=(
+            "This section allows you to generate a workload trace for simulation.\n"
+            "Click **Run Model** to generate the workload trace."
+        )
+    )
+    
     temp_dir = "temp/"
 
     # --- Form Section ---
@@ -24,7 +32,8 @@ def generate_workload():
         _run_trace_generation(
             selected_model_name, [dp, tp, sp, pp, sharding], params_list, temp_dir
         )
-
+        if 'submitted' not in st.session_state:
+            st.session_state['submitted'] = True
     # --- Return parameters for downstream use ---
     return {
         "dp": dp,
@@ -75,7 +84,17 @@ def _workload_form(selected_model_name):
                     label=params_labels[i], value=params_list[i], key=f"{param_names[i]}_input"
                 )
 
-        st.subheader("Parallelism strategy")
+        st.subheader(
+            "Parallelism strategy",
+            help=(
+            "Set the parallelism parameters for the model.\n"
+            "- **Data Parallelism Degree (DP)**.\n"
+            "- **Tensor Parallelism Degree (TP)**.\n"
+            "- **Sequence Parallelism Degree (SP)**.\n"
+            "- **Pipeline Parallelism Degree (PP)**.\n"
+            "- **FSDP**: Enable Fully Sharded Data Parallelism."
+            )
+        )
         col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
             dp = st.text_input("Data Parallelism (DP)", 1)

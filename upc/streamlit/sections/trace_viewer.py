@@ -247,7 +247,30 @@ def _show_timestep_plot_and_table(df, timesteps):
 
 
 def render_sim_ouput_section(sim_outputs):
-    st.markdown("### Simulation Visualizations")
+    st.header(
+        "Simulation Visualizations",
+        help=(
+            "This section allows you to visualize the simulation results.\n"
+        )
+    )
+    st.markdown("""
+        <style>
+        .stTabs [data-baseweb="tab"] {
+            background-color: #e0e7ff !important;  /* Light blue */
+            color: #222 !important;
+            font-weight: bold;
+            font-size: 1.2em;
+            border-radius: 8px 8px 0 0;
+            margin-right: 4px;
+            padding: 10px 24px;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #6366f1 !important; /* Indigo */
+            color: #fff !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     tabs = st.tabs([
         "Exposed Communication per NPU",
         "Chakra Traces",
@@ -256,11 +279,23 @@ def render_sim_ouput_section(sim_outputs):
     ])
 
     with tabs[0]:
-        st.subheader("Exposed Communication per NPU")
+        st.subheader(
+            "Exposed Communication per NPU",
+            help=(
+            "This section visualizes the simulation time and exposed communication time for each NPU.\n"
+            "- It helps in understanding the communication overhead and bottlenecks.\n"
+            )
+        )
         astra.visualize_simulation_results(sim_outputs)
 
     with tabs[1]:
-        st.subheader("Chakra Trace")
+        st.subheader(
+            "Chakra Trace",
+            help=(
+            "This section visualizes the Chakra trace for the simulation.\n"
+            "- It provides insights into the timing, overlapped execution and communication of each NPU.\n"
+            )
+        )
         _init_session_state()
         if "df_matched" not in st.session_state:
             st.warning("The simulation trace is not available yet.")
@@ -279,13 +314,26 @@ def render_sim_ouput_section(sim_outputs):
                     )
 
     with tabs[2]:
-        st.subheader("Chakra Nodes Timing Plot")
+        st.subheader(
+            "Chakra Nodes Timing Plot",
+            help=(
+            "This section visualizes the timing of each Chakra node for a selected NPU.\n"
+            "- It helps in understanding the execution time of different nodes and their impact on overall performance.\n"
+            )
+        )
         max_npu = int(st.session_state.df_matched["sys_id"].max())
         npu = _load_and_select_npu(max_npu, "timing")
         st.altair_chart(tv.plot_one_npu(st.session_state.df_matched, npu, plot_blocks=False, plot_times=True))
 
     with tabs[3]:
-        st.subheader("Roofline Model")
+        st.subheader(
+            "Roofline Model",
+            help=(
+            "This section visualizes the roofline model for the simulation.\n"
+            "- It helps in understanding the performance limits of the system and identifying bottlenecks.\n"
+            "- You can select the NPU and the mode of visualization.\n"
+            )
+        )
 
         max_npu = int(st.session_state.df_matched["sys_id"].max())
         col0, col1 = st.columns(2)

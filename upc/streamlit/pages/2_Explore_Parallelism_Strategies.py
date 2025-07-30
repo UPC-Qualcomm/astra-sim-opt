@@ -6,8 +6,10 @@ from tabs.bulk_analysis_tab_dim_red_clus_ml import render as render_tab1
 from tabs.system_throughput import render_system_throughput as render_tab2
 
 st.set_page_config(layout="wide")
-
-st.subheader("Exploration: Parallelism Strategy")
+st.header("Explore Parallelism Strategies", help=(
+    "Analyze how different parallelism strategies affect simulation time. \n"
+    "- Select a model and configuration. \n"
+    "- View simulation time breakdowns for each strategy."))
 # Generate Workload
 selected_model, selected_config = picker.get_model_and_config()
 picker.set_session_peak_perf_bw(selected_config)
@@ -65,7 +67,15 @@ tabs = st.tabs([f"**{name}**" for name in ["Visualization & ML Analysis", "Detai
 
 with tabs[0]:
     st.subheader(
-        "Study the relation between the different degrees of parallelsim methods and the simulation time"
+        "Study the relation between the different degrees of parallelism methods and the simulation time",
+        help=(
+            "A 3D plot to show the relationship between different parallelism strategies and simulation time.\n"
+            "- Fix the first two dimensions (e.g., dp and tp).\n"
+            "- Vary the third dimension (e.g., sp or pp).\n"
+            "- Show neighbours grid for selected dimensions.\n"
+            "- View local minima and their records.\n"
+            "- Analyze the data slice based on selected dimensions."
+        )
     )
     col0, col1 = st.columns([2, 4])
     with col0:
@@ -109,7 +119,7 @@ with tabs[0]:
             & (df["fsdp"] == selected_fsdp)
         ]
 
-        st.subheader("Data Slice:")
+        st.subheader("Data Slice:", help=("View the data slice based on selected dimensions."))
         st.write(filtered_df.sort_values("total"))
 
     with col1:
@@ -141,19 +151,37 @@ with tabs[0]:
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.plotly_chart(fig, use_container_width=True)
-            st.subheader("Local Minima Records on the data slice:")
+            st.subheader(
+                "Local Minima Records on the data slice:",
+                help=(
+                    "View the local minima records for the data slice.\n"
+                    "- This helps in understanding the performance patterns at lower dimensions."
+                )
+            )
             if not local_min_df.empty:
                 st.dataframe(local_min_df.sort_values("total"))
             else:
                 st.write("No local minima found for the selected configuration.")
 
-    st.subheader("Local Minima Records on the entire data (unsliced):")
+    st.subheader(
+        "Local Minima Records on the entire data (unsliced):",
+        help=(
+            "View the local minima records across all dimensions.\n"
+            "- This helps in understanding the overall performance patterns.\n"
+            "- Useful for identifying optimal configurations."
+        )
+    )
     st.dataframe(local_min_df_all_axis.sort_values("total"))
 
     st.markdown("---")
 
     st.subheader(
-        "Detect the Parallelism Strategies Pattern at Lower Dimensions w.r.t Time"
+        "Detect the Parallelism Strategies Pattern at Lower Dimensions w.r.t Time",
+        help=(
+            "This section allows you to explore the parallelism strategies employed at lower dimensions.\n"
+            "- Analyze the patterns of parallelism strategies at lower dimensions.\n"
+            "- Understand how different strategies impact simulation time."
+        )
     )
 
     render_tab1(df)
