@@ -46,9 +46,10 @@ def _compute_paths(params, sim_dir):
     as_bin = (
         "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware"
     )
+    
     # Construct a unique name for the workload files
     workload_name = (
-        f"{params['dp']}_{params['tp']}_{params['sp']}_{params['pp']}_0"
+        f"{params['dp']}_{params['tp']}_{params['sp']}_{params['pp']}_{params['sharding']}.seq_{params['seq']}.batch_{params['batch']}"
     )
 
 

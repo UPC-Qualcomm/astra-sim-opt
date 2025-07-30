@@ -163,8 +163,7 @@ if network_files:
                             "pp": pp,
                             "tp": tp,
                             "sp": sp,
-                            "sharding_type": "no-sharding",
-                            "sharding_dim": 0,
+                            "sharding": 0,
                             "temp_dir": TEMP_DIR,
                         }
 
