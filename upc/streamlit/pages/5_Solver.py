@@ -105,7 +105,7 @@ if network_files:
             dims = get_valid_parallelism_dims(num_npus)
             # Allow user to select multiple options for each parallelism strategy
             dp_options = st.multiselect("Data Parallel (DP) options", dims, default=[1])
-            pp_options = st.multiselect("Pipeline Parallel (PP) options", dims, default=[1])
+            pp_options = st.multiselect("Pipeline Parallel (PP) options", [dim for dim in dims if dim <=4], default=[1])
             tp_options = st.multiselect("Tensor Parallel (TP) options", dims, default=[1])
             sp_options = st.multiselect("Sequence Parallel (SP) options", dims, default=[1])
 
@@ -236,6 +236,5 @@ if network_files:
                             )
                             st.plotly_chart(fig, use_container_width=True)
 
-                            st.balloons()
 else:
     st.warning("No network configurations found. Please make sure they are in the correct directory.")
