@@ -139,11 +139,11 @@ if network_files:
                 )
                 
             with col2:
-                npus_per_node = st.number_input(
-                    "NPUs per Node", 
-                    min_value=1, 
-                    max_value=total_npu_count, 
-                    value=min(npus_count_array[0] if npus_count_array else 4, total_npu_count),
+                npus_per_node_options = [i for i in range(2, total_npu_count // len(npus_count_array) + 1) if total_npu_count % i == 0]
+                npus_per_node = st.selectbox(
+                    "NPUs per Node",
+                    npus_per_node_options,
+                    index=npus_per_node_options.index(npus_count_array[0]) if npus_count_array and npus_count_array[0] in npus_per_node_options else 0,
                     key='npus_per_node'
                 )
                 
@@ -176,23 +176,28 @@ if network_files:
                 nodes = total_npus // npus_per_node
                 
                 if is_3d:
-                    # For 3D: split remaining NPUs by 2
+                    # For 3D: split remaining NPUs by 2, ensuring all dimensions > 1
                     remaining_factor = nodes
                     if remaining_factor == 1:
-                        return [npus_per_node, 1, 1], None
+                        return None, "For 3D configuration, need at least 2 nodes (all dimensions must be > 1)"
                     elif remaining_factor == 2:
-                        return [npus_per_node, 2, 1], None
+                        return None, "For 3D configuration with 2 nodes, cannot split into 3 dimensions with all > 1"
                     elif remaining_factor == 4:
                         return [npus_per_node, 2, 2], None
                     elif remaining_factor == 8:
                         return [npus_per_node, 2, 4], None
                     else:
-                        # Try to split as evenly as possible
+                        # Try to split as evenly as possible, ensuring all dims > 1
                         import math
                         dim2 = int(math.sqrt(remaining_factor))
                         while remaining_factor % dim2 != 0 and dim2 > 1:
                             dim2 -= 1
                         dim3 = remaining_factor // dim2
+                        
+                        # Check if all dimensions are > 1
+                        if dim2 <= 1 or dim3 <= 1:
+                            return None, f"For 3D configuration, cannot split {remaining_factor} nodes into 3 dimensions with all > 1"
+                        
                         return [npus_per_node, dim2, dim3], None
                 else:
                     # For 2D
