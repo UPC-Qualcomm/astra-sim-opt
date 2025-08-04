@@ -42,9 +42,9 @@ def _load_and_select_npu(max_npu, idx = "default"):
     return npu
 
 
-def _show_basic_plots(df, npu):
+def _show_basic_plots(df, npu, exp = ""):
     st.subheader("Visualize the compute and communication node over time.")
-    st.altair_chart(tv.plot_one_npu(df, npu), use_container_width=True)
+    st.altair_chart(tv.plot_one_npu(df, npu, exp=exp), use_container_width=True)
     mem, comp, idle = rv.get_info(
         df,
         npu=npu,
@@ -122,16 +122,16 @@ def _show_3d_roofline(df, npu, time_window):
 def _show_2d_roofline(df, npu):
     st.subheader("Visualize 2D roofline model.")
     
-    buf = io.BytesIO()
+    #buf = io.BytesIO()
     rv.get_2d_roofline_plot_normal(
         df,
         npu,
         perf=st.session_state.peak_perf,
         bw=st.session_state.peak_bw,
-    ).save(buf, format='png')
-    buf.seek(0)
-    png_bytes = buf.read()
-    st.image(png_bytes)
+    )#.save(buf, format='png')
+    #buf.seek(0)
+    #png_bytes = buf.read()
+    #st.image(png_bytes)
     
 
 @st.cache_data
@@ -217,13 +217,13 @@ def _show_timestep_plot_and_table(df, timesteps):
     df = df[df["issue_tick"] == timesteps[st.session_state.timestep_idx]]
     col1, col2 = st.columns([2, 1])
     with col1:
-        buf = io.BytesIO()
+        #buf = io.BytesIO()
         rv.get_2d_roofline_plot_timestep(
                 df, perf=st.session_state.peak_perf, bw=st.session_state.peak_bw
-            ).save(buf, format='png')  # Requires vl-convert or altair_saver
-        buf.seek(0)
-        png_bytes = buf.read()
-        st.image(png_bytes)
+            )#.save(buf, format='png')  # Requires vl-convert or altair_saver
+        #buf.seek(0)
+        #png_bytes = buf.read()
+        #st.image(png_bytes)
        
     with col2:
         st.write("ℹ️ Points at this timestep:")
@@ -304,7 +304,7 @@ def render_sim_ouput_section(sim_outputs):
             max_npu = int(st.session_state.df_matched["sys_id"].max())
             if option == "Per NPU":
                 npu = _load_and_select_npu(max_npu, "trace")
-                _show_basic_plots(st.session_state.df_matched, npu)
+                _show_basic_plots(st.session_state.df_matched, npu, exp = "")#f"Parallelism Strategy: DP:{sim_outputs['dp']}, TP:{sim_outputs['tp']}, SP:{sim_outputs['sp']}, PP:{sim_outputs['pp']}, FSDP:{sim_outputs['sharding_val']}")
             else:
                 st.write("Showing Chakra Trace for all NPUs")
                 for n in range(max_npu):
@@ -323,7 +323,7 @@ def render_sim_ouput_section(sim_outputs):
         )
         max_npu = int(st.session_state.df_matched["sys_id"].max())
         npu = _load_and_select_npu(max_npu, "timing")
-        st.altair_chart(tv.plot_one_npu(st.session_state.df_matched, npu, plot_blocks=False, plot_times=True))
+        st.altair_chart(tv.plot_one_npu(st.session_state.df_matched, npu, plot_blocks=False, plot_times=True, exp = ""))#)f" of Parallelism Strategy: DP:{sim_outputs['dp']}, TP:{sim_outputs['tp']}, SP:{sim_outputs['sp']}, PP:{sim_outputs['pp']}, FSDP:{sim_outputs['sharding_val']}."))
 
     with tabs[3]:
         st.subheader(

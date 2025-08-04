@@ -56,9 +56,10 @@ with tabs[0]:
     df_sorted = df.sort_values(by="exec_cycles", ascending=True).iloc[0:10]
     parallelism_options = df_sorted["dp_mp_sp_pp_sharded"].tolist()
     selected_parallelism = st.multiselect(
-        f"Select Parallelism Strategies (dp_mp_sp_pp_sharded) - Top {len(parallelism_options)} is available",
+        f"Select Parallelism Strategies (dp_mp_sp_pp_sharded) - Top {len(parallelism_options)} is available (max 4)",
         parallelism_options,
-        default=parallelism_options
+        default=parallelism_options[:4],
+        max_selections=4,
     )
     if len(selected_parallelism) == 0:
         st.warning(

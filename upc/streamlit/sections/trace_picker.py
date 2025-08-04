@@ -10,6 +10,7 @@ import numpy as np
 import math
 import seaborn as sns
 import matplotlib.pyplot as plt
+import helper.constants as constants
 
 def trace_picker():
     st.title("📊 Trace Picker")
@@ -140,36 +141,36 @@ def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
         idx = options.index(selected_option)
         selected_file = seq_batch_list[idx][2]
 
-    submitted = st.button("Submit")
+    #submitted = st.button("Submit")
 
-    if submitted and selected_file:
-        # Clear session state (if needed)
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
+    #if submitted and selected_file:
+    # Clear session state (if needed)
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
 
-        # Parse parallelism degrees from strategy
-        dp, tp, sp, pp, sharding_val = selected_strategy.split("_")
-        trace_file_name = selected_file
-        csv_trace_file = os.path.join(base_dir, trace_file_name)
-        file_base = selected_file.split("_trace_matched_timing")[0]
-        res_path = os.path.abspath(
-            os.path.join(os.getcwd(), f"../results/{selected_model}/{selected_config}/")
-        )
-        res_file = os.path.join(res_path, f"{file_base}_res.csv")
-        log_file = os.path.join(base_dir, f"{file_base}.log")
+    # Parse parallelism degrees from strategy
+    dp, tp, sp, pp, sharding_val = selected_strategy.split("_")
+    trace_file_name = selected_file
+    csv_trace_file = os.path.join(base_dir, trace_file_name)
+    file_base = selected_file.split("_trace_matched_timing")[0]
+    res_path = os.path.abspath(
+        os.path.join(os.getcwd(), f"../results/{selected_model}/{selected_config}/")
+    )
+    res_file = os.path.join(res_path, f"{file_base}_res.csv")
+    log_file = os.path.join(base_dir, f"{file_base}.log")
 
-        _set_session_df(base_dir, file_base, csv_trace_file)
+    _set_session_df(base_dir, file_base, csv_trace_file)
 
-        st.session_state.update(
-            {
-                "csv_trace_file": csv_trace_file,
-                "trace_file_name": trace_file_name,
-                "res_file": res_file,
-                "log_file": log_file,
-                "res_path": res_path,
-                "file_base": file_base,
-            }
-        )
+    st.session_state.update(
+        {
+            "csv_trace_file": csv_trace_file,
+            "trace_file_name": trace_file_name,
+            "res_file": res_file,
+            "log_file": log_file,
+            "res_path": res_path,
+            "file_base": file_base,
+        }
+    )
 
 def _detect_file_change(csv_trace_file):
     if (
@@ -389,6 +390,15 @@ def get_max_mem_npu(df):
 #    return plots
 @st.cache_data
 def plot_experiments_bound_breakdown(df, chunk_size=40):
+    plt.rcParams.update({
+        'font.size': constants.FONT_SIZE,  # change this value as needed
+        'axes.titlesize': constants.TITLE_SIZE,
+        'axes.labelsize': constants.LABEL_SIZE,
+        'xtick.labelsize': constants.XTICK_SIZE,
+        'ytick.labelsize': constants.YTICK_SIZE,
+        'legend.fontsize': constants.LEGEND_SIZE
+    })
+    
     plots = []
 
     # Sort by parallelism columns
@@ -419,26 +429,32 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
 
         x = np.arange(len(chunk))
 
-        fig, ax = plt.subplots(figsize=(12, 4))
+        fig, ax = plt.subplots(figsize=(32, 8))
 
-        ax.bar(x, mem_values, label='Memory Bound OPs', color='skyblue')
-        ax.bar(x, comp_values, bottom=mem_values, label='Compute Bound OPs', color='lightgreen')
+        ax.bar(x, mem_values, label='Memory\nBound OPs', color='blue')
+        ax.bar(x, comp_values, bottom=mem_values, label='Compute\nBound OPs', color='lightgreen')
+        ax.bar(x, comm_values, bottom=mem_values + comp_values, label='Exposed\nComm. (%)', color='lightcoral')
 
-        # Use global color mapping for comm bars
-        comm_colors = total_colors[start:end]
-        ax.bar(x, comm_values, bottom=mem_values + comp_values, label='Exposed Communication (%)', color='lightcoral')#comm_colors)
+        #for xi, mem, comm, comp in zip(x, mem_values, comm_values, comp_values):
+        #    ax.text(xi, comp + mem + comm / 2, f"{comm/(comp+mem+comm) * 100 :.1f}", ha='center', va='center', fontsize=constants.IN_PLOT_LABEL_SIZE, color='black')
 
-        for xi, mem, comm, comp in zip(x, mem_values, comm_values, comp_values):
-            ax.text(xi, comp + mem + comm / 2, f"{comm/(comp+mem+comm) * 100 :.2f}", ha='center', va='center', fontsize=8, color='black')
-
-        ax.set_xticks(x)
-        ax.set_xticklabels(file_names, rotation=45, ha='right')
-        ax.set_xlabel('Parallelism strategy: DP,TP,SP,PP,FSDP')
-        ax.set_ylabel('Time (Cycles)')
-        ax.set_title(f'Execution Breakdown per Experiment - #NPUs is {num_npus} (Experiments {start + 1} to {end})')# - lighter color faster simulation')
-        ax.legend()
-
+        ax.set_xticks([])
+        #ax.set_xticklabels(file_names, rotation=45, ha='right', fontsize=constants.XTICK_SIZE)
+        ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE)
+        ax.yaxis.get_offset_text().set_fontsize(constants.YTICK_SIZE)
+        ax.set_xlabel('Combination of parallelism strategies: DP,TP,SP,PP,FSDP', fontsize=constants.LABEL_SIZE)
+        ax.set_ylabel('Time (Cycles)', fontsize=constants.LABEL_SIZE)
+        ax.set_title(f'Execution Breakdown per Experiment - #NPUs is {num_npus}', fontsize=constants.TITLE_SIZE)#(Experiments {start + 1} to {end})', fontsize=constants.TITLE_SIZE)
+        if (i == 0):
+            ax.legend(
+                fontsize=constants.LEGEND_SIZE,
+                loc='center left',
+                bbox_to_anchor=(1.02, 0.5),
+                borderaxespad=0
+            )
         fig.tight_layout()
+        #plt.rcParams['svg.fonttype'] = 'none'
+        #fig.savefig(f"parallel_st{i}.svg", dpi=600, format='svg')
         plots.append(fig)
 
     return plots

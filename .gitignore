@@ -38,11 +38,11 @@ upc/log/
 upc/results/
 upc/network_log/
 upc/streamlit/temp
-upc/*/__pycache__
-upc/*/*/__pycache__
-upc/__pycache__
+**/*/__pycache__
 
 *.ipynb_checkpoints/
 
 our_examples/
 stg_generated_examples/
+
+**/*.svg

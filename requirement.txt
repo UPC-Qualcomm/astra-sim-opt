@@ -1,0 +1,9 @@
+streamlit==1.45.0
+intervaltree==3.1.0
+vl-convert-python==1.7.0
+tqdm==4.67.1
+umap-learn==0.5.7
+xgboost==3.0.2
+regex==2024.11.6
+plotly==6.2.0 
+kaleido==0.2.1

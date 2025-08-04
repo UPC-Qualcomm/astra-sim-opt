@@ -5,10 +5,12 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import math
+from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 
 # Custom Modules
 import sections.trace_picker as picker
+import helper.constants as constants
 
 @st.cache_data
 def load_and_prepare_file(file_path, selected_files):
@@ -101,7 +103,7 @@ def get_summary_plot(summary_df, figsize=(10, 3)):
                     f"{percent:.2f}%",
                     ha='center',
                     va='center',
-                    fontsize=9,
+                    fontsize=constants.IN_PLOT_LABEL_SIZE,
                     color='black'
                 )
 
@@ -109,8 +111,8 @@ def get_summary_plot(summary_df, figsize=(10, 3)):
 
     ax.set_xlabel('Topology')
     ax.set_ylabel('Average Time (s)')
-    ax.set_title('Time Breakdown by Topology - Averaged Across Various Parallelsim Strategies')
-    
+    ax.set_title('Time Breakdown by Topology - Averaged Across Various Parallelism Strategies')
+
     # Move legend outside right
     ax.legend(title='Breakdown Components', bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 
@@ -120,26 +122,37 @@ def get_summary_plot(summary_df, figsize=(10, 3)):
 
     return fig
 
-@st.cache_data
-def get_compare_topology_per_range(merged_df, start_idx, end_idx, configs_sorted, selected_files):
-    labels = ['Overlap', 'Exposed Comm', 'Exposed Comp']
-    colors = ['blue', 'lightcoral', 'lightgreen']
-
-    selected_configs = configs_sorted[start_idx:end_idx]
+def get_compare_topology_per_range(merged_df, selected_configs, selected_files):
+    labels = ['Overlap', 'Exposed Comp', 'Exposed Comm']
+    colors = ['lightblue', 'lightgreen', 'lightcoral']
+    
     valid_configs = []
     for config in selected_configs:
         config_rows = merged_df[merged_df['dp_mp_sp_pp_sharded'] == config]
         topologies_present = config_rows['topology'].unique().tolist()
         if all(topo in topologies_present for topo in selected_files):
             valid_configs.append(config)
-
+    font_increment = 0#10
     if len(valid_configs) == 0:
         st.warning("No valid configs present in all selected topologies in this range.")
         return None
 
     num_configs = len(valid_configs)
-    fig, axes = plt.subplots(1, num_configs, figsize=(6*num_configs, 8), squeeze=False)
-    axes = axes[0]
+    ncols = 4  
+    nrows = math.ceil(num_configs / ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(8*ncols, 7*nrows), squeeze=False)
+    axes = axes.flatten()
+
+    # Custom legend as a horizontal bar at the top
+    legend_handles = [Patch(facecolor=color, label=label) for label, color in zip(labels, colors)]
+    legend = fig.legend(
+        handles=legend_handles,
+        loc='upper center',
+        bbox_to_anchor=(0.5, 1.05),
+        ncol=len(labels),
+        fontsize=constants.LEGEND_SIZE+font_increment,
+        frameon=False
+    )
 
     for i, config in enumerate(valid_configs):
         ax = axes[i]
@@ -154,43 +167,67 @@ def get_compare_topology_per_range(merged_df, start_idx, end_idx, configs_sorted
         compare_df['exposed_comm_cycles'] = compare_df['exposed_comm_cycles'] * 1e9
         compare_df['exposed_comp_cycles'] = compare_df['exposed_comp_cycles'] * 1e9
         overlap = compare_df['exec_cycles'] - (compare_df['exposed_comm_cycles'] + compare_df['exposed_comp_cycles'])
-        exposed_comm = compare_df['exposed_comm_cycles']
         exposed_comp = compare_df['exposed_comp_cycles']
+        exposed_comm = compare_df['exposed_comm_cycles']
 
-        bar_width = 0.5
+        bar_width = 0.7
         indices = np.arange(len(selected_files))
 
-        p1 = ax.bar(indices, overlap, bar_width, label='Overlap', color=colors[0])
-        p2 = ax.bar(indices, exposed_comm, bar_width, bottom=overlap, label='Exposed Comm', color=colors[1])
-        p3 = ax.bar(indices, exposed_comp, bar_width, bottom=overlap+exposed_comm, label='Exposed Comp', color=colors[2])
+        p1 = ax.bar(indices, overlap, bar_width, label=labels[0], color=colors[0])
+        p2 = ax.bar(indices, exposed_comp, bar_width, bottom=overlap, label=labels[1], color=colors[1])
+        p3 = ax.bar(indices, exposed_comm, bar_width, bottom=overlap+exposed_comp, label=labels[2], color=colors[2])
 
-        total = overlap + exposed_comm + exposed_comp
+        total = overlap + exposed_comp + exposed_comm
 
         for j in range(len(indices)):
             y_offset = 0
-            for value in [overlap[j], exposed_comm[j], exposed_comp[j]]:
+            for k, value in enumerate([overlap[j], exposed_comp[j], exposed_comm[j]]):
                 pct = (value / total[j]) * 100
-                ax.text(indices[j], y_offset + value / 2, f"{pct:.1f}%", 
-                        ha='center', va='center', color='black', fontsize=12)
+                text_color = 'black'
+                ax.text(
+                    indices[j],
+                    y_offset + value / 2,
+                    f"{pct:.1f}%",
+                    ha='center',
+                    va='center',
+                    color=text_color,
+                    fontsize=constants.IN_PLOT_LABEL_SIZE + font_increment
+                )
                 y_offset += value
 
-        ax.set_xticks(indices)
-        ax.set_xticklabels(compare_df['topology'], fontsize=13)
-        ax.tick_params(axis='x', labelrotation=45)
-        ax.set_ylabel('Cycles', fontsize=16)
-        ax.set_xlabel('Topology', fontsize=14)
+        # Only show x ticks on bottom row
+        row_idx = i // ncols
+        col_idx = i % ncols
+        if row_idx == nrows - 1:
+            ax.set_xticks(indices)
+            ax.set_xticklabels(compare_df['topology'], fontsize=constants.FONT_SIZE + font_increment)
+            ax.tick_params(axis='x', labelrotation=25)
+        else:
+            ax.set_xticks([])
+            ax.set_xticklabels([])
+
+        # Only show y ticks/label on first column
+        if col_idx == 0:
+            ax.set_ylabel('Cycles', fontsize=constants.LABEL_SIZE + font_increment)
+            ax.yaxis.get_offset_text().set_fontsize(constants.YTICK_SIZE + font_increment)
+            ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE + font_increment)
+        else:
+            ax.set_yticks([])
+            ax.set_yticklabels([])
 
         config_clean = config.replace('_res', '')
         dp, tp, sp, pp, fsdp = config_clean.split('_')
-        title = f"DP={dp}, TP={tp}, SP={sp}, PP={pp}, FSDP={fsdp}, #NPUs={int(dp)*int(tp)*int(sp)*int(pp)}"
-        ax.set_title(title, fontsize=16)
+        title = f"DP={dp}, TP={tp}, SP={sp}\nPP={pp}, FSDP={fsdp}"
+        ax.set_title(title, fontsize=constants.TITLE_SIZE + font_increment)
 
-        ax.tick_params(axis='y', labelsize=13)  # y-axis tick values fontsize
+    # Hide unused axes if any
+    for j in range(len(valid_configs), len(axes)):
+        fig.delaxes(axes[j])
 
-        if i == 0:
-            ax.legend(fontsize=12)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])  # leave space for legend at top
 
-    fig.tight_layout()
+    # Ensure legend is included in SVG by passing extra_artists
+    #fig.savefig("topo_2.svg", format='svg', bbox_extra_artists=[legend], bbox_inches='tight')
     return fig
 
 @st.cache_data
@@ -220,11 +257,11 @@ def add_topology_and_min_exec_cycles(merged_df):
     return min_exec_cycles_df
 
 @st.cache_data
-def get_top_n_configs(merged_df, n_start, n_end):
-    """Identify top N configs (by range) with lowest exec_cycles and their topology."""
-    top_configs = merged_df.nsmallest(n_end, 'min_exec_cycles_value')[
-        ['dp_mp_sp_pp_sharded', 'topology', 'min_exec_cycles_value']
-    ].iloc[n_start:n_end].reset_index(drop=True)
+def get_top_n_configs(merged_df, selected_configs):
+    """Get selected configs with their topology and exec_cycles values."""
+    top_configs = merged_df[
+        merged_df['dp_mp_sp_pp_sharded'].isin(selected_configs)
+    ][['dp_mp_sp_pp_sharded', 'topology', 'min_exec_cycles_value']].drop_duplicates().reset_index(drop=True)
 
     return top_configs
 
@@ -296,7 +333,7 @@ def analysis_across_topologies(selected_model):
     st.dataframe(counts_df)
     
     min_df = min_df[min_df["topology"] == counts_df["Topology"][0]]
-    # Top-N Best Experiments with Slider
+    # Top-N Best Experiments with Multiselect
     st.subheader(
         f"Top Parallelism Strategies with Lowest Simulation Time in Best Topology: {counts_df['Topology'][0]}",
         help=(
@@ -305,21 +342,25 @@ def analysis_across_topologies(selected_model):
             "- Use this to identify the most efficient parallelism configurations for your workload."
         )
     )
-    n_range = st.slider(
-        "Select range of experiments to display:",
-        0, min_df["dp_mp_sp_pp_sharded"].nunique(), (0, 4), step=1
-    )
-
-    n_start, n_end = n_range
-    top_configs = get_top_n_configs(min_df, n_start, n_end)
-
-    #st.subheader(f"Top experiments from {n_start} to {n_end}")
-    st.dataframe(top_configs)
-
+    
     configs_sorted = merged_df[merged_df['topology'] == counts_df["Topology"][0]].sort_values('exec_cycles')['dp_mp_sp_pp_sharded'].unique().tolist()
+    max_selection = 4
+    default_configs = configs_sorted[:min(max_selection, len(configs_sorted))]
+    
+    # Multiselect with maximum 8 options
+    selected_configs = st.multiselect(
+        "Select parallelism strategies to compare (max 8):",
+        options=configs_sorted,
+        default=default_configs,
+        max_selections=max_selection
+    )
+    
+    if not selected_configs:
+        st.warning("Please select at least one parallelism strategy.")
+        return None, selected_files, merged_df[merged_df["topology"] == counts_df["Topology"][0]].sort_values('exec_cycles')
 
     fig = get_compare_topology_per_range(
-        merged_df, n_start, n_end, configs_sorted, selected_files
+        merged_df, selected_configs, selected_files
     )
 
     return fig, selected_files, merged_df[merged_df["topology"] == counts_df["Topology"][0]].sort_values('exec_cycles')

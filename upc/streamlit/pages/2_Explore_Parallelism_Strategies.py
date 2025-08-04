@@ -4,6 +4,9 @@ import sections.trace_picker as picker
 import helper.bulk_analysis_helper as helper
 from tabs.bulk_analysis_tab_dim_red_clus_ml import render as render_tab1
 from tabs.system_throughput import render_system_throughput as render_tab2
+from scipy.stats import gmean
+import matplotlib.pyplot as plt
+import numpy as np
 
 st.set_page_config(layout="wide")
 st.header("Explore Parallelism Strategies", help=(
@@ -38,7 +41,7 @@ df = picker.get_all_parallelism_strategies_data(selected_model, selected_config,
 
 df_sorted = df.sort_values(by="total", ascending=True)
 figs = picker.plot_experiments_bound_breakdown(
-    df.sort_values(by="total", ascending=True), chunk_size=32
+    df.sort_values(by="total", ascending=True), chunk_size=50
 )
 for fig in figs:
     st.pyplot(fig)
@@ -63,7 +66,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-tabs = st.tabs([f"**{name}**" for name in ["Visualization & ML Analysis", "Detailed Trace Visualization", "System Throughput"]])
+tabs = st.tabs([f"**{name}**" for name in ["Visualization & ML Analysis", "Detailed Trace Visualization", "System Throughput", "ِCommunication Analysis"]])
 
 with tabs[0]:
     st.subheader(
@@ -84,8 +87,9 @@ with tabs[0]:
         selected_fsdp = st.checkbox("Use FSDP?", value=True)
         local_min_df_all_axis = helper.find_local_minima_all_axis(
             df[df["fsdp"] == selected_fsdp], "dp", "tp", "sp", "pp", value_col="total"
-        )
-        st.write(local_min_df_all_axis)
+        )        
+        cols_to_show = ["dp", "tp", "sp", "pp", "fsdp", "mem_percent", "comp_percent", "comm_percent"]
+        st.write(local_min_df_all_axis[cols_to_show])
         global_min_idx = local_min_df_all_axis["total"].idxmin()
 
         slider_dim1, slider_value1 = helper.select_dim(
@@ -120,7 +124,7 @@ with tabs[0]:
         ]
 
         st.subheader("Data Slice:", help=("View the data slice based on selected dimensions."))
-        st.write(filtered_df.sort_values("total"))
+        st.write(filtered_df.sort_values("total")[cols_to_show])
 
     with col1:
         if filtered_df.empty:
@@ -159,7 +163,7 @@ with tabs[0]:
                 )
             )
             if not local_min_df.empty:
-                st.dataframe(local_min_df.sort_values("total"))
+                st.dataframe(local_min_df.sort_values("total")[cols_to_show])
             else:
                 st.write("No local minima found for the selected configuration.")
 
@@ -171,7 +175,7 @@ with tabs[0]:
             "- Useful for identifying optimal configurations."
         )
     )
-    st.dataframe(local_min_df_all_axis.sort_values("total"))
+    st.dataframe(local_min_df_all_axis.sort_values("total")[cols_to_show])
 
     st.markdown("---")
 
@@ -197,3 +201,30 @@ with tabs[1]:
 
 with tabs[2]:
     render_tab2(df)
+
+with tabs[3]:
+
+    comm_mean, comm_std, comm_gmean = (
+        df["comm_percent"].mean(),
+        df["comm_percent"].std(),
+        gmean(df["comm_percent"][df["comm_percent"] > 0]),
+    )
+
+    sorted_comm = np.sort(df["comm_percent"].values)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.plot(sorted_comm, marker="o", linestyle="-", color="blue")
+    ax.set_xlabel("Number of Experiments", fontsize=25)
+    ax.set_ylabel("Exposed\nComm. Time\n(%)", fontsize=25)
+    ax.set_title(
+        f"Sorted - Exposed Communication Percentage per Experiment\n(μ={comm_mean:.2f}%, σ={comm_std:.2f}%, gμ={comm_gmean:.2f}%)",
+        fontsize=25,
+    )
+    ax.grid(True)
+
+    ax.tick_params(axis="both", which="major", labelsize=24)
+    ax.tick_params(axis="both", which="minor", labelsize=24)
+
+    fig.subplots_adjust(left=0.13, right=0.98, top=0.80, bottom=0.22)
+    #fig.savefig("comm_percentag.svg", format="svg", bbox_inches="tight")
+    st.pyplot(fig)

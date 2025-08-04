@@ -1,6 +1,5 @@
 import glob
 import os
-from pathlib import Path
 import pandas as pd
 import regex as re
 import matplotlib.pyplot as plt
@@ -9,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import numpy as np
-
+import helper.constants as constants
 
 def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config, is_3d=False):
     ###st.title("Execution vs Communication Cycles Analysis")
@@ -42,15 +41,20 @@ def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config
                     legend_title='DP, TP, SP, PP, FSDP',
                 )
             else:
-                summary_fig = get_total_cycles_plot(
+                summary_fig = get_total_cycles_split_by_intra(
                     combined_df,
-                    title=f"Total Cycles vs Bandwidth for Different Parallelism Strategies - Network Config: {selected_config}, #NPU=DP*TP*SP*PP",
+                    title=(
+                        "Total Cycles vs Bandwidth for Different Parallelism Strategies\n"
+                        f"Network Config: {selected_config}, #NPU=DP*TP*SP*PP"
+                    ),
                     group_by="strategy",
                     legend_title='DP, TP, SP, PP, FSDP',
                 )
-            st.plotly_chart(
-                summary_fig, use_container_width=True, key=f"plot_{selected_config}"
-            )
+            if isinstance(summary_fig, list):
+                for i, fig in enumerate(summary_fig):
+                    st.plotly_chart(fig, use_container_width=True, key=f"plot_{selected_config}_{i}")
+            else:
+                st.plotly_chart(summary_fig, use_container_width=True, key=f"plot_{selected_config}")
 
             # st.subheader("Raw Combined Data")
             # st.dataframe(combined_df_sorted, key=f"df_{selected_config}")
@@ -155,12 +159,13 @@ def get_total_cycles_plot(
     y_label="Total Cycles",
     x_label="Intra, Inter - Bandwidth (GB/s)",
 ):
+    # Copy and transform the DataFrame
     all_data = df.copy()
-
     all_data["bw_label"] = all_data["bw_label"].str.split("_").apply(
         lambda parts: f"Intra: {parts[0]}, Inter: {parts[1]}"
     )
 
+    # Define color mapping
     unique_groups = all_data[group_by].unique()
     color_sequence = pc.qualitative.Set2
     color_map = {
@@ -168,6 +173,7 @@ def get_total_cycles_plot(
         for i, group in enumerate(unique_groups)
     }
 
+    # Create the main line plot
     fig = px.line(
         all_data,
         x="bw_label",
@@ -183,6 +189,7 @@ def get_total_cycles_plot(
         color_discrete_map=color_map,
     )
 
+    # Add markers for minimum total_cycles per group
     min_points = all_data.loc[
         all_data.groupby(group_by)["total_cycles"].idxmin()
     ].reset_index(drop=True)
@@ -198,28 +205,149 @@ def get_total_cycles_plot(
                 mode="markers+text",
                 marker=dict(size=12, color=color, symbol="diamond"),
                 name=f"Best: {group}",
-                text=[f"{row['total_cycles']:.0f}"],
                 textposition="top center",
+                textfont=dict(color='black', size=constants.TITLE_SIZE),
                 showlegend=False,
             )
         )
 
-    # Layout updates
+    # Update layout with global and specific font settings
     fig.update_layout(
-        xaxis_tickangle=-45,
+        font=dict(
+            size=constants.LABEL_SIZE,
+            color='black'
+        ),
+        xaxis_tickangle=-25,
         height=600,
+        width=1000,
+        margin=dict(l=20, r=20),
         hovermode="x unified",
-        title_font=dict(size=18),
-        legend_font=dict(size=18),
+        title_font=dict(size=constants.TITLE_SIZE, color="black"),
+        legend_font=dict(size=constants.LEGEND_SIZE, color="black"),
+        legend_title=dict(font=dict(size=constants.LEGEND_SIZE, color="black")),
         xaxis=dict(
-            title_font=dict(size=18),
-            tickfont=dict(size=14),
+            title_font=dict(size=constants.LABEL_SIZE, color="black"),
+            tickfont=dict(size=constants.LABEL_SIZE, color="black"),
+            showgrid=True,
+            gridcolor='lightgray',
+            gridwidth=3,
+            griddash='dot'
         ),
         yaxis=dict(
-            title_font=dict(size=18),
-            tickfont=dict(size=14),
+            title_font=dict(size=constants.LABEL_SIZE, color="black"),
+            tickfont=dict(size=constants.LABEL_SIZE, color="black"),
         ),
     )
+
+    fig.update_traces(line=dict(width=4), textfont=dict(color='black'))     
+
+    return fig
+
+def get_total_cycles_split_by_intra(
+    df,
+    title,
+    group_by="strategy",
+    legend_title='',
+    y_label="Total Cycles",
+):
+
+    # Copy and parse bandwidths
+    all_data = df.copy()
+    all_data[["intra", "inter"]] = all_data["bw_label"].str.split("_", expand=True).astype(int)
+
+    # Find the minimum value across all data for highlighting
+    min_value = all_data["total_cycles"].min()
+    all_data['is_min'] = all_data["total_cycles"] == min_value
+
+    # Define color mapping
+    unique_groups = all_data[group_by].unique()
+    color_sequence = pc.qualitative.Set2
+    color_map = {
+        group: color_sequence[i % len(color_sequence)]
+        for i, group in enumerate(unique_groups)
+    }
+
+    # Use plotly express to facet by 'intra'
+    fig = px.line(
+        all_data,
+        x="inter",
+        y="total_cycles",
+        color=group_by,
+        facet_col="intra",
+        facet_col_wrap=2,
+        markers=True,
+        title=title,
+        labels={
+            "inter": "Inter BW (GB/s)",
+            "total_cycles": y_label,
+            group_by: legend_title,
+            "intra": "Intra BW (GB/s)",
+        },
+        color_discrete_map=color_map,
+    )
+
+    # === NON-BOLD TITLE ===
+    # Convert \n to <br> for HTML line breaks
+    html_title = title.replace('\n', '<br>')
+    fig.update_layout(
+        title={
+            "text": f"<span style='font-weight:normal'>{html_title}</span>",
+            "x": 0.5,
+            "xanchor": "center"
+        },
+        font=dict(size=constants.FONT_SIZE, color="black"),
+        height=800,
+        width=1200,
+        margin=dict(l=40, r=40, t=120, b=40),  # Increased top margin from 80 to 120
+        title_font=dict(size=constants.FONT_SIZE, color="black", family="Arial"),
+        legend_font=dict(size=constants.FONT_SIZE, color="black"),
+        legend_title=dict(font=dict(size=constants.FONT_SIZE, color="black")),
+    )
+    
+    # Add extra spacing between title and facet labels
+    fig.for_each_annotation(lambda a: a.update(y=a.y - 0.15))
+    # Highlight minimum value with a diamond shape, others as circles, for each line
+    for trace in fig.data:
+        group_val = trace.name
+        group_min = all_data[all_data[group_by] == group_val]["total_cycles"].min()
+        symbols = []
+        sizes = []
+        for y_val in trace.y:
+            if y_val == group_min:
+                symbols.append('diamond')
+                sizes.append(14)
+            else:
+                symbols.append('circle')
+                sizes.append(10)
+        trace.marker.symbol = symbols
+        trace.marker.size = sizes
+
+    # Style axes and lines
+    fig.update_traces(line=dict(width=6))
+
+    unique_inter_values = sorted(all_data["inter"].unique())
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor='lightgray',
+        griddash='dot',
+        title_font=dict(size=constants.FONT_SIZE, color='black'),
+        tickfont=dict(size=constants.FONT_SIZE, color='black'),
+        tickmode='array',
+        tickvals=unique_inter_values,
+        ticktext=[str(val) for val in unique_inter_values]
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor='lightgray',
+        griddash='dot',
+        title_font=dict(size=constants.FONT_SIZE, color='black'),
+        tickfont=dict(size=constants.FONT_SIZE, color='black')
+    )
+
+    filename = "bw_study.svg"  
+    
+    os.makedirs("plots", exist_ok=True)
+    fig.write_image(f"{filename}")
 
     return fig
 
@@ -317,14 +445,18 @@ def show_res_across_configs(parallelism_strategy, res_dirs_configs, is_3d=False)
                 #legend_title='Topology',
             )
         else:
-            fig = get_total_cycles_plot(
+            fig = get_total_cycles_split_by_intra(
                 combined_df,
                 title=f"Total Cycles vs Bandwidth for Different Network Configs - Parallelism Strategy DP:{dp}, TP:{tp}, SP{sp}, PP:{pp}, FSDP:{fsdp} and #NPUs = {npu_count}",
                 group_by="config",
                 #legend_title='Topology', 
             )
 
-        st.plotly_chart(fig, use_container_width=True, key=f"plot_{parallelism_strategy}")
+        if isinstance(fig, list):
+            for i, f in enumerate(fig):
+                st.plotly_chart(f, use_container_width=True, key=f"plot_{parallelism_strategy}_{i}")
+        else:
+            st.plotly_chart(fig, use_container_width=True, key=f"plot_{parallelism_strategy}")
     else:
         st.warning(f"No data found for the parallelsim strategy {parallelism_strategy}")
 

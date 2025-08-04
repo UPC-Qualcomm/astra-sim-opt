@@ -5,6 +5,7 @@ import pandas as pd
 import math
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import helper.constants as constants
 
 @st.cache_data
 def load_batch_data(selected_model, selected_config, batch_size_dir="batch_study"):
@@ -27,51 +28,64 @@ def filter_and_prepare_df(df, selected_strategies, selected_batch_sizes):
 
 @st.cache_data
 def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, selected_config):
-    labels = ['Overlap', 'Exposed Comm', 'Exposed Comp']
-    colors = ['blue', 'lightcoral', 'lightgreen']
+    labels = ['Overlap', 'Exposed Comp', 'Exposed Comm']  # Flipped order
+    colors = ['lightblue', 'lightgreen', 'lightcoral']         # Flipped colors
     strategies = df['strategy'].unique()
-    cols = 3
+    cols = 4
     rows = math.ceil(len(strategies) / cols)
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 5))
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 8, rows * 6))
     axes = axes.flatten()
 
     for idx, strategy in enumerate(strategies):
         ax = axes[idx]
         strategy_df = df[df['strategy'] == strategy].set_index('batch').reindex(selected_batch_sizes)
         overlaps = strategy_df['overlap'].fillna(0).values
-        comms = strategy_df['exposed_comm_cycles'].fillna(0).values
-        comps = strategy_df['exposed_comp_cycles'].fillna(0).values
+        comps = strategy_df['exposed_comp_cycles'].fillna(0).values      # Flipped
+        comms = strategy_df['exposed_comm_cycles'].fillna(0).values      # Flipped
         totals = strategy_df['exec_cycles'].fillna(0).values
 
         x = range(len(selected_batch_sizes))
         bar_width = 0.6
-        bottoms_comm = overlaps
-        bottoms_comp = overlaps + comms
+        bottoms_comp = overlaps
+        bottoms_comm = overlaps + comps
 
         ax.bar(x, overlaps, bar_width, label=labels[0], color=colors[0])
-        ax.bar(x, comms, bar_width, bottom=bottoms_comm, label=labels[1], color=colors[1])
-        ax.bar(x, comps, bar_width, bottom=bottoms_comp, label=labels[2], color=colors[2])
+        ax.bar(x, comps, bar_width, bottom=bottoms_comp, label=labels[1], color=colors[1])   # Flipped
+        ax.bar(x, comms, bar_width, bottom=bottoms_comm, label=labels[2], color=colors[2])   # Flipped
 
-        for i in range(len(x)):
-            total = totals[i]
-            if total == 0:
-                continue
-            ax.text(x[i], overlaps[i]/2, f"{overlaps[i]/total*100:.1f}%", ha='center', va='center', color='white', fontsize=10)
-            ax.text(x[i], bottoms_comm[i] + comms[i]/2, f"{comms[i]/total*100:.1f}%", ha='center', va='center', color='black', fontsize=10)
-            ax.text(x[i], bottoms_comp[i] + comps[i]/2, f"{comps[i]/total*100:.1f}%", ha='center', va='center', color='black', fontsize=10)
-
+        startegy_label = strategy.split('_')
         ax.set_xticks(x)
-        ax.set_xticklabels(selected_batch_sizes)
-        ax.set_xlabel("Batch Size")
-        ax.set_ylabel("Cycles")
-        ax.set_title(f"Strategy: {strategy}")
-        ax.legend()
+        ax.set_xticklabels(selected_batch_sizes, fontsize=constants.XTICK_SIZE)
+        ax.set_xlabel("Batch Size", fontsize=constants.LABEL_SIZE)
+        ax.set_title(f"DP:{startegy_label[0]}, TP:{startegy_label[1]}, SP:{startegy_label[2]}\nPP:{startegy_label[3]}, FSDP:{startegy_label[4]}", fontsize=constants.TITLE_SIZE, pad=20)  # Add padding to title
 
+        if idx == 0:
+            ax.set_ylabel("Cycles", fontsize=constants.LABEL_SIZE)
+            ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE)
+            ax.yaxis.get_offset_text().set_fontsize(constants.FONT_SIZE)
+        else:
+            ax.set_ylabel("")
+            ax.tick_params(axis='y', labelleft=False)
+            ax.yaxis.get_offset_text().set_fontsize(constants.FONT_SIZE)
+    # Remove unused subplots
     for j in range(idx + 1, len(axes)):
         fig.delaxes(axes[j])
 
-    fig.suptitle(f"Simulation Time Breakdown\nModel: {selected_model} | Topology: {selected_config}", fontsize=16)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    # Add one global legend in a row (horizontal)
+    handles, legend_labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles, legend_labels,
+        loc='upper center',
+        ncol=len(labels),
+        fontsize=constants.LEGEND_SIZE,
+        frameon=False
+    )
+
+    plt.tight_layout(rect=[0, 0.05, 1, 0.95])  # Fix: Add tight_layout to prevent overlap
+    #filename = "batch_study.svg"
+    #plt.savefig(filename, format="svg", transparent=True, bbox_inches='tight', 
+    #            pad_inches=0.3, facecolor='white', dpi=300)
+
     st.pyplot(fig)
 
 @st.cache_data
@@ -213,12 +227,12 @@ picker.set_session_peak_perf_bw(selected_config)
 
 df = load_batch_data(selected_model, selected_config, BATCH_SIZE_DIR)
 parallelism_strategies, sorted_batches = get_unique_strategies_and_batches(df)
-
+max_select = 8
 selected_strategies = st.multiselect(
     "Select Strategies (dp_tp_sp_pp_fsdp) [max 20]", 
     parallelism_strategies, 
-    default=parallelism_strategies[:20], 
-    max_selections=20
+    default=parallelism_strategies[:max_select], 
+    max_selections=max_select
 )
 
 exp_opt = st.radio("Select Exploration Mode", ["Saved Data", "Generate New Data"], key="exploration_mode")

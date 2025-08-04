@@ -30,4 +30,4 @@ cd ./extern/graph_frontend/chakra/
 
 pip3 install .
 
-pip3 install streamlit==1.45.0
+pip3 install -r ./requirements.txt

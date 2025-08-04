@@ -12,7 +12,7 @@ def plot_sim_results(csv_file):
     )
 
     df = df.sort_values(by="sys_id", ascending=True)
-    chunk_size = 100
+    chunk_size = 32
     num_chunks = (len(df) + chunk_size - 1) // chunk_size
 
     # Overall averages (absolute cycles)
