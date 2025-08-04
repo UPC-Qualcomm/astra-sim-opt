@@ -122,16 +122,16 @@ def _show_3d_roofline(df, npu, time_window):
 def _show_2d_roofline(df, npu):
     st.subheader("Visualize 2D roofline model.")
     
-    #buf = io.BytesIO()
+    buf = io.BytesIO()
     rv.get_2d_roofline_plot_normal(
         df,
         npu,
         perf=st.session_state.peak_perf,
         bw=st.session_state.peak_bw,
-    )#.save(buf, format='png')
-    #buf.seek(0)
-    #png_bytes = buf.read()
-    #st.image(png_bytes)
+    ).save(buf, format='png')
+    buf.seek(0)
+    png_bytes = buf.read()
+    st.image(png_bytes)
     
 
 @st.cache_data
@@ -217,13 +217,13 @@ def _show_timestep_plot_and_table(df, timesteps):
     df = df[df["issue_tick"] == timesteps[st.session_state.timestep_idx]]
     col1, col2 = st.columns([2, 1])
     with col1:
-        #buf = io.BytesIO()
+        buf = io.BytesIO()
         rv.get_2d_roofline_plot_timestep(
                 df, perf=st.session_state.peak_perf, bw=st.session_state.peak_bw
-            )#.save(buf, format='png')  # Requires vl-convert or altair_saver
-        #buf.seek(0)
-        #png_bytes = buf.read()
-        #st.image(png_bytes)
+            ).save(buf, format='png')  # Requires vl-convert or altair_saver
+        buf.seek(0)
+        png_bytes = buf.read()
+        st.image(png_bytes)
        
     with col2:
         st.write("ℹ️ Points at this timestep:")
