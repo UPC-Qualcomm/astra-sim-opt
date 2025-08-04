@@ -11,6 +11,8 @@ pip3 install protobuf==5.29.0
 
 pip3 install graphviz pydot sympy tqdm seaborn matplotlib
 
+pip3 install scikit-learn altair scipy umap xgboost intervaltree ipykernel
+
 cd ..
 
 ASTRA_SIM=$(realpath ./astra-sim)
@@ -21,8 +23,10 @@ git submodule update --init --recursive
 
 ./build/astra_analytical/build.sh
 
-ASTRA_SIM_BIN=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware
-echo "export ASTRA_SIM_BIN=${ASTRA_SIM_BIN}" >> "${HOME}/.bashrc"
+ASTRA_SIM_BIN_AWARE=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware
+echo "export ASTRA_SIM_BIN_AWARE=${ASTRA_SIM_BIN_AWARE}" >> "${HOME}/.bashrc"
+ASTRA_SIM_BIN_UNAWARE=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware
+echo "export ASTRA_SIM_BIN_UNAWARE=${ASTRA_SIM_BIN_UNAWARE}" >> "${HOME}/.bashrc"
 
 ./build/astra_ns3/build.sh -c
 

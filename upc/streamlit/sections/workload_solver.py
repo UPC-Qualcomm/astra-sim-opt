@@ -18,17 +18,16 @@ def generate_workload_for_solver(params):
     dp = params['dp']
     mp = params['tp'] # In the new format, mp is tp
     ssp = params['sp']
-    pp = params['pp']
+    pp = params['pp']    
     
-    # sharding is not fully implemented in the solver yet, defaulting to False
-    sharded = False
+    sharding = params['sharding']
 
     # Construct the command to run the workload generator
     cmd = (
         f"python {workload_generator_path} "
         f"--output_dir {temp_dir} "
-        f"--output_name '{dp}_{mp}_{ssp}_{pp}_{1 if sharded else 0}.%d.et' "
-        f"--comm_group '{dp}_{mp}_{ssp}_{pp}_{1 if sharded else 0}.json' "
+        f"--output_name '{dp}_{mp}_{ssp}_{pp}_{sharding}.%d.et' "
+        f"--comm_group '{dp}_{mp}_{ssp}_{pp}_{sharding}.json' "
         f"--dp {dp} "
         f"--tp {mp} "
         f"--sp {ssp} "
@@ -37,11 +36,11 @@ def generate_workload_for_solver(params):
         f"--dout {params['dout']} "
         f"--dmodel {params['dmodel']} "
         f"--dff {params['dff']} "
-        f"--batch {params['batch']} "
+        f"--batch [{params['batch']}] "
         f"--seq {params['seq']} "
         f"--head {params['head']} "
         f"--num_stacks {params['num_stacks']} "
-        f"--weight_sharded {sharded} "
+        f"--weight_sharded {True if sharding else False} "
         f"--chakra_schema_version v0.0.4"
     )
 

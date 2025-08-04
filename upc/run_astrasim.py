@@ -160,12 +160,24 @@ def list_workloads(root):
     return filtered
 
 
-def run_astrasim(workload_path, system, network, memory, output_dir, network_log, suffix=None):
+def run_astrasim(workload_path, system, network, memory, output_dir, network_log, sim_type, suffix=None):
     #astrasim_root = os.environ.get("ASTRA_SIM")
     #if astrasim_root is None:
     #    raise RuntimeError("ASTRA_SIM is not set.")
 
-    astrasim_bin = os.environ.get("ASTRA_SIM_BIN")
+    if sim_type == "analytical_unaware":
+        astrasim_bin = os.environ.get("ASTRA_SIM_BIN_UNAWARE")
+    elif sim_type == "analytical_aware":
+        astrasim_bin = os.environ.get("ASTRA_SIM_BIN_AWARE")
+    else:
+        raise ValueError(f"Unknown sim_type: {sim_type}")
+
+    if astrasim_bin is None:
+        if sim_type == "analytical_unaware":
+            raise RuntimeError("ASTRA_SIM_BIN_UNAWARE is not set.")
+        else:
+            raise RuntimeError("ASTRA_SIM_BIN_AWARE is not set.")
+
     file_dir = os.path.split(os.path.abspath(__file__))[0]
 
     system = os.path.join(file_dir, system)
@@ -232,6 +244,13 @@ if __name__ == "__main__":
         help="The folder containing the network logs",
         required=True,
     )
+    parser.add_argument(
+        "--sim_type",
+        type=str,
+        default="analytical_unaware",
+        choices=["analytical_unaware", "analytical_aware"],
+        help="The type of simulator to run.",
+    )
     args = parser.parse_args()
 
     design_space = list_workloads(str(args.workload_dir))
@@ -242,6 +261,7 @@ if __name__ == "__main__":
         memory=args.memory,
         output_dir=args.output_dir,
         network_log=args.network_log,
+        sim_type=args.sim_type,
     )
 
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.70)) as pool:
