@@ -22,6 +22,7 @@ class AstraNetworkAPI {
                          int type,
                          int dst,
                          int tag,
+                         uint64_t workload_node_id,
                          sim_request* request,
                          void (*msg_handler)(void* fun_arg),
                          void* fun_arg) = 0;
@@ -80,8 +81,13 @@ class AstraNetworkAPI {
     virtual void init_logger(std::string str, bool enable_network_logger) {
         return;
     }
+    static bool get_network_enabled_log() {
+        return network_enabled_log;
+    }
     int rank;
     bool enable_network_logger;
+    static bool network_enabled_log;
+    
 };
 
 }  // namespace AstraSim

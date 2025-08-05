@@ -91,6 +91,9 @@ int main(int argc, char* argv[]) {
     // Initiate ASTRA-sim simulation
     for (int i = 0; i < npus_count; i++) {
         systems[i]->workload->fire();
+        if (systems[i]->network_logger_enabled) {
+            AstraNetworkAPI::network_enabled_log = true;
+        }
     }
 
     // run simulation

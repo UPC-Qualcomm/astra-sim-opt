@@ -20,12 +20,14 @@ class StreamBaseline : public BaseStream {
     StreamBaseline(Sys* owner,
                    DataSet* dataset,
                    int stream_id,
+                   uint64_t workload_node_id,
                    std::list<CollectivePhase> phases_to_go,
                    int priority);
 
     void init();
     void call(EventType event, CallData* data);
     void consume(RecvPacketEventHandlerData* message);
+    uint64_t workload_node_id;
 };
 
 }  // namespace AstraSim

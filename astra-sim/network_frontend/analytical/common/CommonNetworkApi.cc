@@ -20,6 +20,8 @@ int CommonNetworkApi::dims_count = -1;
 
 std::vector<Bandwidth> CommonNetworkApi::bandwidth_per_dim = {};
 
+bool AstraNetworkAPI::network_enabled_log = false;
+
 void CommonNetworkApi::set_event_queue(
     std::shared_ptr<EventQueue> event_queue_ptr) noexcept {
     assert(event_queue_ptr != nullptr);

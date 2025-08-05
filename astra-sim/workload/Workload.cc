@@ -325,25 +325,25 @@ void Workload::issue_coll_comm(
 
     if (comm_type == ChakraCollectiveCommType::ALL_REDUCE) {
         DataSet* fp = sys->generate_all_reduce(comm_size, involved_dims,
-                                               comm_group, comm_priority);
+                                               comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::ALL_TO_ALL) {
         DataSet* fp = sys->generate_all_to_all(comm_size, involved_dims,
-                                               comm_group, comm_priority);
+                                               comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::ALL_GATHER) {
         DataSet* fp = sys->generate_all_gather(comm_size, involved_dims,
-                                               comm_group, comm_priority);
+                                               comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::REDUCE_SCATTER) {
         DataSet* fp = sys->generate_reduce_scatter(comm_size, involved_dims,
-                                                   comm_group, comm_priority);
+                                                   comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
@@ -388,8 +388,8 @@ void Workload::issue_send_comm(
     sehd->wlhd = new WorkloadLayerHandlerData;
     sehd->wlhd->node_id = node->id();
     sehd->event = EventType::PacketSent;
-    sys->front_end_sim_send(0, Sys::dummy_data, size, UINT8, dst, tag, &snd_req,
-                            Sys::FrontEndSendRecvType::NATIVE,
+    sys->front_end_sim_send(0, Sys::dummy_data, size, UINT8, dst, tag, node->id(),
+                            &snd_req, Sys::FrontEndSendRecvType::NATIVE, 
                             &Sys::handleEvent, sehd);
 }
 

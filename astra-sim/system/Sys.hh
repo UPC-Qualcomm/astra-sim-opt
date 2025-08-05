@@ -122,21 +122,25 @@ class Sys : public Callable {
     // Collective Communication Primitives
     // --------------------------------------
     DataSet* generate_all_reduce(uint64_t size,
-                                 std::vector<bool> involved_dimensions,
-                                 CommunicatorGroup* communicator_group,
-                                 int explicit_priority);
+                             std::vector<bool> involved_dimensions,
+                             CommunicatorGroup* communicator_group,
+                             int explicit_priority,
+                             uint64_t node_id = 0);
     DataSet* generate_all_to_all(uint64_t size,
-                                 std::vector<bool> involved_dimensions,
-                                 CommunicatorGroup* communicator_group,
-                                 int explicit_priority);
+                             std::vector<bool> involved_dimensions,
+                             CommunicatorGroup* communicator_group,
+                             int explicit_priority,
+                             uint64_t node_id = 0);
     DataSet* generate_all_gather(uint64_t size,
+                             std::vector<bool> involved_dimensions,
+                             CommunicatorGroup* communicator_group,
+                             int explicit_priority,
+                             uint64_t node_id = 0);
+    DataSet* generate_reduce_scatter(uint64_t size,
                                  std::vector<bool> involved_dimensions,
                                  CommunicatorGroup* communicator_group,
-                                 int explicit_priority);
-    DataSet* generate_reduce_scatter(uint64_t size,
-                                     std::vector<bool> involved_dimensions,
-                                     CommunicatorGroup* communicator_group,
-                                     int explicit_priority);
+                                 int explicit_priority,
+                                 uint64_t node_id = 0);
     DataSet* generate_collective(
         uint64_t size,
         LogicalTopology* topology,
@@ -144,7 +148,8 @@ class Sys : public Callable {
         std::vector<bool> dimensions_involved,
         ComType collective_type,
         int explicit_priority,
-        CommunicatorGroup* communicator_group);
+        CommunicatorGroup* communicator_group,
+        uint64_t node_id = 0);
     CollectivePhase generate_collective_phase(ComType collective_type,
                                               BasicLogicalTopology* topology,
                                               uint64_t data_size,
@@ -187,6 +192,7 @@ class Sys : public Callable {
                            int type,
                            int dst,
                            int tag,
+                           uint64_t workload_node_id,
                            sim_request* request,
                            FrontEndSendRecvType send_type,
                            void (*msg_handler)(void* fun_arg),
@@ -209,6 +215,7 @@ class Sys : public Callable {
                             int type,
                             int dst,
                             int tag,
+                            uint64_t workload_node_id,
                             sim_request* request,
                             void (*msg_handler)(void* fun_arg),
                             void* fun_arg);
@@ -229,6 +236,7 @@ class Sys : public Callable {
                  int type,
                  int dst,
                  int tag,
+                 uint64_t workload_node_id,
                  sim_request* request,
                  void (*msg_handler)(void* fun_arg),
                  void* fun_arg);
@@ -324,6 +332,7 @@ class Sys : public Callable {
 
     // statistics
     bool trace_enabled;
+    bool network_logger_enabled;
 
     // skip simulation for all nodes and use current duration
     bool replay_only;
