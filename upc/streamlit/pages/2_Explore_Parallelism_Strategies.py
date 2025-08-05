@@ -9,6 +9,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 st.set_page_config(layout="wide")
+st.markdown("""
+    <style>
+        .reportview-container {
+            margin-top: -2em;
+        }
+        #MainMenu {visibility: hidden;}
+        .stAppDeployButton {display:none;}
+    </style>
+""", unsafe_allow_html=True)
 st.header("Explore Parallelism Strategies", help=(
     "Analyze how different parallelism strategies affect simulation time. \n"
     "- Select a model and configuration. \n"

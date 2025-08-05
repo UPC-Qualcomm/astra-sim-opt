@@ -75,7 +75,8 @@ def compute_summary_stats(merged_df, selected_files):
     return pd.DataFrame(summary_stats)
 
 @st.cache_data
-def get_summary_plot(summary_df, figsize=(10, 3)):
+def get_summary_plot(summary_df, figsize=(10, 6)):
+    font_increment = -10  # Adjust this value to increase font size
     summary_df['avg_overlap (s)'] = summary_df['avg_exec (s)'] - summary_df['avg_exposed_comm (s)'] - summary_df['avg_exposed_comp (s)']
     summary_df = summary_df.sort_values('topology')
 
@@ -103,20 +104,31 @@ def get_summary_plot(summary_df, figsize=(10, 3)):
                     f"{percent:.2f}%",
                     ha='center',
                     va='center',
-                    fontsize=constants.IN_PLOT_LABEL_SIZE,
+                    fontsize=constants.IN_PLOT_LABEL_SIZE+font_increment,
                     color='black'
                 )
 
         bottom = [i + j for i, j in zip(bottom, values)]
 
-    ax.set_xlabel('Topology')
-    ax.set_ylabel('Average Time (s)')
-    ax.set_title('Time Breakdown by Topology - Averaged Across Various Parallelism Strategies')
+    ax.set_xlabel('Topology', fontsize=constants.LABEL_SIZE+font_increment)
+    ax.set_ylabel('Average Time (s)', fontsize=constants.LABEL_SIZE+font_increment)
+    ax.set_title(
+        'Time Breakdown by Topology - Averaged Across Various Parallelism Strategies',
+        fontsize=constants.TITLE_SIZE+font_increment
+    )
 
     # Move legend outside right
-    ax.legend(title='Breakdown Components', bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    ax.legend(
+        title='Breakdown Components',
+        bbox_to_anchor=(1., 1),
+        loc='upper left',
+        borderaxespad=0.,
+        fontsize=constants.LEGEND_SIZE+font_increment,
+        title_fontsize=constants.LEGEND_SIZE+font_increment
+    )
 
-    ax.tick_params(axis='x', labelrotation=45)
+    ax.tick_params(axis='x', labelrotation=45, labelsize=constants.XTICK_SIZE+font_increment)
+    ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE+font_increment)
     #ax.grid(axis='y', linestyle='--', alpha=0.7)
     fig.tight_layout()
 

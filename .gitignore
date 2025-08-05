@@ -44,5 +44,3 @@ upc/streamlit/temp
 
 our_examples/
 stg_generated_examples/
-
-**/*.svg

@@ -7,7 +7,15 @@ import helper.bw_run_sim as bw_run
 import sections.bw_show_res as bw_show
 
 st.set_page_config(layout="wide")
-
+st.markdown("""
+    <style>
+        .reportview-container {
+            margin-top: -2em;
+        }
+        #MainMenu {visibility: hidden;}
+        .stAppDeployButton {display:none;}
+    </style>
+""", unsafe_allow_html=True)
 st.subheader(
     "Exploration: Interconnect Network Topology",
     help=(

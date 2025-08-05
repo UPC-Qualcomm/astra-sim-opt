@@ -1,0 +1,232 @@
+import streamlit as st
+import os
+
+st.set_page_config(
+    page_title="DAI",
+    layout="wide",
+)
+
+# Hide the the streamlit menu, deploy button and footer
+st.markdown("""
+    <style>
+        .reportview-container {
+            margin-top: -2em;
+        }
+        #MainMenu {visibility: hidden;}
+        .stAppDeployButton {display:none;}
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown(
+    """
+    <h1 style='text-align: center; color: #4F8BF9; font-size: 1.75em;'>
+        Welcome to <b>DAI</b>:<br>
+        <span style='font-size: 1.1em; color: #222;'>A Simulation Driven Recommendation Framework for Exploring Parallelism Strategies and Optimizing Distributed AI Workloads Performance.</span>
+    </h1>
+    <hr style='border: 1px solid #4F8BF9; margin-top: 2em; margin-bottom: 2em;'>
+    """,
+    unsafe_allow_html=True
+)
+
+st.markdown("""
+<div style='background-color: #fde8e8; border-left: 4px solid #F94F4F; padding: 1em; margin: 1.5em 0; border-radius: 4px;'>
+    <p style='margin: 0; color: #822c2c; font-size: 0.95em;'>
+        <strong>Note:</strong> DAI is a work in progress. This version has limited many of the functionalities for the demo purposes.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+## Overview
+
+**DAI (Distributed AI Workload Optimizer)** is a comprehensive simulation-driven framework built on top of the [Symbolic Tensor Graph (STG)](https://github.com/astra-sim/symbolic_tensor_graph) and [ASTRA-sim 2.0](https://github.com/astra-sim/astra-sim) that enables researchers to systematically explore, analyze, and optimize distributed deep learning workloads. The framework provides an intuitive web-based interface for investigating the complex interplay between parallelism strategies, hardware configurations, and network topologies in large-scale AI training scenarios.
+""")
+
+
+st.markdown("""
+<div style='text-align: center; margin: 2em 0;'>
+    <h3 style='color: #4F8BF9; margin-bottom: 1em;'>DAI Framework Architecture</h3>
+</div>
+""", unsafe_allow_html=True)
+
+
+col1, col2 = st.columns([1, 1])
+
+with col1:
+
+    svg_path = os.path.join(os.path.dirname(__file__), "images/overview.svg")
+    if os.path.exists(svg_path):
+        st.image(svg_path, caption="Complete DAI workflow showing the integration of workload generation, simulation, and analysis components", width=600)
+    else:
+
+        alt_svg_path = "images/overview.svg"
+        if os.path.exists(alt_svg_path):
+            st.image(alt_svg_path, caption="Complete DAI workflow showing the integration of workload generation, simulation, and analysis components", width=600)
+        else:
+
+            st.markdown("""
+            <div style='background-color: #f0f2f6; border: 2px dashed #4F8BF9; padding: 3em; text-align: center; margin: 2em 0; border-radius: 8px; max-width: 600px; margin-left: auto; margin-right: auto;'>
+                <h4 style='color: #4F8BF9; margin-bottom: 0.5em;'>DAI Framework Architecture Diagram</h4>
+                <p style='color: #666; margin: 0;'>Overview diagram will be displayed here<br><small>(overview.svg not found in current directory)</small></p>
+            </div>
+            """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown("""
+    
+    The DAI framework follows a comprehensive end-to-end workflow that integrates multiple sophisticated components:
+    
+    **Input Layer**:
+    - **Workload Generation**: Takes GPT-model architecture specifications (layer count, attention heads, embedding dimensions, etc.), parallelism strategy configuration (Data, Tensor, Sequence, Pipeline, and Fully Sharded Data Parallel - DP, PP, TP, SP, FSDP respectively), and the number of NPUs to generate computational workloads
+    - **System Specification**: Defines the hardware environment including interconnect network topology, links capacity, NPU peak performance characteristics, and local memory bandwidth specifications
+    
+    **Trace Generation**: The [Symbolic Tensor Graph (STG)](https://github.com/astra-sim/symbolic_tensor_graph) component translates model architectures and parallelism configurations into Chakra execution traces, creating detailed computational graphs that capture the precise sequence of operations required for distributed training.
+    
+    **Simulation Engine**: At the core lies the "Modeling & Simulation" environment powered by [ASTRA-sim 2.0](https://github.com/astra-sim/astra-sim), which processes the traces through three critical analysis dimensions:
+    - **Computation**: Models the execution time of the workload based on the defined system specifications and parallelism strategies
+    - **Communication**: Simulates communication patterns of the distributed workload, accounting for intra-node and inter-node bandwidths
+    - **Memory**: Tracks memory consumption
+    - **Power**: Estimates power consumption based on hardware specifications and parallelism strategies
+    
+    **Analysis Output**: The framework generates comprehensive performance metrics, timing breakdowns, and optimization recommendations, with additional capabilities for memory consumption estimation and bottleneck identification.
+    
+    This integrated approach enables researchers to systematically explore how different parallelism strategies, hardware configurations, and network topologies impact distributed AI workload performance.
+    """)
+
+st.markdown("## Explore DAI's Capabilities")
+
+with st.expander("**Workload Modeling & Simulation**", expanded=False):
+    st.markdown("""
+    - **Interactive Workload Generation**: Create custom transformer-based workloads with configurable model parameters
+    - **Real-time Simulation**: Execute ASTRA-sim simulations directly through the web interface
+    - **Trace Visualization**: Comprehensive visualization of execution traces and performance metrics
+    """)
+
+with st.expander("**Parallelism Strategy Exploration**", expanded=False):
+    st.markdown("""
+    - **Multi-dimensional Analysis**: Systematic exploration of Data Parallel (DP), Pipeline Parallel (PP), Tensor Parallel (TP), and Sequence Parallel (SP) strategies
+    - **Performance Comparison**: Side-by-side analysis of different parallelism configurations
+    - **Machine Learning Insights**: Advanced clustering and dimensionality reduction techniques
+    """)
+
+with st.expander("**Interconnect Network Design Exploration**", expanded=False):
+    st.markdown("""
+    - **Topology Comparison**: Analyze performance across different interconnect designs (2D/3D topologies)
+    - **Bandwidth Sensitivity Analysis**: Interactive exploration of intra-node and inter-node bandwidth effects
+    - **Scalability Studies**: Investigate performance scaling characteristics
+    """)
+
+with st.expander("**Batch Size Exploration**", expanded=False):
+    st.markdown("""
+    - **Global Batch Size Analysis**: Study how batch size affects training efficiency across parallelism strategies
+    - **Performance Breakdown**: Detailed visualization of computation, communication, and overlap cycles
+    """)
+
+with st.expander("**Intelligent Strategy Solver**", expanded=False):
+    st.markdown("""
+    - **Automated Optimization**: Random search-based solver for optimal parallelism strategies
+    - **Configurable Search Space**: User-defined constraints for each parallelism dimension
+    - **Performance Ranking**: Comprehensive comparison with detailed cycle breakdowns
+    """)
+
+##st.markdown("## Technical Foundation")
+##col1, col2, col3 = st.columns(3)
+##
+##with col1:
+##    st.markdown("""
+##    **[ASTRA-sim 2.0](https://github.com/astra-sim/astra-sim)**
+##    
+##    State-of-the-art distributed ML system simulator
+##    """)
+##
+##with col2:
+##    st.markdown("""
+##    **[Symbolic Tensor Graph](https://github.com/astra-sim/symbolic_tensor_graph)**
+##    
+##    Generates synthetic LLM workloads with Chakra Execution Traces
+##    """)
+##
+##with col3:
+##    st.markdown("""
+##    **User-friendly Interface**
+##    
+##    Streamlit-based web application for intuitive exploration
+##    """)
+
+##st.markdown("## Applications & Use Cases")
+##col1, col2 = st.columns(2)
+##
+##with col1:
+##    st.markdown("""
+##    **Research & Development**
+##    - Explore novel parallelism strategies
+##    - Test hardware configurations for emerging AI workloads
+##    
+##    **System Design**
+##    - Evaluate network topology decisions
+##    - Assess hardware specifications before deployment
+##    """)
+##
+##with col2:
+##    st.markdown("""
+##    **Performance Optimization**
+##    - Identify bottlenecks in distributed training
+##    - Optimize existing training setups
+##    
+##    """)
+
+st.markdown("## Getting Started")
+
+st.markdown("""
+**Navigate through the sidebar to access different analysis modules:**
+
+1. **Modeling & Simulation**: Generate custom workloads and run simulations
+2. **Explore Parallelism Strategies**: Compare different parallelism approaches  
+3. **Explore Network Design**: Analyze interconnect topology and bandwidth impact
+4. **Explore Batch Size**: Compare global batch sizes impact on performance
+5. **Strategy Solver**: Automatically discover optimal parallelism strategies
+
+*Each module provides guided workflows with helpful tooltips and explanations.*
+""")
+
+st.markdown("""
+---
+
+<div style='text-align: center; margin: 2em 0;'>
+<h3 style='color: #4F8BF9; margin-bottom: 1.5em;'>Meet the Team</h3>
+</div>
+""", unsafe_allow_html=True)
+
+# Developer data
+developers = [
+    {"name": "Mohammad Nasser", "role": "Ph.D Student at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
+    {"name": "Tomás Gadea", "role": "Former Researcher at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
+    {"name": "Xavier Querol Bassols", "role": "Masters Student at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
+    {"name": "Abhijit Das", "role": "Director of Research and Group Leader at the N3Cat at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
+    {"name": "Àlex Batlle", "role": "Researcher at Qualcomm", "link": "#", "image": ""},
+    {"name": "Adrián Pérez", "role": "Researcher at Qualcomm", "link": "#", "image": ""},
+    {"name": "Jordi Cortadella", "role": "Professor in   the Computer Science Department at the Universitat Politècnica de Catalunya", "link": "#", "image": ""},
+    {"name": "Sergi Abadal", "role": "N3Cat Director and Distinguished Researcher at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
+    {"name": "Jordi Ros", "role": "Director of Engineering at Qualcomm", "link": "#", "image": ""}
+]
+
+# Display developers in rows of 5 and 4
+rows = [developers[:5], developers[5:]]
+for row in rows:
+    cols = st.columns(len(row))
+    for i, dev in enumerate(row):
+        with cols[i]:
+            # Use actual image if provided, otherwise use placeholder
+            img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/120x120/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
+            
+            st.markdown(f"""
+            <div style='text-align: center; padding: 1em;'>
+                <img src='{img_src}' 
+                     style='border-radius: 50%; width: 120px; height: 120px; margin-bottom: 1em; object-fit: cover;'>
+                <h4 style='margin: 0.5em 0 0.2em 0; color: #333;'>{dev["name"]}</h4>
+                <p style='margin: 0; color: #666; font-size: 0.9em;'>{dev["role"]}</p>
+                <a href='{dev["link"]}' style='color: #4F8BF9; text-decoration: none; font-size: 0.9em;'>🔗 Profile</a>
+            </div>
+            """, unsafe_allow_html=True)
+
+

@@ -4,7 +4,15 @@ import sections.astrasim as astra
 import sections.trace_viewer as tv
 
 st.set_page_config(layout="wide")
-
+st.markdown("""
+    <style>
+        .reportview-container {
+            margin-top: -2em;
+        }
+        #MainMenu {visibility: hidden;}
+        .stAppDeployButton {display:none;}
+    </style>
+""", unsafe_allow_html=True)
 # Generate Workload and Run AstraSim in a pipeline
 params = gen.generate_workload()
 

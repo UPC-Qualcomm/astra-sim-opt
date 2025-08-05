@@ -12,28 +12,36 @@ import getpass
 import datetime
 
 st.set_page_config(layout="wide")
-
+st.markdown("""
+    <style>
+        .reportview-container {
+            margin-top: -2em;
+        }
+        #MainMenu {visibility: hidden;}
+        .stAppDeployButton {display:none;}
+    </style>
+""", unsafe_allow_html=True)
 st.title("Parallelism Strategy Solver")
+with st.expander("ℹ️ How does the Parallelism Strategy Solver work?", expanded=False):
+    st.markdown("""
+    This page performs a random search to find the best parallelism strategy for a given model and hardware configuration.
 
-st.info("""
-This page performs a random search to find the best parallelism strategy for a given model and hardware configuration.
+    **How it works:**
+    1. You select a network configuration and model parameters.
+    2. For each parallelism strategy (Data, Pipeline, Tensor, Sequence), you can select multiple possible options.
+    3. The solver will randomly sample valid combinations (where the product of the selected parallelism factors equals the number of NPUs).
+    4. For each sampled combination, the tool generates a workload, runs a simulation, and collects the communication and computation cycles.
+    5. The best strategies are shown in a table and a stacked bar plot.
 
-**How it works:**
-1. You select a network configuration and model parameters.
-2. For each parallelism strategy (Data, Pipeline, Tensor, Sequence), you can select multiple possible options.
-3. The solver will randomly sample valid combinations (where the product of the selected parallelism factors equals the number of NPUs).
-4. For each sampled combination, the tool generates a workload, runs a simulation, and collects the communication and computation cycles.
-5. The best strategies are shown in a table and a stacked bar plot.
+    **Limitations:**
+    - This is a demo and uses random search, not an exhaustive or optimal search.
+    - Only a limited number of simulations are run (as set by the slider).
+    - Some combinations may not be feasible for your hardware or model.
+    - Only communication and computation cycles are shown; memory cycles and other metrics are not included.
+    - Results with zero total cycles are ignored in the plots.
 
-**Limitations:**
-- This is a demo and uses random search, not an exhaustive or optimal search.
-- Only a limited number of simulations are run (as set by the slider).
-- Some combinations may not be feasible for your hardware or model.
-- Only communication and computation cycles are shown; memory cycles and other metrics are not included.
-- Results with zero total cycles are ignored in the plots.
-
-In the future, this will be replaced with a more sophisticated search algorithm.
-""")
+    In the future, this will be replaced with a more sophisticated search algorithm.
+    """)
 
 def get_network_configurations():
     network_config_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'configuration')
@@ -71,10 +79,14 @@ def get_valid_parallelism_dims(num_npus):
             dims.append(i)
     return sorted(list(set(dims)))
 
-st.header("Configuration")
+st.header("Hardware Configuration")
 network_files = get_network_configurations()
 if network_files:
-    selected_network = st.selectbox("Select Network Configuration", network_files, key='network_select')
+    # Place Network Topology and Total NPU Count selectboxes on the same row
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_network = st.selectbox("Select Network Topology", network_files, key='network_select')
+    
     selected_network = selected_network + '.yml' 
     if selected_network:
         net_content, net_config_data = load_network_config(selected_network)
@@ -86,7 +98,7 @@ if network_files:
             for i in range(1, len(num_npu)):
                 num_npus *= num_npu[i]
 
-            st.write(f"Number of NPUs in selected network: **{num_npus}**")
+            #st.write(f"Number of NPUs in selected network: **{num_npus}**")
 
             # Parse system configuration for editing
             import json
@@ -96,12 +108,27 @@ if network_files:
                 st.error("Invalid system configuration JSON format")
                 sys_config_data = {}
 
-            st.header("Hardware Configuration")
             
-            # System Configuration Section
-            st.subheader("System Parameters")
-            col1, col2 = st.columns(2)
-            
+            # System and Network Configuration Section (Single Row)
+            # Gather current values for defaults
+            npus_count_array = net_config_data.get("npus_count", [])
+            bandwidth_array = net_config_data.get("bandwidth", [])
+            is_3d = len(npus_count_array) == 3
+
+            # Compute npus_per_node options based on current selection
+            total_npu_count_default = num_npus if num_npus in [8, 16, 32] else 8
+            with col2:
+                total_npu_count = st.selectbox(
+                    "Total NPU Count", 
+                    [8, 16, 32], 
+                    index=[8, 16, 32].index(total_npu_count_default),
+                    key='total_npu_count'
+                )
+            npus_per_node_options = [i for i in range(2, total_npu_count // (len(npus_count_array) if len(npus_count_array) > 0 else 1) + 1) if total_npu_count % i == 0]
+            npus_per_node_default = npus_count_array[0] if npus_count_array and npus_count_array[0] in npus_per_node_options else npus_per_node_options[0]
+
+            # Show all inputs in a single row
+            col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
                 peak_perf = st.number_input(
                     "Peak Performance (TFLOPS)", 
@@ -110,55 +137,32 @@ if network_files:
                     value=int(sys_config_data.get("peak-perf", 989)),
                     key='peak_perf_input'
                 )
-                
             with col2:
                 local_mem_bw = st.number_input(
-                    "Local Memory Bandwidth (GB/s)", 
+                    "Local Memory BW (GB/s)", 
                     min_value=1, 
                     max_value=50000, 
                     value=int(sys_config_data.get("local-mem-bw", 3350)),
                     key='local_mem_bw_input'
                 )
-
-            # Network Configuration Section
-            st.subheader("Network Parameters")
-            
-            # Determine if we have 2D or 3D configuration
-            npus_count_array = net_config_data.get("npus_count", [])
-            bandwidth_array = net_config_data.get("bandwidth", [])
-            is_3d = len(npus_count_array) == 3
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                total_npu_count = st.selectbox(
-                    "Total NPU Count", 
-                    [8, 16, 32, 64], 
-                    index=[8, 16, 32, 64].index(num_npus) if num_npus in [8, 16, 32, 64] else 0,
-                    key='total_npu_count'
-                )
-                
-            with col2:
-                npus_per_node_options = [i for i in range(2, total_npu_count // len(npus_count_array) + 1) if total_npu_count % i == 0]
+            with col3:
                 npus_per_node = st.selectbox(
                     "NPUs per Node",
                     npus_per_node_options,
-                    index=npus_per_node_options.index(npus_count_array[0]) if npus_count_array and npus_count_array[0] in npus_per_node_options else 0,
+                    index=npus_per_node_options.index(npus_per_node_default),
                     key='npus_per_node'
                 )
-                
-            with col3:
+            with col4:
                 intra_node_bw = st.number_input(
-                    "Intra-Node Bandwidth (GB/s)", 
+                    "Intra-Node BW (GB/s)", 
                     min_value=1, 
                     max_value=10000, 
                     value=int(bandwidth_array[0] if bandwidth_array else 900),
                     key='intra_node_bw'
                 )
-                
-            with col4:
+            with col5:
                 inter_node_bw = st.number_input(
-                    "Inter-Node Bandwidth (GB/s)", 
+                    "Inter-Node BW (GB/s)", 
                     min_value=1, 
                     max_value=10000, 
                     value=int(bandwidth_array[1] if len(bandwidth_array) > 1 else 200),
@@ -243,25 +247,32 @@ if network_files:
                 num_npus = total_npu_count
 
             st.header("Model Parameters")
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
             with col1:
                 batch = st.selectbox("Batch Size", [256, 512, 1024, 2048], index=1, key='batch_select')
             with col2:
                 dmodel = st.selectbox("Model Dimension (dmodel)", [512, 1024, 2048, 4096], index=1, key='dmodel_select')
-                dff = st.selectbox("Feed-Forward Dimension (dff)", [1024, 2048, 4096, 8192], index=2, key='dff_select')
             with col3:
-                head = st.selectbox("Number of Heads", [4, 8, 16, 32, 64], index=1, key='head_select')
-                seq = st.selectbox("Sequence Length", [128, 256, 512, 1024, 2048], index=2, key='seq_select')
+                dff = st.selectbox("Feed-Forward Dimension (dff)", [1024, 2048, 4096, 8192], index=2, key='dff_select')
             with col4:
-                num_stacks = st.selectbox("Number of Stacks", [1,2], index=1, key='num_stacks_select', help="The number of layers: limited to 2 for Demo purposes.", disabled=True)
+                head = st.selectbox("Number of Heads", [4, 8, 16, 32], index=1, key='head_select')
+            with col5:
+                seq = st.selectbox("Sequence Length", [128, 256, 512, 1024, 2048], index=2, key='seq_select')
+            with col6:
+                num_stacks = st.selectbox("Number of Stacks", [1,2], index=1, key='num_stacks_select', help="The number of layers: limited to 2 for the Demo purposes.", disabled=True)
 
             st.header("Parallelism Search Space")
             dims = get_valid_parallelism_dims(num_npus)
             # Allow user to select multiple options for each parallelism strategy
-            dp_options = st.multiselect("Data Parallel (DP) options", dims, default=dims)
-            sp_options = st.multiselect("Sequence Parallel (SP) options", dims, default=dims)
-            tp_options = st.multiselect("Tensor Parallel (TP) options", dims, default=dims)
-            pp_options = st.multiselect("Pipeline Parallel (PP) options", [1, 2], default=[1, 2])
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                dp_options = st.multiselect("Data Parallel (DP) options", dims, default=dims)
+            with col2:
+                sp_options = st.multiselect("Sequence Parallel (SP) options", dims, default=dims)
+            with col3:
+                tp_options = st.multiselect("Tensor Parallel (TP) options", dims, default=dims)
+            with col4:
+                pp_options = st.multiselect("Pipeline Parallel (PP) options", [1, 2], default=[1, 2])
 
             st.header("Search Parameters")
             num_searches = st.slider("Number of Searches", min_value=1, max_value=10, value=5, key='num_searches_slider')

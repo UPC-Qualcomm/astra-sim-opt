@@ -212,6 +212,15 @@ def plot_3d_simulation_time_breakdown(df, selected_batch_sizes, selected_model, 
     st.plotly_chart(fig, use_container_width=True)
 
 st.set_page_config(layout="wide")
+st.markdown("""
+    <style>
+        .reportview-container {
+            margin-top: -2em;
+        }
+        #MainMenu {visibility: hidden;}
+        .stAppDeployButton {display:none;}
+    </style>
+""", unsafe_allow_html=True)
 st.subheader(
     "Exploration: Global Batch Size",
     help=(
