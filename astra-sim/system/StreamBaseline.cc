@@ -12,13 +12,11 @@ using namespace AstraSim;
 StreamBaseline::StreamBaseline(Sys* owner,
                                DataSet* dataset,
                                int stream_id,
-                               uint64_t workload_node_id,
                                std::list<CollectivePhase> phases_to_go,
                                int priority)
-    : BaseStream(stream_id, workload_node_id, owner, phases_to_go) {
+    : BaseStream(stream_id, owner, phases_to_go) {
     this->owner = owner;
     this->stream_id = stream_id;
-    this->workload_node_id = workload_node_id;
     this->phases_to_go = phases_to_go;
     this->dataset = dataset;
     this->priority = priority;

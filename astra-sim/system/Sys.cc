@@ -1065,7 +1065,8 @@ DataSet* Sys::generate_collective(
                 stream_id = communicator_group->num_streams++;
             }
             StreamBaseline* newStream = new StreamBaseline(
-                this, dataset, stream_id, node_id, vect, pri);
+                this, dataset, stream_id, vect, pri);
+            newStream->workload_node_id = node_id;
             newStream->current_com_type = collective_type;
             newStream->initial_data_size = remain_size;
             newStream->creation_time = Sys::boostedTick();

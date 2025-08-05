@@ -23,7 +23,6 @@ class RecvPacketEventHandlerData;
 class BaseStream : public Callable, public StreamStat {
   public:
     BaseStream(int stream_id,
-               uint64_t workload_node_id,
                Sys* owner,
                std::list<CollectivePhase> phases_to_go);
     virtual ~BaseStream() = default;

@@ -18,11 +18,9 @@ void BaseStream::changeState(StreamState state) {
 }
 
 BaseStream::BaseStream(int stream_id,
-                       uint64_t workload_node_id,
                        Sys* owner,
                        std::list<CollectivePhase> phases_to_go) {
     this->stream_id = stream_id;
-    this->workload_node_id = workload_node_id;
     this->owner = owner;
     this->initialized = false;
     this->phases_to_go = phases_to_go;
