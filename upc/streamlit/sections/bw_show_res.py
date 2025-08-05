@@ -287,7 +287,6 @@ def get_total_cycles_split_by_intra(
     )
 
     # === NON-BOLD TITLE ===
-    # Convert \n to <br> for HTML line breaks
     html_title = title.replace('\n', '<br>')
     fig.update_layout(
         title={
@@ -344,10 +343,10 @@ def get_total_cycles_split_by_intra(
         tickfont=dict(size=constants.FONT_SIZE, color='black')
     )
 
-    filename = "bw_study.svg"  
+    #filename = "bw_study.svg"  
     
     os.makedirs("plots", exist_ok=True)
-    fig.write_image(f"{filename}")
+    #fig.write_image(f"{filename}")
 
     return fig
 
