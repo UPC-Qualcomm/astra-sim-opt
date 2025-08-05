@@ -49,49 +49,93 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Check if we should use mobile layout
+st.markdown("""
+<style>
+@media (max-width: 768px) {
+    .stColumns > div {
+        width: 100% !important;
+        flex: none !important;
+    }
+    .responsive-text {
+        font-size: 0.9em !important;
+        line-height: 1.5 !important;
+    }
+    .responsive-image {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+}
+@media (min-width: 769px) {
+    .responsive-text {
+        font-size: 1em;
+        line-height: 1.6;
+    }
+}
+.workflow-section {
+    background-color: #f8f9fa;
+    padding: 1.5em;
+    border-radius: 8px;
+    margin: 1em 0;
+    border-left: 4px solid #4F8BF9;
+}
+</style>
+""", unsafe_allow_html=True)
 
+# Use responsive columns that stack on mobile
 col1, col2 = st.columns([1, 1])
 
 with col1:
-
     svg_path = os.path.join(os.path.dirname(__file__), "images/overview.svg")
     if os.path.exists(svg_path):
-        st.image(svg_path, caption="Complete DAI workflow showing the integration of workload generation, simulation, and analysis components", width=600)
+        st.image(svg_path, caption="Complete DAI workflow showing the integration of workload generation, simulation, and analysis components", use_container_width=True)
     else:
-
         alt_svg_path = "images/overview.svg"
         if os.path.exists(alt_svg_path):
-            st.image(alt_svg_path, caption="Complete DAI workflow showing the integration of workload generation, simulation, and analysis components", width=600)
+            st.image(alt_svg_path, caption="Complete DAI workflow showing the integration of workload generation, simulation, and analysis components", use_container_width=True)
         else:
-
             st.markdown("""
-            <div style='background-color: #f0f2f6; border: 2px dashed #4F8BF9; padding: 3em; text-align: center; margin: 2em 0; border-radius: 8px; max-width: 600px; margin-left: auto; margin-right: auto;'>
-                <h4 style='color: #4F8BF9; margin-bottom: 0.5em;'>DAI Framework Architecture Diagram</h4>
-                <p style='color: #666; margin: 0;'>Overview diagram will be displayed here<br><small>(overview.svg not found in current directory)</small></p>
+            <div style='background-color: #f0f2f6; border: 2px dashed #4F8BF9; padding: 2em; text-align: center; margin: 1em 0; border-radius: 8px; width: 100%;'>
+                <h4 style='color: #4F8BF9; margin-bottom: 0.5em; font-size: 1.1em;'>DAI Framework Architecture Diagram</h4>
+                <p style='color: #666; margin: 0; font-size: 0.9em;'>Overview diagram will be displayed here<br><small>(overview.svg not found in current directory)</small></p>
             </div>
             """, unsafe_allow_html=True)
 
 with col2:
     st.markdown("""
-    
+    <div class="responsive-text workflow-section">
+    <p>
     The DAI framework follows a comprehensive end-to-end workflow that integrates multiple sophisticated components:
-    
-    **Input Layer**:
-    - **Workload Generation**: Takes GPT-model architecture specifications (layer count, attention heads, embedding dimensions, etc.), parallelism strategy configuration (Data, Tensor, Sequence, Pipeline, and Fully Sharded Data Parallel - DP, PP, TP, SP, FSDP respectively), and the number of NPUs to generate computational workloads
-    - **System Specification**: Defines the hardware environment including interconnect network topology, links capacity, NPU peak performance characteristics, and local memory bandwidth specifications
-    
-    **Trace Generation**: The [Symbolic Tensor Graph (STG)](https://github.com/astra-sim/symbolic_tensor_graph) component translates model architectures and parallelism configurations into Chakra execution traces, creating detailed computational graphs that capture the precise sequence of operations required for distributed training.
-    
-    **Simulation Engine**: At the core lies the "Modeling & Simulation" environment powered by [ASTRA-sim 2.0](https://github.com/astra-sim/astra-sim), which processes the traces through three critical analysis dimensions:
-    - **Computation**: Models the execution time of the workload based on the defined system specifications and parallelism strategies
-    - **Communication**: Simulates communication patterns of the distributed workload, accounting for intra-node and inter-node bandwidths
-    - **Memory**: Tracks memory consumption
-    - **Power**: Estimates power consumption based on hardware specifications and parallelism strategies
-    
-    **Analysis Output**: The framework generates comprehensive performance metrics, timing breakdowns, and optimization recommendations, with additional capabilities for memory consumption estimation and bottleneck identification.
-    
+    </p>
+    <ul>
+        <li>
+            <strong>Input Layer</strong>:
+            <ul>
+                <li><strong>Workload Generation</strong>: Takes GPT-model architecture specifications (layer count, attention heads, embedding dimensions, etc.), parallelism strategy configuration (Data, Tensor, Sequence, Pipeline, and Fully Sharded Data Parallel - DP, PP, TP, SP, FSDP respectively), and the number of NPUs to generate computational workloads</li>
+                <li><strong>System Specification</strong>: Defines the hardware environment including interconnect network topology, links capacity, NPU peak performance characteristics, and local memory bandwidth specifications</li>
+            </ul>
+        </li>
+        <li>
+            <strong>Trace Generation</strong>: The <a href="https://github.com/astra-sim/symbolic_tensor_graph" target="_blank">Symbolic Tensor Graph (STG)</a> component translates model architectures and parallelism configurations into Chakra execution traces, creating detailed computational graphs that capture the precise sequence of operations required for distributed training.
+        </li>
+        <li>
+            <strong>Simulation Engine</strong>: At the core lies the "Modeling & Simulation" environment powered by <a href="https://github.com/astra-sim/astra-sim" target="_blank">ASTRA-sim 2.0</a>, which processes the traces through four critical analysis dimensions:
+            <ul>
+                <li><strong>Computation</strong>: Models the execution time of the workload based on the defined system specifications and parallelism strategies</li>
+                <li><strong>Communication</strong>: Simulates communication patterns of the distributed workload, accounting for intra-node and inter-node bandwidths</li>
+                <li><strong>Memory</strong>: Tracks memory consumption</li>
+                <li><strong>Power</strong>: Estimates power consumption based on hardware specifications and parallelism strategies</li>
+            </ul>
+        </li>
+        <li>
+            <strong>Analysis Output</strong>: The framework generates comprehensive performance metrics, timing breakdowns, and optimization recommendations, with additional capabilities for memory consumption estimation and bottleneck identification.
+        </li>
+    </ul>
+    <p>
     This integrated approach enables researchers to systematically explore how different parallelism strategies, hardware configurations, and network topologies impact distributed AI workload performance.
-    """)
+    </p>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.markdown("## Explore DAI's Capabilities")
 
@@ -210,23 +254,89 @@ developers = [
     {"name": "Jordi Ros", "role": "Director of Engineering at Qualcomm", "link": "#", "image": ""}
 ]
 
-# Display developers in rows of 5 and 4
-rows = [developers[:5], developers[5:]]
-for row in rows:
-    cols = st.columns(len(row))
-    for i, dev in enumerate(row):
-        with cols[i]:
-            # Use actual image if provided, otherwise use placeholder
-            img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/120x120/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
-            
-            st.markdown(f"""
-            <div style='text-align: center; padding: 1em;'>
-                <img src='{img_src}' 
-                     style='border-radius: 50%; width: 120px; height: 120px; margin-bottom: 1em; object-fit: cover;'>
-                <h4 style='margin: 0.5em 0 0.2em 0; color: #333;'>{dev["name"]}</h4>
-                <p style='margin: 0; color: #666; font-size: 0.9em;'>{dev["role"]}</p>
-                <a href='{dev["link"]}' style='color: #4F8BF9; text-decoration: none; font-size: 0.9em;'>🔗 Profile</a>
-            </div>
-            """, unsafe_allow_html=True)
+# Display developers in responsive grid using Streamlit columns
+st.markdown("""
+<style>
+.team-member-card {
+    text-align: center;
+    padding: 1em;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin: 0.5em 0;
+    border: 1px solid #e9ecef;
+}
+.team-member-card img {
+    border-radius: 50%;
+    width: 120px;
+    height: 120px;
+    margin-bottom: 1em;
+    object-fit: cover;
+}
+.team-member-card h4 {
+    margin: 0.5em 0 0.2em 0;
+    color: #333;
+    font-size: 1.1em;
+}
+.team-member-card p {
+    margin: 0 0 0.5em 0;
+    color: #666;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+.team-member-card a {
+    color: #4F8BF9;
+    text-decoration: none;
+    font-size: 0.9em;
+}
+@media (max-width: 768px) {
+    .team-member-card img {
+        width: 100px;
+        height: 100px;
+    }
+    .team-member-card h4 {
+        font-size: 1em;
+    }
+    .team-member-card p {
+        font-size: 0.85em;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Create responsive team grid using Streamlit columns
+# Display in two rows: 5 in top row, 4 in bottom row
+# First row - 5 team members
+first_row_developers = developers[:5]
+cols1 = st.columns(5)
+
+for j, dev in enumerate(first_row_developers):
+    with cols1[j]:
+        img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/120x120/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
+        
+        st.markdown(f"""
+        <div class="team-member-card">
+            <img src='{img_src}' alt='{dev["name"]}'>
+            <h4>{dev["name"]}</h4>
+            <p>{dev["role"]}</p>
+            <a href='{dev["link"]}'>🔗 Profile</a>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Second row - 4 team members
+second_row_developers = developers[5:]
+cols2 = st.columns(4)
+
+for j, dev in enumerate(second_row_developers):
+    with cols2[j]:
+        img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/120x120/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
+        
+        st.markdown(f"""
+        <div class="team-member-card">
+            <img src='{img_src}' alt='{dev["name"]}'>
+            <h4>{dev["name"]}</h4>
+            <p>{dev["role"]}</p>
+            <a href='{dev["link"]}'>🔗 Profile</a>
+        </div>
+        """, unsafe_allow_html=True)
 
 
