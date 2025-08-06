@@ -202,13 +202,13 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                     LoggerFactory::get_trace_logger()->info(
                         ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
                         node->name(), static_cast<uint64_t>(node->comm_type()),
-                        static_cast<uint64_t>(node->type()), 0, 0, 0,
+                        static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
                         Sys::boostedTick());
                 } else {
                     LoggerFactory::get_trace_logger()->info(
                         ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
                         node->name(), 99,
-                        static_cast<uint64_t>(node->type()), 0, 0, 0, Sys::boostedTick());
+                        static_cast<uint64_t>(node->type()), 0, 0, 0, 0, Sys::boostedTick());
                 }
             }
             issue_comm(node);

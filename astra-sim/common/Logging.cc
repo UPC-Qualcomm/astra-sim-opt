@@ -108,7 +108,7 @@ void LoggerFactory::init_default_components(
     trace_logger = std::make_shared<spdlog::logger>("trace", trace_sink);
     spdlog::register_logger(trace_logger);
     // Set the header
-    trace_logger->info(",action,sys_id,node_id,node_name,node_type,col_type,num_ops,tensor_size,perf,operational_intensity,issue_tick");
+    trace_logger->info(",action,sys_id,node_id,node_name,col_type,node_type,num_ops,tensor_size,perf,operational_intensity,issue_tick");
 
     // Initialize roofeline logger
     auto roofline_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
