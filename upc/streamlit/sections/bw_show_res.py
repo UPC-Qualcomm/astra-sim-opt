@@ -411,8 +411,8 @@ def get_total_cycles_split_by_intra(
         textangle=-90
     )
 
-    filename = "bw_study.svg" 
-    fig.write_image(f"{filename}") 
+    #filename = "bw_study.svg" 
+    #fig.write_image(f"{filename}") 
     return fig
 
 @st.cache_data
