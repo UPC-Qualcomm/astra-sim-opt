@@ -42,7 +42,7 @@ with col2:
 with col1:
     st.info(f"""
         **Peak performance**: {st.session_state.peak_perf} TFLOPs, \t
-        **Peak bandwidth**: {st.session_state.peak_bw} GB/s
+        **Peak memory bandwidth**: {st.session_state.peak_bw} GB/s
     """)
 
 df = picker.get_all_parallelism_strategies_data(selected_model, selected_config, option)
@@ -98,7 +98,17 @@ with tabs[0]:
             df[df["fsdp"] == selected_fsdp], "dp", "tp", "sp", "pp", value_col="total"
         )        
         cols_to_show = ["dp", "tp", "sp", "pp", "fsdp", "mem_percent", "comp_percent", "comm_percent"]
-        st.write(local_min_df_all_axis[cols_to_show])
+        col_rename_map = {
+            "dp": "Data Parallelism",
+            "tp": "Tensor Parallelism",
+            "sp": "Sequence Parallelism",
+            "pp": "Pipeline Parallelism",
+            "fsdp": "Full Sharded",
+            "mem_percent": "Memory Bound Op (%)",
+            "comp_percent": "Compute Bound Op (%)",
+            "comm_percent": "Expose Comm (%)"
+        }
+        st.write(local_min_df_all_axis[cols_to_show].rename(columns=col_rename_map))
         global_min_idx = local_min_df_all_axis["total"].idxmin()
 
         slider_dim1, slider_value1 = helper.select_dim(
@@ -133,7 +143,7 @@ with tabs[0]:
         ]
 
         st.subheader("Data Slice:", help=("View the data slice based on selected dimensions."))
-        st.write(filtered_df.sort_values("total")[cols_to_show])
+        st.write(filtered_df.sort_values("total")[cols_to_show].rename(columns=col_rename_map))
 
     with col1:
         if filtered_df.empty:
@@ -165,26 +175,26 @@ with tabs[0]:
             else:
                 st.plotly_chart(fig, use_container_width=True)
             st.subheader(
-                "Local Minima Records on the data slice:",
+                "Local Minima Records on the Data Slice:",
                 help=(
                     "View the local minima records for the data slice.\n"
                     "- This helps in understanding the performance patterns at lower dimensions."
                 )
             )
             if not local_min_df.empty:
-                st.dataframe(local_min_df.sort_values("total")[cols_to_show])
+                st.dataframe(local_min_df.sort_values("total")[cols_to_show].rename(columns=col_rename_map))
             else:
                 st.write("No local minima found for the selected configuration.")
 
     st.subheader(
-        "Local Minima Records on the entire data (unsliced):",
+        "Local Minima Records on the Entire Data (unsliced):",
         help=(
             "View the local minima records across all dimensions.\n"
             "- This helps in understanding the overall performance patterns.\n"
             "- Useful for identifying optimal configurations."
         )
     )
-    st.dataframe(local_min_df_all_axis.sort_values("total")[cols_to_show])
+    st.dataframe(local_min_df_all_axis.sort_values("total")[cols_to_show].rename(columns=col_rename_map))
 
     st.markdown("---")
 

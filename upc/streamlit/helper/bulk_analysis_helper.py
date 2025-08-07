@@ -193,7 +193,7 @@ def selected_dims_3d_fig(
         scene=dict(
             xaxis_title=x_dim.upper(),
             yaxis_title=y_dim.upper(),
-            zaxis_title=z_dim.upper(),
+            zaxis_title="Time (Cycles)",
         ),
     )
 
@@ -274,13 +274,13 @@ def get_1d_umap_fig(df, min_dist, n_neighbors, metric):
     X_embedded = reducer.fit_transform(df_cols_val)
     df["1d"] = X_embedded.flatten()
 
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=(12, 6))
     ax.set_xlabel("UMAP 1D")
-    ax.set_title("Effect of Parallelism Parameters on Total via UMAP")
+    ax.set_title("Effect of Parallelism Parameters on\nPerformance via UMAP")
     sc = ax.scatter(df["1d"], df["total"], c=df["total"], cmap="viridis")
     cbar = plt.colorbar(sc, ax=ax)
-    cbar.set_label("Total")
-    ax.set_ylabel("Total")
+    cbar.set_label("Time (Cycles)")
+    ax.set_ylabel("Time (Cycles)")
     ax.grid(True)
 
     return fig
@@ -293,13 +293,13 @@ def get_1d_pca_fig(df):
     X_embedded = pca.fit_transform(df_cols_val)
     df["1d"] = X_embedded.flatten()
 
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=(12, 6))
     ax.set_xlabel("PCA 1D")
-    ax.set_title("Effect of Parallelism Parameters on Total via PCA")
+    ax.set_title("Effect of Parallelism Parameters on\nPerformance via PCA")
     sc = ax.scatter(df["1d"], df["total"], c=df["total"], cmap="viridis")
     cbar = plt.colorbar(sc, ax=ax)
-    cbar.set_label("Total")
-    ax.set_ylabel("Total")
+    cbar.set_label("Time (Cycles)")
+    ax.set_ylabel("Time (Cycles)")
     ax.grid(True)
 
     return fig
@@ -330,7 +330,7 @@ def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
                     size=5,
                     color=df["total"],
                     colorscale="Viridis",
-                    colorbar=dict(title="Total"),
+                    colorbar=dict(title="Time (Cycles)"),
                     opacity=0.8,
                 ),
             )
@@ -346,7 +346,7 @@ def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
             colorscale="Viridis",
             opacity=0.3,
             showscale=True,
-            colorbar=dict(title="Total"),
+            colorbar=dict(title="Time (Cycles)"),
         )
     )
 
@@ -354,9 +354,9 @@ def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
         scene=dict(
             xaxis_title="UMAP Component 1",
             yaxis_title="UMAP Component 2",
-            zaxis_title="Total",
+            zaxis_title="Time (Cycles)",
         ),
-        title="3D Plot: UMAP Components 1 & 2 vs Total",
+        title="3D Plot: UMAP Components 1 & 2 vs Time (Cycles)",
         height=550,
         width=900,
     )
@@ -382,7 +382,7 @@ def get_2d_pca_fig(df, cols):
                     size=5,
                     color=df["total"],
                     colorscale="Viridis",
-                    colorbar=dict(title="Total"),
+                    colorbar=dict(title="Time (Cycles)"),
                     opacity=0.8,
                 ),
             )
@@ -398,7 +398,7 @@ def get_2d_pca_fig(df, cols):
             colorscale="Viridis",
             opacity=0.3,
             showscale=True,
-            colorbar=dict(title="Total"),
+            colorbar=dict(title="Time (Cycles)"),
         )
     )
 
@@ -406,9 +406,9 @@ def get_2d_pca_fig(df, cols):
         scene=dict(
             xaxis_title="PCA Component 1",
             yaxis_title="PCA Component 2",
-            zaxis_title="Total",
+            zaxis_title="Time (Cycles)",
         ),
-        title="3D Plot: PCA Components 1 & 2 vs Total",
+        title="3D Plot: PCA Components 1 & 2 vs Performance",
         height=550,
         width=800,
     )
