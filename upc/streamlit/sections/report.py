@@ -144,7 +144,7 @@ def get_compare_topology_per_range(merged_df, selected_configs, selected_files):
         topologies_present = config_rows['topology'].unique().tolist()
         if all(topo in topologies_present for topo in selected_files):
             valid_configs.append(config)
-    font_increment = 0#10
+    font_increment = 10
     if len(valid_configs) == 0:
         st.warning("No valid configs present in all selected topologies in this range.")
         return None
@@ -152,7 +152,7 @@ def get_compare_topology_per_range(merged_df, selected_configs, selected_files):
     num_configs = len(valid_configs)
     ncols = 4  
     nrows = math.ceil(num_configs / ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(8*ncols, 7*nrows), squeeze=False)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(12*ncols, 11*nrows), squeeze=False)
     axes = axes.flatten()
 
     # Custom legend as a horizontal bar at the top
@@ -220,7 +220,7 @@ def get_compare_topology_per_range(merged_df, selected_configs, selected_files):
 
         # Only show y ticks/label on first column
         if col_idx == 0:
-            ax.set_ylabel('Cycles', fontsize=constants.LABEL_SIZE + font_increment)
+            ax.set_ylabel('Time (Cycles)', fontsize=constants.LABEL_SIZE + font_increment)
             ax.yaxis.get_offset_text().set_fontsize(constants.YTICK_SIZE + font_increment)
             ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE + font_increment)
         else:

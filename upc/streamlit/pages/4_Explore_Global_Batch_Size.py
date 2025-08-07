@@ -33,7 +33,7 @@ def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, sel
     strategies = df['strategy'].unique()
     cols = 4
     rows = math.ceil(len(strategies) / cols)
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 8, rows * 6))
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 8, rows * 10))
     axes = axes.flatten()
 
     for idx, strategy in enumerate(strategies):
@@ -60,7 +60,7 @@ def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, sel
         ax.set_title(f"DP:{startegy_label[0]}, TP:{startegy_label[1]}, SP:{startegy_label[2]}\nPP:{startegy_label[3]}, FSDP:{startegy_label[4]}", fontsize=constants.TITLE_SIZE, pad=20)  # Add padding to title
 
         if idx == 0:
-            ax.set_ylabel("Cycles", fontsize=constants.LABEL_SIZE)
+            ax.set_ylabel("Time (Cycles)    ", fontsize=constants.LABEL_SIZE)
             ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE)
             ax.yaxis.get_offset_text().set_fontsize(constants.FONT_SIZE)
         else:
@@ -76,8 +76,9 @@ def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, sel
     fig.legend(
         handles, legend_labels,
         loc='upper center',
+        #bbox_to_anchor=(0.5, 1.),  # Move legend higher above the titles
         ncol=len(labels),
-        fontsize=constants.LEGEND_SIZE,
+        fontsize=constants.LEGEND_SIZE,#+4,
         frameon=False
     )
 

@@ -27,7 +27,7 @@ with st.expander("ℹ️ How does the Parallelism Strategy Solver work?", expand
     This page performs a random search to find the best parallelism strategy for a given model and hardware configuration.
 
     **How it works:**
-    1. You select a network configuration and model parameters.
+    1. Input the hardware configuration and model parameters.
     2. For each parallelism strategy (Data, Pipeline, Tensor, Sequence), you can select multiple possible options.
     3. The solver will randomly sample valid combinations (where the product of the selected parallelism factors equals the number of NPUs).
     4. For each sampled combination, the tool generates a workload, runs a simulation, and collects the communication and computation cycles.
@@ -37,7 +37,7 @@ with st.expander("ℹ️ How does the Parallelism Strategy Solver work?", expand
     - This is a demo and uses random search, not an exhaustive or optimal search.
     - Only a limited number of simulations are run (as set by the slider).
     - Some combinations may not be feasible for your hardware or model.
-    - Only communication and computation cycles are shown; memory cycles and other metrics are not included.
+    - Only communication and computation cycles are shown; other metrics are not included.
     - Results with zero total cycles are ignored in the plots.
 
     In the future, this will be replaced with a more sophisticated search algorithm.
@@ -79,7 +79,7 @@ def get_valid_parallelism_dims(num_npus):
             dims.append(i)
     return sorted(list(set(dims)))
 
-st.header("Hardware Configuration")
+st.header("Hardware Configuration", help="Select the network topology and NPU count for your simulation, then configure system parameters.")
 network_files = get_network_configurations()
 if network_files:
     # Place Network Topology and Total NPU Count selectboxes on the same row
@@ -246,7 +246,7 @@ if network_files:
                 # Update num_npus for the rest of the application
                 num_npus = total_npu_count
 
-            st.header("Model Parameters")
+            st.header("Model Parameters", help="Configure the model parameters for the solver. These will be used to generate the workloads and run simulations.")
             col1, col2, col3, col4, col5, col6 = st.columns(6)
             with col1:
                 batch = st.selectbox("Batch Size", [256, 512, 1024, 2048], index=1, key='batch_select')
@@ -261,7 +261,7 @@ if network_files:
             with col6:
                 num_stacks = st.selectbox("Number of Stacks", [1,2], index=1, key='num_stacks_select', help="The number of layers: limited to 2 for the Demo purposes.", disabled=True)
 
-            st.header("Parallelism Search Space")
+            st.header("Parallelism Search Space", help="Select the possible parallelism strategies degrees. The solver will search for the best combination based on the selected options.")
             dims = get_valid_parallelism_dims(num_npus)
             # Allow user to select multiple options for each parallelism strategy
             col1, col2, col3, col4 = st.columns(4)
@@ -274,7 +274,7 @@ if network_files:
             with col4:
                 pp_options = st.multiselect("Pipeline Parallel (PP) options", [1, 2], default=[1, 2])
 
-            st.header("Search Parameters")
+            st.header("Search Parameters", help="Set the number of searches to perform. The solver will randomly sample valid combinations of the selected parallelism strategies.")
             num_searches = st.slider("Number of Searches", min_value=1, max_value=10, value=5, key='num_searches_slider')
 
             if st.button("Find Best Parallelism Strategy"):
@@ -387,11 +387,11 @@ if network_files:
                         else:
                             df_results = df_results.sort_values(by="Total Cycles").reset_index(drop=True)
                             
-                            st.subheader("Best Strategy Found")
+                            st.subheader("Best Strategy Found", help="The details of the strategy with the lowest total cycles.")
                             best_result = df_results.iloc[0]
                             st.json(best_result.to_dict())
 
-                            st.subheader("Top Strategies Comparison")
+                            st.subheader("Top Strategies Comparison", help="Showing the top strategies based on total cycles, with a breakdown of computation and communication cycles.")
                             num_to_compare = min(5, len(df_results))
                             top_results = df_results.head(num_to_compare)
                             

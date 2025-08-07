@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import numpy as np
 import helper.constants as constants
+from plotly.subplots import make_subplots
 
 def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config, is_3d=False):
     ###st.title("Execution vs Communication Cycles Analysis")
@@ -248,8 +249,10 @@ def get_total_cycles_split_by_intra(
     title,
     group_by="strategy",
     legend_title='',
-    y_label="Total Cycles",
+    y_label="Time (Cycles)",
 ):
+    # Font size adjustment
+    font_size_delta = -8
 
     # Copy and parse bandwidths
     all_data = df.copy()
@@ -267,26 +270,59 @@ def get_total_cycles_split_by_intra(
         for i, group in enumerate(unique_groups)
     }
 
-    # Use plotly express to facet by 'intra'
-    fig = px.line(
-        all_data,
-        x="inter",
-        y="total_cycles",
-        color=group_by,
-        facet_col="intra",
-        facet_col_wrap=2,
-        markers=True,
-        title=title,
-        labels={
-            "inter": "Inter BW (GB/s)",
-            "total_cycles": y_label,
-            group_by: legend_title,
-            "intra": "Intra BW (GB/s)",
-        },
-        color_discrete_map=color_map,
+    # Get sorted unique intra values
+    intra_values = sorted(all_data["intra"].unique())
+
+    # Filter out intra values that have no data
+    valid_intra_values = []
+    subplot_widths = []
+
+    for intra_val in intra_values:
+        subset_data = all_data[all_data["intra"] == intra_val]
+        if not subset_data.empty:
+            valid_intra_values.append(intra_val)
+            subplot_widths.append(len(subset_data["inter"].unique()))
+
+    # Normalize subplot widths
+    total_width = sum(subplot_widths)
+    subplot_widths = [w / total_width for w in subplot_widths]
+
+    # Create subplots with custom widths
+    fig = make_subplots(
+        rows=1, 
+        cols=len(valid_intra_values),
+        column_widths=subplot_widths,
+        subplot_titles=None
     )
 
-    # === NON-BOLD TITLE ===
+    # Add traces
+    for group in unique_groups:
+        group_data = all_data[all_data[group_by] == group]
+        for i, intra_val in enumerate(valid_intra_values):
+            subset_data = group_data[group_data["intra"] == intra_val].sort_values("inter")
+            if not subset_data.empty:
+                group_min = group_data["total_cycles"].min()
+                symbols = ['diamond' if y == group_min else 'circle' for y in subset_data["total_cycles"]]
+                sizes = [14 if y == group_min else 10 for y in subset_data["total_cycles"]]
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=subset_data["inter"],
+                        y=subset_data["total_cycles"],
+                        mode="lines+markers",
+                        name=str(group),
+                        line=dict(color=color_map[group], width=6),
+                        marker=dict(
+                            color=color_map[group],
+                            symbol=symbols,
+                            size=sizes
+                        ),
+                        showlegend=(i == 0),
+                    ),
+                    row=1, col=i+1
+                )
+
+    # Add layout and global styles
     html_title = title.replace('\n', '<br>')
     fig.update_layout(
         title={
@@ -294,60 +330,89 @@ def get_total_cycles_split_by_intra(
             "x": 0.5,
             "xanchor": "center"
         },
-        font=dict(size=constants.FONT_SIZE, color="black"),
-        height=800,
-        width=1200,
-        margin=dict(l=40, r=40, t=120, b=40),  # Increased top margin from 80 to 120
-        title_font=dict(size=constants.FONT_SIZE, color="black", family="Arial"),
-        legend_font=dict(size=constants.FONT_SIZE, color="black"),
-        legend_title=dict(font=dict(size=constants.FONT_SIZE, color="black")),
-    )
-    
-    # Add extra spacing between title and facet labels
-    fig.for_each_annotation(lambda a: a.update(y=a.y - 0.15))
-    # Highlight minimum value with a diamond shape, others as circles, for each line
-    for trace in fig.data:
-        group_val = trace.name
-        group_min = all_data[all_data[group_by] == group_val]["total_cycles"].min()
-        symbols = []
-        sizes = []
-        for y_val in trace.y:
-            if y_val == group_min:
-                symbols.append('diamond')
-                sizes.append(14)
-            else:
-                symbols.append('circle')
-                sizes.append(10)
-        trace.marker.symbol = symbols
-        trace.marker.size = sizes
-
-    # Style axes and lines
-    fig.update_traces(line=dict(width=6))
-
-    unique_inter_values = sorted(all_data["inter"].unique())
-    fig.update_xaxes(
-        showgrid=True,
-        gridcolor='lightgray',
-        griddash='dot',
-        title_font=dict(size=constants.FONT_SIZE, color='black'),
-        tickfont=dict(size=constants.FONT_SIZE, color='black'),
-        tickmode='array',
-        tickvals=unique_inter_values,
-        ticktext=[str(val) for val in unique_inter_values]
-    )
-    fig.update_yaxes(
-        showgrid=True,
-        gridcolor='lightgray',
-        griddash='dot',
-        title_font=dict(size=constants.FONT_SIZE, color='black'),
-        tickfont=dict(size=constants.FONT_SIZE, color='black')
+        font=dict(size=constants.LABEL_SIZE + font_size_delta, color="black"),
+        height=600,
+        width=1000,
+        margin=dict(l=300, r=40, t=120, b=160),
+        title_font=dict(size=constants.TITLE_SIZE + font_size_delta, color="black", family="Arial"),
+        legend_font=dict(size=constants.LEGEND_SIZE + font_size_delta, color="black"),
+        legend_title=dict(font=dict(size=constants.LEGEND_SIZE + font_size_delta, color="black")),
+        showlegend=True
     )
 
-    #filename = "bw_study.svg"  
-    
-    os.makedirs("plots", exist_ok=True)
-    #fig.write_image(f"{filename}")
+    # Set consistent y-axis
+    overall_min_cycles = all_data["total_cycles"].min()
+    overall_max_cycles = all_data["total_cycles"].max()
+    y_padding = 0.05 * (overall_max_cycles - overall_min_cycles)
 
+    for i, intra_val in enumerate(valid_intra_values):
+        subset_data = all_data[all_data["intra"] == intra_val]
+        unique_inter_values = sorted(subset_data["inter"].unique())
+
+        fig.update_xaxes(
+            showgrid=True,
+            gridcolor='lightgray',
+            griddash='dot',
+            tickfont=dict(size=constants.XTICK_SIZE + font_size_delta, color='black'),
+            tickmode='array',
+            tickvals=unique_inter_values,
+            ticktext=[str(val) for val in unique_inter_values],
+            row=1, col=i+1,
+            tickangle=-45  # Change from -25 to 25 for correct rotation direction
+        )
+
+        fig.update_yaxes(
+            showgrid=True,
+            gridcolor='lightgray',
+            griddash='dot',
+            tickfont=dict(size=constants.XTICK_SIZE + font_size_delta, color='black'),
+            showticklabels=(i == 0),
+            title_font=dict(size=constants.LABEL_SIZE + font_size_delta, color='black'),
+            range=[overall_min_cycles - y_padding, overall_max_cycles + y_padding],
+            row=1, col=i+1
+        )
+
+    # Intra BW annotations (below each subplot)
+    for i, intra_val in enumerate(valid_intra_values):
+        label_text = f"Intra BW (GB/s):          {intra_val}" if i == 0 else f"{intra_val}"
+        fig.add_annotation(
+            text=label_text,
+            xref="x domain" if i == 0 else f"x{i+1} domain",
+            yref="paper",
+            x=-0.45 if i == 0 else 0.5,
+            y=-0.33,
+            showarrow=False,
+            font=dict(size=constants.LABEL_SIZE + font_size_delta, color="black"),
+            xanchor="center"
+        )
+
+    # Inter BW label (only once under first plot)
+    fig.add_annotation(
+        text="Inter BW (GB/s):",
+        xref="x domain",
+        yref="paper",
+        x=-0.8,
+        y=-0.2,
+        showarrow=False,
+        font=dict(size=constants.LABEL_SIZE + font_size_delta, color="black"),
+        xanchor="center"
+    )
+
+    # Y-axis title (once, vertically left)
+    fig.add_annotation(
+        text=y_label,
+        xref="paper",
+        yref="paper",
+        x=-0.07,
+        y=0.5,
+        showarrow=False,
+        font=dict(size=constants.LABEL_SIZE + font_size_delta, color="black"),
+        xanchor="center",
+        textangle=-90
+    )
+
+    filename = "bw_study.svg" 
+    fig.write_image(f"{filename}") 
     return fig
 
 @st.cache_data

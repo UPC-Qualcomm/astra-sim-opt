@@ -435,8 +435,8 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
         ax.bar(x, comp_values, bottom=mem_values, label='Compute\nBound OPs', color='lightgreen')
         ax.bar(x, comm_values, bottom=mem_values + comp_values, label='Exposed\nComm. (%)', color='lightcoral')
 
-        #for xi, mem, comm, comp in zip(x, mem_values, comm_values, comp_values):
-        #    ax.text(xi, comp + mem + comm / 2, f"{comm/(comp+mem+comm) * 100 :.1f}", ha='center', va='center', fontsize=constants.IN_PLOT_LABEL_SIZE, color='black')
+        for xi, mem, comm, comp in zip(x, mem_values, comm_values, comp_values):
+            ax.text(xi, comp + mem + comm / 2, f"{comm/(comp+mem+comm) * 100 :.1f}", ha='center', va='center', fontsize=constants.IN_PLOT_LABEL_SIZE, color='black')
 
         ax.set_xticks([])
         #ax.set_xticklabels(file_names, rotation=45, ha='right', fontsize=constants.XTICK_SIZE)

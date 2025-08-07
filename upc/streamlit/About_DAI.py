@@ -166,7 +166,7 @@ with st.expander("**Batch Size Exploration**", expanded=False):
     - **Performance Breakdown**: Detailed visualization of computation, communication, and overlap cycles
     """)
 
-with st.expander("**Intelligent Strategy Solver**", expanded=False):
+with st.expander("**Solver**", expanded=False):
     st.markdown("""
     - **Automated Optimization**: Random search-based solver for optimal parallelism strategies
     - **Configurable Search Space**: User-defined constraints for each parallelism dimension
@@ -228,7 +228,7 @@ st.markdown("""
 2. **Explore Parallelism Strategies**: Compare different parallelism approaches  
 3. **Explore Network Design**: Analyze interconnect topology and bandwidth impact
 4. **Explore Batch Size**: Compare global batch sizes impact on performance
-5. **Strategy Solver**: Automatically discover optimal parallelism strategies
+5. **Solver**: Automatically discover optimal parallelism strategies
 
 *Each module provides guided workflows with helpful tooltips and explanations.*
 """)
@@ -243,15 +243,15 @@ st.markdown("""
 
 # Developer data
 developers = [
-    {"name": "Mohammad Nasser", "role": "Ph.D Student at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
-    {"name": "Tomás Gadea", "role": "Former Researcher at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
-    {"name": "Xavier Querol Bassols", "role": "Masters Student at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
-    {"name": "Abhijit Das", "role": "Director of Research and Group Leader at the N3Cat at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
-    {"name": "Àlex Batlle", "role": "Researcher at Qualcomm", "link": "#", "image": ""},
-    {"name": "Adrián Pérez", "role": "Researcher at Qualcomm", "link": "#", "image": ""},
-    {"name": "Jordi Cortadella", "role": "Professor in   the Computer Science Department at the Universitat Politècnica de Catalunya", "link": "#", "image": ""},
-    {"name": "Sergi Abadal", "role": "N3Cat Director and Distinguished Researcher at Universitat Politècnica de Catalunya", "link": "#", "image": ""},
-    {"name": "Jordi Ros", "role": "Director of Engineering at Qualcomm", "link": "#", "image": ""}
+    {"name": "Mohammad Nasser", "role": "Ph.D Student at Universitat Politècnica de Catalunya", "link": "https://es.linkedin.com/in/mohyna", "image": ""},
+    {"name": "Tomás Gadea", "role": "Former Researcher at Universitat Politècnica de Catalunya", "link": "https://ch.linkedin.com/in/tomas-gadea", "image": ""},
+    {"name": "Xavier Querol Bassols", "role": "Masters Student at Universitat Politècnica de Catalunya", "link": "https://es.linkedin.com/in/xavier-querol", "image": ""},
+    {"name": "Abhijit Das", "role": "Director of Research and Group Leader at the N3Cat at Universitat Politècnica de Catalunya", "link": "https://abhijitcse.github.io/", "image": ""},
+    {"name": "Àlex Batlle", "role": "Researcher at Qualcomm", "link": "https://es.linkedin.com/in/atellas23", "image": ""},
+    {"name": "Adrián Pérez", "role": "Researcher at Qualcomm", "link": "https://www.linkedin.com/in/aperezdieguez", "image": ""},
+    {"name": "Jordi Cortadella", "role": "Professor in   the Computer Science Department at the Universitat Politècnica de Catalunya", "link": "https://www.cs.upc.edu/~jordicf/", "image": ""},
+    {"name": "Sergi Abadal", "role": "N3Cat Director and Distinguished Researcher at Universitat Politècnica de Catalunya", "link": "https://sergiabadal.com/", "image": ""},
+    {"name": "Jordi Ros", "role": "Director of Engineering at Qualcomm", "link": "https://www.linkedin.com/in/jordi-ros-giralt-phd", "image": ""}
 ]
 
 # Display developers in responsive grid using Streamlit columns

@@ -50,7 +50,7 @@ df = picker.get_all_parallelism_strategies_data(selected_model, selected_config,
 
 df_sorted = df.sort_values(by="total", ascending=True)
 figs = picker.plot_experiments_bound_breakdown(
-    df.sort_values(by="total", ascending=True), chunk_size=50
+    df.sort_values(by="total", ascending=True), chunk_size=33
 )
 for fig in figs:
     st.pyplot(fig)
