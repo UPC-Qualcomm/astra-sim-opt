@@ -308,7 +308,6 @@ st.markdown("""
 # First row - 5 team members
 first_row_developers = developers[:5]
 cols1 = st.columns(5)
-
 for j, dev in enumerate(first_row_developers):
     with cols1[j]:
         img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/120x120/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
@@ -316,9 +315,8 @@ for j, dev in enumerate(first_row_developers):
         st.markdown(f"""
         <div class="team-member-card">
             <img src='{img_src}' alt='{dev["name"]}'>
-            <h4>{dev["name"]}</h4>
+            <h4><a href='{dev["link"]}' target="_blank">{dev["name"]}</a></h4>
             <p>{dev["role"]}</p>
-            <a href='{dev["link"]}'>🔗 Profile</a>
         </div>
         """, unsafe_allow_html=True)
 
@@ -333,10 +331,8 @@ for j, dev in enumerate(second_row_developers):
         st.markdown(f"""
         <div class="team-member-card">
             <img src='{img_src}' alt='{dev["name"]}'>
-            <h4>{dev["name"]}</h4>
+            <h4><a href='{dev["link"]}' target="_blank">{dev["name"]}</a></h4>
             <p>{dev["role"]}</p>
-            <a href='{dev["link"]}'>🔗 Profile</a>
         </div>
         """, unsafe_allow_html=True)
-
 
