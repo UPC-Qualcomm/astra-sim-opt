@@ -3,6 +3,7 @@ import subprocess
 import time
 import scripts.generate_single_workload as gen
 import os
+import uuid
 
 def generate_workload():
     
@@ -13,8 +14,11 @@ def generate_workload():
             "Click **Run Model** to generate the workload trace."
         )
     )
-    
-    temp_dir = "temp/"
+    if "temp_dir" not in st.session_state:
+        # Create a temporary directory for the session
+        st.session_state.temp_dir = f"temp/{uuid.uuid4()}/"
+        os.makedirs(st.session_state.temp_dir, exist_ok=True)
+    temp_dir = st.session_state.temp_dir
 
     # --- Form Section ---
     models_names = _get_models_names()
@@ -72,7 +76,7 @@ def _workload_form(selected_model_name):
             "Output Embedding Size",            
             "Model Feature Size",
             "FFN Feature Size",
-            "Global Batch Size",
+            "Batch Size",
             "Sequance Length",
             "Number of Heads",
             "Number of Layers"
@@ -113,8 +117,22 @@ def _workload_form(selected_model_name):
 
 
 def _clear_session_state():
+    # Preserve important session variables that should persist
+    preserved_keys = {'temp_dir', 'session_id'}
+    preserved_values = {}
+    
+    # Save values we want to keep
+    for key in preserved_keys:
+        if key in st.session_state:
+            preserved_values[key] = st.session_state[key]
+    
+    # Clear all session state
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    
+    # Restore preserved values
+    for key, value in preserved_values.items():
+        st.session_state[key] = value
 
 def _clear_temp_dir(temp_dir):
     subprocess.run(f"rm -rf {temp_dir}*", shell=True, cwd=None)

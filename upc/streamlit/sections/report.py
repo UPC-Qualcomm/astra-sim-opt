@@ -75,8 +75,8 @@ def compute_summary_stats(merged_df, selected_files):
     return pd.DataFrame(summary_stats)
 
 @st.cache_data
-def get_summary_plot(summary_df, figsize=(10, 6)):
-    font_increment = -10  # Adjust this value to increase font size
+def get_summary_plot(summary_df, figsize=(10, 4)):
+    font_increment = -14  # Adjust this value to increase font size
     summary_df['avg_overlap (s)'] = summary_df['avg_exec (s)'] - summary_df['avg_exposed_comm (s)'] - summary_df['avg_exposed_comp (s)']
     summary_df = summary_df.sort_values('topology')
 
@@ -212,7 +212,13 @@ def get_compare_topology_per_range(merged_df, selected_configs, selected_files):
         col_idx = i % ncols
         if row_idx == nrows - 1:
             ax.set_xticks(indices)
-            ax.set_xticklabels(compare_df['topology'], fontsize=constants.FONT_SIZE + font_increment)
+            # Map topology names for display
+            display_topologies = compare_df['topology'].replace({
+                '2D_Torus': '2D Torus',
+                '3D_Torus': '3D Torus',
+                'FoldedClos': 'Folded-Clos'
+            })
+            ax.set_xticklabels(display_topologies, fontsize=constants.FONT_SIZE + font_increment)
             ax.tick_params(axis='x', labelrotation=25)
         else:
             ax.set_xticks([])
@@ -299,13 +305,25 @@ def analysis_across_topologies(selected_model):
     # Extract experiment names
     file_names = sorted([os.path.splitext(os.path.basename(f))[0] for f in gathered_res_files])
 
+    # Create display names mapping
+    display_names = []
+    for name in file_names:
+        if name == "2D_Torus":
+            display_names.append("2D Torus")
+        elif name == "3D_Torus":
+            display_names.append("3D Torus")
+        elif name == "FoldedClos":
+            display_names.append("Folded-Clos")
+        else:
+            display_names.append(name)
+
     # Experiment selection checkboxes (in one row)
     st.text("Select The Topologies to Include")
     cols = st.columns(len(file_names))
     selected_files = []
-    for i, name in enumerate(file_names):
+    for i, (name, display_name) in enumerate(zip(file_names, display_names)):
         with cols[i]:
-            if st.checkbox(name, value=True, key=f"chk_{name}"):
+            if st.checkbox(display_name, value=True, key=f"chk_{name}"):
                 selected_files.append(name)
 
     if not selected_files:
@@ -342,7 +360,13 @@ def analysis_across_topologies(selected_model):
             "- Helps in identifying the most effective interconnect network designs."
         )
     )
-    st.dataframe(counts_df)
+    display_counts_df = counts_df.copy()
+    display_counts_df['Topology'] = display_counts_df['Topology'].replace({
+        '2D_Torus': '2D Torus',
+        '3D_Torus': '3D Torus',
+        'FoldedClos': 'Folded-Clos'
+    })
+    st.dataframe(display_counts_df)
     
     min_df = min_df[min_df["topology"] == counts_df["Topology"][0]]
     # Top-N Best Experiments with Multiselect
@@ -361,7 +385,7 @@ def analysis_across_topologies(selected_model):
     
     # Multiselect with maximum 8 options
     selected_configs = st.multiselect(
-        "Select parallelism strategies to compare (max 8):",
+        "Select parallelism strategies to compare (max {}):".format(max_selection),
         options=configs_sorted,
         default=default_configs,
         max_selections=max_selection

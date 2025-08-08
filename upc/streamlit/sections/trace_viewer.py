@@ -246,7 +246,7 @@ def _show_timestep_plot_and_table(df, timesteps):
         st.rerun()
 
 
-def render_sim_ouput_section(sim_outputs):
+def render_sim_output_section(sim_outputs):
     st.header(
         "Simulation Visualizations",
         help=(
@@ -280,10 +280,12 @@ def render_sim_ouput_section(sim_outputs):
 
     with tabs[0]:
         st.subheader(
-            "Exposed Communication per NPU",
+            "Simulation Time Breakdown per NPU",
             help=(
-            "This section visualizes the simulation time and exposed communication time for each NPU.\n"
-            "- It helps in understanding the communication overhead and bottlenecks.\n"
+            "This section visualizes the simulation time breakdown for each NPU showing.\n"
+            "- The amount of overlap between communication and computation cycles.\n"
+            "- The exposed communication cycles indicating potential bottlenecks.\n"
+            "- The exposed computation cycles indicating missed opportunities for optimization.\n"
             )
         )
         astra.visualize_simulation_results(sim_outputs)

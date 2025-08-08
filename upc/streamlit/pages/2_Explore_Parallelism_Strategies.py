@@ -93,7 +93,7 @@ with tabs[0]:
     with col0:
         all_dims = helper.get_dims()
 
-        selected_fsdp = st.checkbox("Use FSDP?", value=True)
+        selected_fsdp = st.checkbox("Enable FSDP", value=True)
         local_min_df_all_axis = helper.find_local_minima_all_axis(
             df[df["fsdp"] == selected_fsdp], "dp", "tp", "sp", "pp", value_col="total"
         )        
@@ -216,13 +216,20 @@ with tabs[1]:
     
     st.markdown("---")
     if "df_matched" in st.session_state:
-        tv.render_sim_ouput_section(sim_outputs)
+        tv.render_sim_output_section(sim_outputs)
 
 with tabs[2]:
     render_tab2(df)
 
 with tabs[3]:
-
+    st.subheader(
+        "Analyze the Exposed Communication Percentage",
+        help=(
+            "This section allows you to analyze the exposed communication percentage across different experiments.\n"
+            "- The plot shows the sorted exposed communication percentage for each experiment.\n"
+            "- It includes mean, standard deviation, and geometric mean."
+        )
+    )
     comm_mean, comm_std, comm_gmean = (
         df["comm_percent"].mean(),
         df["comm_percent"].std(),
@@ -233,16 +240,16 @@ with tabs[3]:
 
     fig, ax = plt.subplots(figsize=(12, 5))
     ax.plot(sorted_comm, marker="o", linestyle="-", color="blue")
-    ax.set_xlabel("Number of Experiments", fontsize=25)
-    ax.set_ylabel("Exposed\nComm. Time\n(%)", fontsize=25)
+    ax.set_xlabel("Number of Experiments (Different Parallelism Strategies)", fontsize=18)
+    ax.set_ylabel("Exposed\nComm. Time\n(%)", fontsize=18)
     ax.set_title(
         f"Sorted - Exposed Communication Percentage per Experiment\n(μ={comm_mean:.2f}%, σ={comm_std:.2f}%, gμ={comm_gmean:.2f}%)",
-        fontsize=25,
+        fontsize=18,
     )
     ax.grid(True)
 
-    ax.tick_params(axis="both", which="major", labelsize=24)
-    ax.tick_params(axis="both", which="minor", labelsize=24)
+    ax.tick_params(axis="both", which="major", labelsize=16)
+    ax.tick_params(axis="both", which="minor", labelsize=16)
 
     fig.subplots_adjust(left=0.13, right=0.98, top=0.80, bottom=0.22)
     #fig.savefig("comm_percentag.svg", format="svg", bbox_inches="tight")

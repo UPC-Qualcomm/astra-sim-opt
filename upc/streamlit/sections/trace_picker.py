@@ -55,12 +55,28 @@ def _get_model_names(base_model_dir):
 
 def model_selector(base_model_dir):
     model_names = _get_model_names(base_model_dir)
-    return st.selectbox("Select a Model", model_names)
+    # Create a display map: "model_name_with_underscore" -> "Model Name With Underscore"
+    display_map = {name: name.replace('_', ' ') for name in model_names}
+    display_names = [display_map[name] for name in model_names]
+    selected_display = st.selectbox("Select a Model", display_names)
+    # Reverse map to get the original model name
+    reverse_map = {v: k for k, v in display_map.items()}
+    return reverse_map[selected_display]
 
 def config_selector(base_model_dir, selected_model):
     model_dir = os.path.join(base_model_dir, selected_model)
     config_names = _get_config_names(model_dir)
-    return st.selectbox("Select a Configuration", config_names)
+    display_map = {
+        "2D_Torus": "2D Torus",
+        "3D_Torus": "3D Torus",
+        "Dragonfly": "Dragonfly",
+        "FoldedClos": "Folded-Clos"
+    }
+    display_names = [display_map.get(name, name) for name in config_names]
+    selected_display = st.selectbox("Select a Network Topology", display_names)
+    reverse_map = {v: k for k, v in display_map.items()}
+    selected_config = reverse_map.get(selected_display, selected_display)
+    return selected_config
 
 def _model_and_config_selection(base_model_dir):
     col_model, col_config = st.columns([1, 1])
@@ -144,9 +160,22 @@ def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
     #submitted = st.button("Submit")
 
     #if submitted and selected_file:
-    # Clear session state (if needed)
+    # Clear session state (if needed) - preserving important values
+    preserved_keys = {'temp_dir', 'session_id'}
+    preserved_values = {}
+    
+    # Save values we want to keep
+    for key in preserved_keys:
+        if key in st.session_state:
+            preserved_values[key] = st.session_state[key]
+    
+    # Clear all session state
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    
+    # Restore preserved values
+    for key, value in preserved_values.items():
+        st.session_state[key] = value
 
     # Parse parallelism degrees from strategy
     dp, tp, sp, pp, sharding_val = selected_strategy.split("_")
@@ -431,15 +460,30 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
 
         fig, ax = plt.subplots(figsize=(32, 8))
 
-        ax.bar(x, mem_values, label='Memory\nBound OPs', color='blue')
-        ax.bar(x, comp_values, bottom=mem_values, label='Compute\nBound OPs', color='lightgreen')
+        ax.bar(x, mem_values, label='Memory\nBound OPs (%)', color='blue')
+        ax.bar(x, comp_values, bottom=mem_values, label='Compute\nBound OPs (%)', color='lightgreen')
         ax.bar(x, comm_values, bottom=mem_values + comp_values, label='Exposed\nComm. (%)', color='lightcoral')
 
         for xi, mem, comm, comp in zip(x, mem_values, comm_values, comp_values):
-            ax.text(xi, comp + mem + comm / 2, f"{comm/(comp+mem+comm) * 100 :.1f}", ha='center', va='center', fontsize=constants.IN_PLOT_LABEL_SIZE, color='black')
+            total = mem + comp + comm
+            
+            # Memory label
+            if mem > 0:
+                ax.text(float(xi), mem / 2, f"{mem/total * 100:.1f}", ha='center', va='center', 
+                       fontsize=constants.IN_PLOT_LABEL_SIZE, color='black')
+            
+            # Compute label
+            if comp > 0:
+                ax.text(float(xi), mem + comp / 2, f"{comp/total * 100:.1f}", ha='center', va='center', 
+                       fontsize=constants.IN_PLOT_LABEL_SIZE, color='black')
+            
+            # Communication label
+            if comm > 0:
+                ax.text(float(xi), mem + comp + comm / 2, f"{comm/total * 100:.1f}", ha='center', va='center', 
+                       fontsize=constants.IN_PLOT_LABEL_SIZE, color='black')
 
-        ax.set_xticks([])
-        #ax.set_xticklabels(file_names, rotation=45, ha='right', fontsize=constants.XTICK_SIZE)
+        ax.set_xticks(x)
+        ax.set_xticklabels(file_names, rotation=45, ha='right', fontsize=constants.XTICK_SIZE)
         ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE)
         ax.yaxis.get_offset_text().set_fontsize(constants.YTICK_SIZE)
         ax.set_xlabel('Combination of parallelism strategies: DP,TP,SP,PP,FSDP', fontsize=constants.LABEL_SIZE)
@@ -507,7 +551,7 @@ def set_sim_input(selected_model, selected_config):
 
         _detect_file_change(csv_trace_file)
 
-        st.success(f"✅ Found trace file: `{trace_file_name}`")
+        st.success(f"✅ Trace file for parallelism strategy `{trace_file_name.split('.')[0]}` is found")
 
         set_session_peak_perf_bw(selected_config)
 

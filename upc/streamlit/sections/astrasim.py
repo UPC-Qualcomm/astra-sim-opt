@@ -22,7 +22,18 @@ def run_astrasim(params):
     configs = _get_config_names(config_dir)
 
     st.subheader("Simulation Configuration")
-    selected_config_name = st.selectbox("Select a config", configs)
+    config_display_map = {
+        "2D_Torus": "2D Torus",
+        "3D_Torus": "3D Torus", 
+        "Dragonfly": "Dragonfly",
+        "FoldedClos": "Folded-Clos"
+    }
+    
+    display_options = [config_display_map.get(config, config) for config in configs]
+    selected_display_name = st.selectbox("Select a Topology", display_options)
+    
+    reverse_map = {v: k for k, v in config_display_map.items()}
+    selected_config_name = reverse_map.get(selected_display_name, selected_display_name)
 
     paths = _compute_paths(params, config_dir, sim_dir)
     col1, col2 = st.columns(2)
@@ -43,10 +54,10 @@ def run_astrasim(params):
                 returncode, elapsed_time = _run_astrasim_bin(
                     paths, temp_sys_path, temp_net_path, params["temp_dir"]
                 )
-                if "df_matched" not in st.session_state:
-                    st.session_state.df_matched = tv.get_timings_df(
-                        paths['trace_file'], paths["timed_trace"]
-                    )
+                #if "df_matched" not in st.session_state:
+                st.session_state.df_matched = tv.get_timings_df(
+                    paths['trace_file'], paths["timed_trace"]
+                )
                 _handle_sim_result(returncode, elapsed_time, paths, updated_sys_content)
         else:
             st.warning("No Configurations Found.")
@@ -144,7 +155,7 @@ def _show_config_editors(col1, col2, sys_content, net_content):
 
 def _clear_sim_dir(sim_dir):
     if os.path.isdir(sim_dir):
-        subprocess.run(f"rm {sim_dir}*", shell=True, cwd=None)
+        subprocess.run(f"rm -rf {sim_dir}*", shell=True, cwd=None)
 
 
 def _save_temp_configs(sim_dir, sys_content, net_content):

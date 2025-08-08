@@ -33,11 +33,15 @@ def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config
 
         if all_data:
             combined_df = get_combined_df(all_data, group_by="strategy")
-            ###st.subheader(f"Total Cycles Comparison Across Bandwidth Settings - Network config {selected_config}")
+            
+            # Format the config name for display
+            display_config = selected_config.replace("2D_Torus", "2D Torus").replace("3D_Torus", "3D Torus").replace("FoldedClos", "Folded-Clos")
+            
+            ###st.subheader(f"Total Cycles Comparison Across Bandwidth Settings - Network config {display_config}")
             if is_3d:
                 summary_fig = get_total_cycles_plot_3d(
                     combined_df,
-                    title=f"Total Cycles vs Bandwidth for Different Parallelism Strategies - Network Config: {selected_config}, #NPU=DP*TP*SP*PP",
+                    title=f"Total Cycles vs Bandwidth for Different Parallelism Strategies - Network Config: {display_config}, #NPU=DP*TP*SP*PP",
                     group_by="strategy",
                     legend_title='DP, TP, SP, PP, FSDP',
                 )
@@ -46,7 +50,7 @@ def show_inter_intra_sim_res(parallelism_strategies, result_dir, selected_config
                     combined_df,
                     title=(
                         "Total Cycles vs Bandwidth for Different Parallelism Strategies\n"
-                        f"Network Config: {selected_config}, #NPU=DP*TP*SP*PP"
+                        f"Network Config: {display_config}, #NPU=DP*TP*SP*PP"
                     ),
                     group_by="strategy",
                     legend_title='DP, TP, SP, PP, FSDP',
@@ -166,6 +170,10 @@ def get_total_cycles_plot(
         lambda parts: f"Intra: {parts[0]}, Inter: {parts[1]}"
     )
 
+    # Format legend labels for config grouping
+    if group_by == "config":
+        all_data[group_by] = all_data[group_by].str.replace("2D_Torus", "2D Torus").str.replace("3D_Torus", "3D Torus").str.replace("FoldedClos", "Folded-Clos")
+
     # Define color mapping
     unique_groups = all_data[group_by].unique()
     color_sequence = pc.qualitative.Set2
@@ -257,6 +265,10 @@ def get_total_cycles_split_by_intra(
     # Copy and parse bandwidths
     all_data = df.copy()
     all_data[["intra", "inter"]] = all_data["bw_label"].str.split("_", expand=True).astype(int)
+
+    # Format legend labels for config grouping
+    if group_by == "config":
+        all_data[group_by] = all_data[group_by].str.replace("2D_Torus", "2D Torus").str.replace("3D_Torus", "3D Torus").str.replace("FoldedClos", "Folded-Clos")
 
     # Find the minimum value across all data for highlighting
     min_value = all_data["total_cycles"].min()
@@ -379,7 +391,7 @@ def get_total_cycles_split_by_intra(
             text=label_text,
             xref="x domain" if i == 0 else f"x{i+1} domain",
             yref="paper",
-            x=-0.45 if i == 0 else 0.5,
+            x=-0.25 if i == 0 else 0.5,
             y=-0.33,
             showarrow=False,
             font=dict(size=constants.LABEL_SIZE + font_size_delta, color="black"),
@@ -391,14 +403,17 @@ def get_total_cycles_split_by_intra(
         text="Inter BW (GB/s):",
         xref="x domain",
         yref="paper",
-        x=-0.8,
-        y=-0.2,
+        x=-0.5,
+        y=-0.12,
         showarrow=False,
         font=dict(size=constants.LABEL_SIZE + font_size_delta, color="black"),
         xanchor="center"
     )
 
-    # Y-axis title (once, vertically left)
+    # Only save image if "FoldedClos" in title - save before adding Y-axis annotation to avoid overlap
+    
+    
+    # Y-axis title (once, vertically left) - add after saving to avoid overlap in saved image
     fig.add_annotation(
         text=y_label,
         xref="paper",
@@ -410,9 +425,16 @@ def get_total_cycles_split_by_intra(
         xanchor="center",
         textangle=-90
     )
-
-    #filename = "bw_study.svg" 
-    #fig.write_image(f"{filename}") 
+    # if "FoldedClos" in title:
+    #     filename = "bw_study.svg"
+    #     # Save directly from the original figure with high resolution settings
+    #     fig.write_image(
+    #         filename, 
+    #         format="svg",
+    #         width=1800,  # Increased width for higher resolution
+    #         height=600,  # Increased height for higher resolution
+    #         scale=5      # Higher scale factor for better quality (was 3)
+    #     )
     return fig
 
 @st.cache_data
@@ -430,6 +452,10 @@ def get_total_cycles_plot_3d(
     # Ensure intra_bw and inter_bw are numeric
     all_data["intra_bw"] = pd.to_numeric(all_data["intra_bw"], errors="coerce")
     all_data["inter_bw"] = pd.to_numeric(all_data["inter_bw"], errors="coerce")
+
+    # Format legend labels for config grouping
+    if group_by == "config":
+        all_data[group_by] = all_data[group_by].str.replace("2D_Torus", "2D Torus").str.replace("3D_Torus", "3D Torus").str.replace("FoldedClos", "Folded-Clos")
 
     unique_groups = all_data[group_by].unique()
     color_sequence = pc.qualitative.Set2

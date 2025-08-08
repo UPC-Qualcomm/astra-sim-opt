@@ -24,6 +24,4 @@ if st.session_state.get("submitted") is not None:
         st.warning("Data is not loaded yet. Please run the simulation first.")
     else:
         # Visualization Tabs
-        tv.render_sim_ouput_section(sim_outputs)
-else:
-    st.warning("Failed to generate workload.")
+        tv.render_sim_output_section(sim_outputs)

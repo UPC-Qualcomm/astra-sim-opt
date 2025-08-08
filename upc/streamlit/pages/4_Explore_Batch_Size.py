@@ -43,15 +43,40 @@ def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, sel
         comps = strategy_df['exposed_comp_cycles'].fillna(0).values      # Flipped
         comms = strategy_df['exposed_comm_cycles'].fillna(0).values      # Flipped
         totals = strategy_df['exec_cycles'].fillna(0).values
+        
+        # Get percentage values for labels
+        comp_percents = strategy_df['exposed_comp_cycles_percent'].fillna(0).values
+        comm_percents = strategy_df['exposed_comm_cycles_percent'].fillna(0).values
+        overlap_percents = 100 - (comp_percents + comm_percents)
 
         x = range(len(selected_batch_sizes))
         bar_width = 0.6
         bottoms_comp = overlaps
         bottoms_comm = overlaps + comps
 
-        ax.bar(x, overlaps, bar_width, label=labels[0], color=colors[0])
-        ax.bar(x, comps, bar_width, bottom=bottoms_comp, label=labels[1], color=colors[1])   # Flipped
-        ax.bar(x, comms, bar_width, bottom=bottoms_comm, label=labels[2], color=colors[2])   # Flipped
+        bars1 = ax.bar(x, overlaps, bar_width, label=labels[0], color=colors[0])
+        bars2 = ax.bar(x, comps, bar_width, bottom=bottoms_comp, label=labels[1], color=colors[1])   # Flipped
+        bars3 = ax.bar(x, comms, bar_width, bottom=bottoms_comm, label=labels[2], color=colors[2])   # Flipped
+
+        # Add percentage labels to each bar segment
+        for i, (bar1, bar2, bar3) in enumerate(zip(bars1, bars2, bars3)):
+            # Overlap label (bottom segment)
+            if overlaps[i] > 0:
+                ax.text(bar1.get_x() + bar1.get_width()/2, bar1.get_height()/2,
+                       f'{overlap_percents[i]:.1f}%', ha='center', va='center', 
+                       fontsize=constants.FONT_SIZE-2, fontweight='normal')
+            
+            # Exposed comp label (middle segment)
+            if comps[i] > 0:
+                ax.text(bar2.get_x() + bar2.get_width()/2, bottoms_comp[i] + bar2.get_height()/2,
+                       f'{comp_percents[i]:.1f}%', ha='center', va='center', 
+                       fontsize=constants.FONT_SIZE-2, fontweight='normal')
+            
+            # Exposed comm label (top segment)
+            if comms[i] > 0:
+                ax.text(bar3.get_x() + bar3.get_width()/2, bottoms_comm[i] + bar3.get_height()/2,
+                       f'{comm_percents[i]:.1f}%', ha='center', va='center', 
+                       fontsize=constants.FONT_SIZE-2, fontweight='normal')
 
         startegy_label = strategy.split('_')
         ax.set_xticks(x)
@@ -59,7 +84,8 @@ def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, sel
         ax.set_xlabel("Batch Size", fontsize=constants.LABEL_SIZE)
         ax.set_title(f"DP:{startegy_label[0]}, TP:{startegy_label[1]}, SP:{startegy_label[2]}\nPP:{startegy_label[3]}, FSDP:{startegy_label[4]}", fontsize=constants.TITLE_SIZE, pad=20)  # Add padding to title
 
-        if idx == 0:
+        # Show y-axis labels on the first subplot of each row
+        if idx % cols == 0:
             ax.set_ylabel("Time (Cycles)    ", fontsize=constants.LABEL_SIZE)
             ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE)
             ax.yaxis.get_offset_text().set_fontsize(constants.FONT_SIZE)
@@ -71,7 +97,7 @@ def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, sel
     for j in range(idx + 1, len(axes)):
         fig.delaxes(axes[j])
 
-    # Add one global legend in a row (horizontal)
+    # Add one legend in a row (horizontal)
     handles, legend_labels = axes[0].get_legend_handles_labels()
     fig.legend(
         handles, legend_labels,
@@ -166,6 +192,18 @@ def plot_3d_simulation_time_breakdown(df, selected_batch_sizes, selected_model, 
             showlegend=False
         ))
 
+    # Format model name (remove underscores)
+    formatted_model = selected_model.replace('_', ' ')
+    
+    # Format config name
+    config_mapping = {
+        '2D_Torus': '2D Torus',
+        '3D_Torus': '3D Torus', 
+        'Dragonfly': 'Dragonfly',
+        'FoldedClos': 'Folded-Clos'
+    }
+    formatted_config = config_mapping.get(selected_config, selected_config)
+
     layout = go.Layout(
         scene=dict(
             xaxis=dict(
@@ -196,11 +234,17 @@ def plot_3d_simulation_time_breakdown(df, selected_batch_sizes, selected_model, 
                 eye=dict(x=-2.0, y=0.0, z=1.2)  # Batch size on left, strategy on right
             )
         ),
-        title=f"3D Simulation Time Breakdown<br>Model: {selected_model} | Topology: {selected_config}",
+        title=dict(
+            text=f"3D Simulation Time Breakdown<br>Model: {formatted_model} | Topology: {formatted_config}",
+            x=0.5,  # Center the title horizontally
+            xanchor='center'
+        ),
         margin=dict(l=10, r=10, b=10, t=50),
         height=700,
         legend=dict(
-            x=0.01, y=0.99,
+            x=0.85, y=0.5,
+            xanchor='left',
+            yanchor='middle',
             bgcolor='rgba(255,255,255,0.7)',
             bordercolor='black',
             borderwidth=1
@@ -223,9 +267,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 st.subheader(
-    "Exploration: Global Batch Size",
+    "Exploration: Batch Size",
     help=(
-        "This section allows you to explore the impact of different global batch sizes on the simulation time for the chosen model and configuration.\n"
+        "This section allows you to explore the impact of different batch sizes on the simulation time for the chosen model and configuration.\n"
         "- Analyze how varying batch sizes affect the performance metrics.\n"
         "- Understand the trade-offs between batch size and simulation time."
     )
@@ -245,14 +289,14 @@ selected_strategies = st.multiselect(
     max_selections=max_select
 )
 
-exp_opt = st.radio("Select Exploration Mode", ["Saved Data", "Generate New Data"], key="exploration_mode")
-
+#### TODO exp_opt = st.radio("Select Exploration Mode", ["Saved Data", "Generate New Data"], key="exploration_mode")
+exp_opt = "Saved Data"
 if exp_opt == "Generate New Data":
     st.warning("This feature is under development. Please check back later.")
 
 else:
     if exp_opt == "Saved Data":
-        st.info("Using pre-generated data for global batch size exploration.")
+        ####st.info("Using pre-generated data for batch size exploration.")
         selected_batch_sizes = st.multiselect("Select Batch Sizes", sorted_batches, default=sorted_batches)
 
         if not selected_strategies or not selected_batch_sizes:

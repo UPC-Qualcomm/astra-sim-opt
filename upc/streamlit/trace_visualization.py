@@ -21,7 +21,6 @@ NodeType = {
 node_types = list(NodeType.keys())
 
 
-@st.cache_data
 def get_timings_df(csv_trace_file, output_file_name) -> pd.DataFrame:
     df = pd.read_csv(csv_trace_file)
     # Filter issues and rename 'tick' to 'issue_tick'

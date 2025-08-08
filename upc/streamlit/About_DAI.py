@@ -162,7 +162,7 @@ with st.expander("**Interconnect Network Design Exploration**", expanded=False):
 
 with st.expander("**Batch Size Exploration**", expanded=False):
     st.markdown("""
-    - **Global Batch Size Analysis**: Study how batch size affects training efficiency across parallelism strategies
+    - **Batch Size Analysis**: Study how batch size affects training efficiency across parallelism strategies
     - **Performance Breakdown**: Detailed visualization of computation, communication, and overlap cycles
     """)
 
@@ -227,7 +227,7 @@ st.markdown("""
 1. **Modeling & Simulation**: Generate custom workloads and run simulations
 2. **Explore Parallelism Strategies**: Compare different parallelism approaches  
 3. **Explore Network Design**: Analyze interconnect topology and bandwidth impact
-4. **Explore Batch Size**: Compare global batch sizes impact on performance
+4. **Explore Batch Size**: Compare batch sizes impact on performance
 5. **Solver**: Automatically discover optimal parallelism strategies
 
 *Each module provides guided workflows with helpful tooltips and explanations.*
@@ -236,8 +236,8 @@ st.markdown("""
 st.markdown("""
 ---
 
-<div style='text-align: center; margin: 2em 0;'>
-<h3 style='color: #4F8BF9; margin-bottom: 1.5em;'>Meet the Team</h3>
+<div style='text-align: center;'>
+<h3 style='color: #4F8BF9;'>Meet the Team</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -247,11 +247,11 @@ developers = [
     {"name": "Tomás Gadea", "role": "Former Researcher at Universitat Politècnica de Catalunya", "link": "https://ch.linkedin.com/in/tomas-gadea", "image": ""},
     {"name": "Xavier Querol Bassols", "role": "Masters Student at Universitat Politècnica de Catalunya", "link": "https://es.linkedin.com/in/xavier-querol", "image": ""},
     {"name": "Abhijit Das", "role": "Director of Research and Group Leader at the N3Cat at Universitat Politècnica de Catalunya", "link": "https://abhijitcse.github.io/", "image": ""},
-    {"name": "Àlex Batlle", "role": "Researcher at Qualcomm", "link": "https://es.linkedin.com/in/atellas23", "image": ""},
-    {"name": "Adrián Pérez", "role": "Researcher at Qualcomm", "link": "https://www.linkedin.com/in/aperezdieguez", "image": ""},
-    {"name": "Jordi Cortadella", "role": "Professor in   the Computer Science Department at the Universitat Politècnica de Catalunya", "link": "https://www.cs.upc.edu/~jordicf/", "image": ""},
-    {"name": "Sergi Abadal", "role": "N3Cat Director and Distinguished Researcher at Universitat Politècnica de Catalunya", "link": "https://sergiabadal.com/", "image": ""},
-    {"name": "Jordi Ros", "role": "Director of Engineering at Qualcomm", "link": "https://www.linkedin.com/in/jordi-ros-giralt-phd", "image": ""}
+    {"name": "Àlex Batlle", "role": "Researcher at Qualcomm Europe, Inc.", "link": "https://es.linkedin.com/in/atellas23", "image": ""},
+    {"name": "Adrián Pérez", "role": "Researcher at Qualcomm Technologies, Inc.", "link": "https://www.linkedin.com/in/aperezdieguez", "image": ""},
+    {"name": "Jordi Cortadella", "role": "Professor in the Computer Science Department at the Universitat Politècnica de Catalunya", "link": "https://www.cs.upc.edu/~jordicf/", "image": ""},
+    {"name": "Sergi Abadal", "role": "Distinguished Researcher at Universitat Politècnica de Catalunya", "link": "https://sergiabadal.com/", "image": ""},
+    {"name": "Jordi Ros", "role": "Director of Engineering at Qualcomm Europe, Inc.", "link": "https://www.linkedin.com/in/jordi-ros-giralt-phd", "image": ""}
 ]
 
 # Display developers in responsive grid using Streamlit columns
@@ -259,45 +259,46 @@ st.markdown("""
 <style>
 .team-member-card {
     text-align: center;
-    padding: 1em;
+    padding: 0.6em;
     background-color: #f8f9fa;
-    border-radius: 8px;
-    margin: 0.5em 0;
+    border-radius: 6px;
+    margin: 0.3em 0;
     border: 1px solid #e9ecef;
+    min-height: 110px;
 }
 .team-member-card img {
     border-radius: 50%;
-    width: 120px;
-    height: 120px;
-    margin-bottom: 1em;
+    width: 60px;
+    height: 60px;
+    margin-bottom: 0.6em;
     object-fit: cover;
 }
 .team-member-card h4 {
-    margin: 0.5em 0 0.2em 0;
+    margin: 0.3em 0 0.1em 0;
     color: #333;
-    font-size: 1.1em;
+    font-size: 0.95em;
 }
 .team-member-card p {
-    margin: 0 0 0.5em 0;
+    margin: 0 0 0.3em 0;
     color: #666;
-    font-size: 0.9em;
-    line-height: 1.4;
+    font-size: 0.78em;
+    line-height: 1.3;
 }
 .team-member-card a {
     color: #4F8BF9;
     text-decoration: none;
-    font-size: 0.9em;
+    font-size: 0.88em;
 }
 @media (max-width: 768px) {
     .team-member-card img {
-        width: 100px;
-        height: 100px;
+        width: 48px;
+        height: 48px;
     }
     .team-member-card h4 {
-        font-size: 1em;
+        font-size: 0.9em;
     }
     .team-member-card p {
-        font-size: 0.85em;
+        font-size: 0.7em;
     }
 }
 </style>
@@ -310,11 +311,10 @@ first_row_developers = developers[:5]
 cols1 = st.columns(5)
 for j, dev in enumerate(first_row_developers):
     with cols1[j]:
-        img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/120x120/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
-        
+        img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/60x60/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
         st.markdown(f"""
         <div class="team-member-card">
-            <img src='{img_src}' alt='{dev["name"]}'>
+            <!--<img src="{img_src}" alt="{dev['name']}">-->
             <h4><a href='{dev["link"]}' target="_blank">{dev["name"]}</a></h4>
             <p>{dev["role"]}</p>
         </div>
@@ -326,11 +326,10 @@ cols2 = st.columns(4)
 
 for j, dev in enumerate(second_row_developers):
     with cols2[j]:
-        img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/120x120/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
-        
+        img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/60x60/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
         st.markdown(f"""
         <div class="team-member-card">
-            <img src='{img_src}' alt='{dev["name"]}'>
+            <!--<img src="{img_src}" alt="{dev['name']}">-->
             <h4><a href='{dev["link"]}' target="_blank">{dev["name"]}</a></h4>
             <p>{dev["role"]}</p>
         </div>

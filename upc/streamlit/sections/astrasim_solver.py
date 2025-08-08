@@ -89,8 +89,22 @@ def _run_astrasim_bin(paths, temp_sys_path, temp_net_path, temp_dir):
         start_time = time.time()
         returncode = subprocess.run(cmd, shell=True, cwd=None).returncode
         elapsed_time = time.time() - start_time
-        for key in st.session_state.keys():
+        # Preserve important session variables when clearing
+        preserved_keys = {'temp_dir', 'session_id'}
+        preserved_values = {}
+        
+        # Save values we want to keep
+        for key in preserved_keys:
+            if key in st.session_state:
+                preserved_values[key] = st.session_state[key]
+        
+        # Clear all session state
+        for key in list(st.session_state.keys()):
             del st.session_state[key]
+        
+        # Restore preserved values
+        for key, value in preserved_values.items():
+            st.session_state[key] = value
     return returncode, elapsed_time
 
 

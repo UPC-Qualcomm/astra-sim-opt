@@ -64,7 +64,7 @@ with tabs[0]:
     df_sorted = df.sort_values(by="exec_cycles", ascending=True).iloc[0:10]
     parallelism_options = df_sorted["dp_mp_sp_pp_sharded"].tolist()
     selected_parallelism = st.multiselect(
-        f"Select Parallelism Strategies (dp_mp_sp_pp_sharded) - Top {len(parallelism_options)} is available (max 4)",
+        f"Select Parallelism Strategies (dp_mp_sp_pp_sharded) - Top {len(parallelism_options)} is available (max 4 you can select):",
         parallelism_options,
         default=parallelism_options[:4],
         max_selections=4,
@@ -75,17 +75,18 @@ with tabs[0]:
         )
     else:
         parallelism_strategies = df[df["dp_mp_sp_pp_sharded"].isin(selected_parallelism)]["file_name"].unique()
-        col0, col1 = st.columns(2)
+        #### TODO: Restore this when the demo is done
+        col0, _ = st.columns(2)
+        #### with col0:
+        ####     sim_mode = st.radio(
+        ####         "Select Exploration Mode", ["Saved Data", "Generate New Data"]
+        ####     )
         with col0:
-            sim_mode = st.radio(
-                "Select Exploration Mode", ["Saved Data", "Generate New Data"]
-            )
-        with col1:
             plot_type = st.radio("Select Plot Type", ["2D", "3D"])
             is_3d = plot_type == "3D"
-
+        sim_mode = "Saved Data"  # For demo purposes, always use saved data
         if sim_mode == "Saved Data":
-            st.subheader("Exploration Using Saved Data")
+            #### st.subheader("Exploration Using Saved Data")
 
             all_res_dirs_configs = []
 
@@ -155,4 +156,4 @@ with tabs[1]:
     
     st.markdown("---")
     if "df_matched" in st.session_state:
-        tv.render_sim_ouput_section(sim_outputs)
+        tv.render_sim_output_section(sim_outputs)
