@@ -235,8 +235,8 @@ def display_results(df_results, timestamp=None):
         df_results_filtered = df_results_filtered.sort_values(by="Total Cycles").reset_index(drop=True)
 
         st.subheader("Best Strategy Found", help="The details of the strategy with the lowest total cycles.")
-        best_result = df_results_filtered.iloc[0]
-        st.json(best_result.to_dict())
+        best_result = df_results_filtered.iloc[[0]]
+        st.dataframe(best_result)
 
         st.subheader("Top Strategies Comparison", help="Showing the top strategies based on total cycles, with a breakdown of computation and communication cycles.")
         num_to_compare = min(5, len(df_results_filtered))
@@ -571,7 +571,7 @@ def execute_search(num_searches, num_npus, search_space_params, model_params, sy
     total_search_space = len(valid_combinations)
     actual_searches = min(num_searches, total_search_space)
     
-    st.info(f"Running {actual_searches} out of {total_search_space} simulations to find the best parallelism strategy for {num_npus} NPUs...")
+    st.info(f"Running {actual_searches} out of {total_search_space} experiments to find the best parallelism strategy for {num_npus} NPUs...")
     
     # Create temp directory
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

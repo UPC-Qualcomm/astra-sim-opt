@@ -39,7 +39,7 @@ st.markdown("""
 st.markdown("""
 ## Overview
 
-**DAI (Distributed AI Workload Optimizer)** is a comprehensive simulation-driven framework built on top of the [Symbolic Tensor Graph (STG)](https://github.com/astra-sim/symbolic_tensor_graph) and [ASTRA-sim 2.0](https://github.com/astra-sim/astra-sim) that enables researchers to systematically explore, analyze, and optimize distributed deep learning workloads. The framework provides an intuitive web-based interface for investigating the complex interplay between parallelism strategies, hardware configurations, and network topologies in large-scale AI training scenarios.
+**DAI (Distributed AI Workload Optimizer)** is a comprehensive simulation-driven framework built on top of the [Symbolic Tensor Graph (STG)](https://github.com/astra-sim/symbolic_tensor_graph) and [ASTRA-sim 2.0](https://github.com/astra-sim/astra-sim) that enables researchers to systematically explore, analyze, and optimize distributed deep learning workloads. The framework provides an intuitive web-based interface for investigating the complex interaction between parallelism strategies, hardware configurations, and network topologies in large-scale AI training scenarios.
 """)
 
 
@@ -111,20 +111,20 @@ with col2:
         <li>
             <strong>Input Layer</strong>:
             <ul>
-                <li><strong>Workload Generation</strong>: Takes GPT-model architecture specifications (layer count, attention heads, embedding dimensions, etc.), parallelism strategy configuration (Data, Tensor, Sequence, Pipeline, and Fully Sharded Data Parallel - DP, PP, TP, SP, FSDP respectively), and the number of NPUs to generate computational workloads</li>
-                <li><strong>System Specification</strong>: Defines the hardware environment including interconnect network topology, links capacity, NPU peak performance characteristics, and local memory bandwidth specifications</li>
+                <li><strong>Workload Generation</strong>: Takes GPT-model architecture specifications (layer count, attention heads, embedding dimensions, etc.), parallelism strategy configuration (Data, Tensor, Sequence, Pipeline, and Fully Sharded Data Parallel - DP, PP, TP, SP, FSDP respectively), and the number of NPUs to generate computational workloads.</li>
+                <li><strong>System Specification</strong>: Defines the hardware environment including interconnect network topology, links capacity, NPU peak performance characteristics, and local memory bandwidth specifications.</li>
             </ul>
         </li>
         <li>
-            <strong>Trace Generation</strong>: The <a href="https://github.com/astra-sim/symbolic_tensor_graph" target="_blank">Symbolic Tensor Graph (STG)</a> component translates model architectures and parallelism configurations into Chakra execution traces, creating detailed computational graphs that capture the precise sequence of operations required for distributed training.
+            <strong>Trace Generation</strong>: The <a href="https://github.com/astra-sim/symbolic_tensor_graph" target="_blank">Symbolic Tensor Graph (STG)</a> component translates model architectures and parallelism configurations into <a https://mlcommons.org/working-groups/research/chakra/" target="_blank">Chakra</a> execution traces, creating detailed computational graphs that capture the precise sequence of operations required for distributed training.
         </li>
         <li>
             <strong>Simulation Engine</strong>: At the core lies the "Modeling & Simulation" environment powered by <a href="https://github.com/astra-sim/astra-sim" target="_blank">ASTRA-sim 2.0</a>, which processes the traces through four critical analysis dimensions:
             <ul>
-                <li><strong>Computation</strong>: Models the execution time of the workload based on the defined system specifications and parallelism strategies</li>
-                <li><strong>Communication</strong>: Simulates communication patterns of the distributed workload, accounting for intra-node and inter-node bandwidths</li>
-                <li><strong>Memory</strong>: Tracks memory consumption</li>
-                <li><strong>Power</strong>: Estimates power consumption based on hardware specifications and parallelism strategies</li>
+                <li><strong>Computation</strong>: Models the execution time of the workload based on the defined system specifications and parallelism strategies.</li>
+                <li><strong>Communication</strong>: Simulates communication patterns of the distributed workload, accounting for intra-node and inter-node bandwidths.</li>
+                <li><strong>Memory</strong>: Tracks memory consumption.</li>
+                <li><strong>Power</strong>: Estimates power consumption based on hardware specifications and parallelism strategies.</li>
             </ul>
         </li>
         <li>
@@ -141,36 +141,36 @@ st.markdown("## Explore DAI's Capabilities")
 
 with st.expander("**Workload Modeling & Simulation**", expanded=False):
     st.markdown("""
-    - **Interactive Workload Generation**: Create custom transformer-based workloads with configurable model parameters
-    - **Real-time Simulation**: Execute ASTRA-sim simulations directly through the web interface
-    - **Trace Visualization**: Comprehensive visualization of execution traces and performance metrics
+    - **Interactive Workload Generation**: Create custom transformer-based workloads with configurable model parameters.
+    - **Real-time Simulation**: Execute ASTRA-sim simulations directly through the web interface.
+    - **Trace Visualization**: Comprehensive visualization of execution traces and performance metrics.
     """)
 
 with st.expander("**Parallelism Strategy Exploration**", expanded=False):
     st.markdown("""
-    - **Multi-dimensional Analysis**: Systematic exploration of Data Parallel (DP), Pipeline Parallel (PP), Tensor Parallel (TP), and Sequence Parallel (SP) strategies
-    - **Performance Comparison**: Side-by-side analysis of different parallelism configurations
-    - **Machine Learning Insights**: Advanced clustering and dimensionality reduction techniques
+    - **Multi-dimensional Analysis**: Systematic exploration of Data Parallel (DP), Pipeline Parallel (PP), Tensor Parallel (TP), and Sequence Parallel (SP) strategies.
+    - **Performance Comparison**: Side-by-side analysis of different parallelism configurations.
+    - **Machine Learning Insights**: Advanced clustering and dimensionality reduction techniques.
     """)
 
 with st.expander("**Interconnect Network Design Exploration**", expanded=False):
     st.markdown("""
-    - **Topology Comparison**: Analyze performance across different interconnect designs (2D/3D topologies)
-    - **Bandwidth Sensitivity Analysis**: Interactive exploration of intra-node and inter-node bandwidth effects
-    - **Scalability Studies**: Investigate performance scaling characteristics
+    - **Topology Comparison**: Analyze performance across different interconnect designs (2D/3D topologies).
+    - **Bandwidth Sensitivity Analysis**: Interactive exploration of intra-node and inter-node bandwidth effects.
+    - **Scalability Studies**: Investigate performance scaling characteristics.
     """)
 
 with st.expander("**Batch Size Exploration**", expanded=False):
     st.markdown("""
-    - **Batch Size Analysis**: Study how batch size affects training efficiency across parallelism strategies
-    - **Performance Breakdown**: Detailed visualization of computation, communication, and overlap cycles
+    - **Batch Size Analysis**: Study how batch size affects training efficiency of a single training step across parallelism strategies. Testing with multiple steps is ongoing.
+    - **Performance Breakdown**: Detailed visualization of computation, communication, and overlap cycles.
     """)
 
 with st.expander("**Solver**", expanded=False):
     st.markdown("""
-    - **Automated Optimization**: Random search-based solver for optimal parallelism strategies
-    - **Configurable Search Space**: User-defined constraints for each parallelism dimension
-    - **Performance Ranking**: Comprehensive comparison with detailed cycle breakdowns
+    - **Automated Optimization**: Random search-based solver for optimal parallelism strategies.
+    - **Configurable Search Space**: User-defined constraints for each parallelism dimension.
+    - **Performance Ranking**: Comprehensive comparison with detailed cycle breakdowns.
     """)
 
 ##st.markdown("## Technical Foundation")
@@ -237,7 +237,7 @@ st.markdown("""
 ---
 
 <div style='text-align: center;'>
-<h3 style='color: #4F8BF9;'>Meet the Team</h3>
+<h3 style='color: #4F8BF9;'>Our Team</h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -334,4 +334,19 @@ for j, dev in enumerate(second_row_developers):
             <p>{dev["role"]}</p>
         </div>
         """, unsafe_allow_html=True)
+
+# Add simple footer to sidebar with contact information
+# Add contact information at the bottom of the sidebar
+with st.sidebar:
+    # Push content to bottom with spacer
+    st.markdown("<div style='height: 50vh;'></div>", unsafe_allow_html=True)
+    
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; padding: 1em; background-color: #f8f9fa; border-radius: 8px;'>
+        <p style='margin: 0; color: #666; font-size: 0.9em;'>
+            <strong>Contact Info:</strong> mohammad.nasser@upc.edu
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 

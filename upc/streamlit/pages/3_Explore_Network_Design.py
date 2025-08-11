@@ -91,7 +91,9 @@ with tabs[0]:
             all_res_dirs_configs = []
 
             st.subheader(
-                "Study the effect of the bandwidth over parallelism strategies"
+                "Study the effect of the link capacity over parallelism strategies", help=(
+                    "Analyze how varying link capacities impact the performance of different parallelism strategies on a given topology."
+                )
             )
             
             for config in all_configs:
@@ -107,7 +109,9 @@ with tabs[0]:
 
             if all_res_dirs_configs:
                 st.subheader(
-                    "Study the effect of the bandwidth over network topologies"
+                    "Study the effect of the link capacity over network topologies", help=(
+                        "Analyze how varying link capacities impact the performance of different network topologies given a specific configuration."
+                    )
                 )
                 for parallelism_strategy in parallelism_strategies:
                     bw_show.show_res_across_configs(

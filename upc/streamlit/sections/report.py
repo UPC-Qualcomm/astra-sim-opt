@@ -374,7 +374,7 @@ def analysis_across_topologies(selected_model):
         f"Top Parallelism Strategies with Lowest Simulation Time in Best Topology: {counts_df['Topology'][0]}",
         help=(
             "This section highlights the parallelism strategies that achieved the lowest simulation time "
-            "within the best-performing topology.\n"
+            "using the best-performing topology.\n"
             "- Use this to identify the most efficient parallelism configurations for your workload."
         )
     )

@@ -113,7 +113,7 @@ with tabs[0]:
 
         slider_dim1, slider_value1 = helper.select_dim(
             df,
-            select_msg="Select dimension for the slider:",
+            select_msg="Select slider dimension:",
             dims=all_dims,
             defualt_idx=3,
             key_prefix="first",
@@ -122,7 +122,7 @@ with tabs[0]:
         remaining_dims = helper.get_remaining_dims(all_dims, excluded_dim=slider_dim1)
         slider_dim2, slider_value2 = helper.select_dim(
             df,
-            select_msg="Select another dimension for the slider:",
+            select_msg="Select slider dimension:",
             dims=remaining_dims,
             defualt_idx=2,
             key_prefix="second",

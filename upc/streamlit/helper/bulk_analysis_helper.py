@@ -29,7 +29,7 @@ def select_dim(
     col0, col1 = st.columns([2, 4])
     with col0:
         selected_dim = st.selectbox(
-            "Select dimension for the slider:",
+            select_msg,
             dims,
             index=defualt_idx,
             key=f"{key_prefix}_selector",
@@ -249,7 +249,7 @@ def select_umap_components(df_len):
         "minkowski",
         "canberra",
         "braycurtis",
-        "haversine",
+        #"haversine", This works for 2D only
         "mahalanobis",
         "wminkowski",
         "seuclidean",
