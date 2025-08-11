@@ -167,53 +167,24 @@ def _get_default_params(temp_dir):
 
 def _get_network_configurations():
     """Get list of available network configurations"""
-    network_dir = "/media/mohammad/extension/experiments/astra-sim/upc/configuration"
+    config_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'configuration')
     try:
-        files = os.listdir(network_dir)
+        files = os.listdir(config_dir)
         return [f[:-4] for f in files if f.endswith('.yml')]  # Remove .yml extension
     except FileNotFoundError:
         return []
 
 def _load_network_config(network_file):
     """Load network configuration from YAML file"""
-    network_path = f"/media/mohammad/extension/experiments/astra-sim/upc/configuration/network/{network_file}"
+    config_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'configuration')
+    network_path = os.path.join(config_dir, network_file)
     try:
         with open(network_path, 'r') as f:
             content = f.read()
             config_data = yaml.safe_load(content)
             return content, config_data
     except (FileNotFoundError, yaml.YAMLError) as e:
-        print(f"Failed to load network config: {e}")  # Use print instead of st.error for now
-        return None, None
-
-def _load_system_config(network_file):
-    """Load system configuration from JSON file"""
-    # Map network file to corresponding system config
-    system_mapping = {
-        "2D_Torus.yml": "2D_Torus.json",
-        "3D_Torus.yml": "3D_Torus.json", 
-        "Dragonfly.yml": "Dragonfly.json",
-        "FoldedClos.yml": "FoldedClos.json"
-    }
-    
-    system_file = system_mapping.get(network_file, network_file.replace('.yml', '.json'))
-    system_path = f"/media/mohammad/extension/experiments/astra-sim/upc/configuration/system/{system_file}"
-    
-    try:
-        with open(system_path, 'r') as f:
-            return f.read()
-    except FileNotFoundError as e:
-        print(f"Failed to load system config: {e}")  # Use print instead of st.error for now
-        return None
-
-def _load_network_config(network_file):
-    """Load network configuration from YAML file"""
-    config_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'configuration')
-    try:
-        with open(os.path.join(config_dir, network_file)) as f:
-            raw_content = f.read()
-            return raw_content, yaml.safe_load(raw_content)
-    except (FileNotFoundError, yaml.YAMLError):
+        print(f"Failed to load network config: {e}")
         return None, None
 
 def _load_system_config(network_file):
