@@ -292,10 +292,16 @@ def find_trace_files(df_results, temp_base_dir, seq, batch):
 
 def create_strategy_dropdown(df_results):
     """Create dropdown options for strategy selection"""
+    # Filter out results with zero or None total cycles
+    df_results_filtered = df_results[
+        (df_results["Total Cycles"] > 0) & 
+        (df_results["Total Cycles"].notnull())
+    ]
+    
     strategy_options = []
     strategy_mapping = {}
     
-    for idx, row in df_results.iterrows():
+    for idx, row in df_results_filtered.iterrows():
         dp = int(row['Data Parallel'])
         tp = int(row['Tensor Parallel'])
         sp = int(row['Sequence Parallel'])
