@@ -600,6 +600,10 @@ def execute_search(num_searches, num_npus, search_space_params, model_params, sy
     # Create and store results
     df_results = create_results_dataframe(results)
     
+    # Filter out results with zero or None total cycles
+    if df_results is not None:
+        df_results = df_results[(df_results["Total Cycles"] > 0) & (df_results["Total Cycles"].notnull())]
+    
     # Store in session state
     st.session_state[results_key] = {
         'df_results': df_results,

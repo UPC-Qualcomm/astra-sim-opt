@@ -1,6 +1,5 @@
 import os
 import streamlit as st
-from pathlib import Path
 import subprocess
 import json
 import time
@@ -89,18 +88,23 @@ def _run_astrasim_bin(paths, temp_sys_path, temp_net_path, temp_dir):
         start_time = time.time()
         returncode = subprocess.run(cmd, shell=True, cwd=None).returncode
         elapsed_time = time.time() - start_time
-        # Preserve important session variables when clearing
-        preserved_keys = {'temp_dir', 'session_id'}
+        # Clear all session state safely, preserving important keys
+        keys_to_preserve = {'temp_dir', 'session_id'}
         preserved_values = {}
         
         # Save values we want to keep
-        for key in preserved_keys:
+        for key in keys_to_preserve:
             if key in st.session_state:
                 preserved_values[key] = st.session_state[key]
         
-        # Clear all session state
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
+        # Clear all session state safely using try-catch to handle missing keys
+        keys_to_delete = [key for key in st.session_state.keys() if key not in keys_to_preserve]
+        for key in keys_to_delete:
+            try:
+                del st.session_state[key]
+            except KeyError:
+                # Key was already deleted or doesn't exist, which is fine
+                pass
         
         # Restore preserved values
         for key, value in preserved_values.items():

@@ -37,6 +37,11 @@ with col2:
             "slowest": "Slowest NPU",
             "average": "Average Across all NPUs",
         }[x],
+        help=(
+            "Choose analysis perspective:\n"
+            "- **Slowest NPU**: Represent the experiment with the performance of the slowest NPU\n"
+            "- **Average Across all NPUs**: Consider average performance across all NPUs"
+        )
     )
 
 with col1:
