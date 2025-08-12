@@ -26,12 +26,21 @@ st.subheader(
 base_dir = picker._get_output_dir()
 selected_model = picker.model_selector(base_dir)
 
+#TODO: Switch variables rather than hardcoded values
+st.info(f"""
+        **Peak performance for Single NPU**: {st.session_state.peak_perf} TFLOPs, \t
+        **Peak memory bandwidth**: {st.session_state.peak_bw} GB/s, \n
+        **Inter node Bandwidth**: {200} GB/s, \t
+        **Intra node Bandwidth**: {900} GB/s, \t
+        **Number of NPUs**: {32}
+    """)
 fig, selected_topologies, df = (
     report.analysis_across_topologies(selected_model)
 )
 
 
 st.pyplot(fig)
+st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666; margin-top: 1em;'>Detailed comparison of selected parallelism strategies across different network topologies. Each subplot shows the execution time breakdown (overlap, exposed computation, and exposed communication) for a specific parallelism configuration, enabling direct performance comparison between topologies for optimal system design.</p>", unsafe_allow_html=True)
 
 st.markdown("---")
 

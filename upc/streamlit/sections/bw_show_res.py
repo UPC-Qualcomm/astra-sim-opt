@@ -403,7 +403,7 @@ def get_total_cycles_split_by_intra(
         text="Inter BW (GB/s):",
         xref="x domain",
         yref="paper",
-        x=-0.5,
+        x=-0.9,
         y=-0.12,
         showarrow=False,
         font=dict(size=constants.LABEL_SIZE + font_size_delta, color="black"),

@@ -299,6 +299,14 @@ else:
         ####st.info("Using pre-generated data for batch size exploration.")
         selected_batch_sizes = st.multiselect("Select Batch Sizes", sorted_batches, default=sorted_batches)
 
+        #TODO: Switch variables rather than hardcoded values
+        st.info(f"""
+            **Peak performance for Single NPU**: {st.session_state.peak_perf} TFLOPs, \t
+            **Peak memory bandwidth**: {st.session_state.peak_bw} GB/s, \n
+            **Inter node Bandwidth**: {200} GB/s, \t
+            **Intra node Bandwidth**: {900} GB/s, \t
+            **Number of NPUs**: {32}
+        """)
         if not selected_strategies or not selected_batch_sizes:
             st.warning("Please select at least one strategy and one batch size.")
             st.stop()
@@ -314,6 +322,8 @@ else:
         )
         if plot_type == "2D Stacked Bar":
             plot_simulation_time_breakdown(filtered_df, selected_batch_sizes, selected_model, selected_config)
+            st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666; margin-top: 1em;'>Execution time breakdown showing how different batch sizes affect overlap (blue), exposed computation (green), and exposed communication (red) for each parallelism strategy. Percentage labels indicate the proportion of each component. Higher overlap and lower exposed communication generally indicate better performance.</p>", unsafe_allow_html=True)
         else:
             plot_3d_simulation_time_breakdown(filtered_df, selected_batch_sizes, selected_model, selected_config)
+            st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666; margin-top: 1em;'>Interactive 3D visualization of execution time breakdown across batch sizes and parallelism strategies. Each vertical bar segment represents different execution components stacked on top of each other. Use mouse controls to rotate and zoom for better exploration of the performance landscape.</p>", unsafe_allow_html=True)
 

@@ -161,21 +161,21 @@ def _parallelism_startegy_form(selected_model, selected_config, base_model_dir):
 
     #if submitted and selected_file:
     # Clear session state (if needed) - preserving important values
-    preserved_keys = {'temp_dir', 'session_id'}
-    preserved_values = {}
-    
-    # Save values we want to keep
-    for key in preserved_keys:
-        if key in st.session_state:
-            preserved_values[key] = st.session_state[key]
-    
-    # Clear all session state
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    
-    # Restore preserved values
-    for key, value in preserved_values.items():
-        st.session_state[key] = value
+    #preserved_keys = {'temp_dir', 'session_id', 'df_matched', 'peak_perf', 'peak_bw', 'show_npu_plots'}
+    #preserved_values = {}
+    #
+    ## Save values we want to keep
+    #for key in preserved_keys:
+    #    if key in st.session_state:
+    #        preserved_values[key] = st.session_state[key]
+    #
+    ## Clear all session state
+    #for key in list(st.session_state.keys()):
+    #    del st.session_state[key]
+    #
+    ## Restore preserved values
+    #for key, value in preserved_values.items():
+    #    st.session_state[key] = value
 
     # Parse parallelism degrees from strategy
     dp, tp, sp, pp, sharding_val = selected_strategy.split("_")
@@ -213,9 +213,8 @@ def _detect_file_change(csv_trace_file):
 def _set_session_df(base_dir, file_base, csv_trace_file):
     timed_file_name = f"{file_base}_trace_matched_timiming.csv"
     timed_csv = os.path.join(base_dir, timed_file_name)
-    if "df_matched" not in st.session_state:
-        #TODO
-        st.session_state.df_matched = pd.read_csv(csv_trace_file)#tv.get_timings_df(csv_trace_file, timed_csv) #pd.read_csv(timed_csv)  
+    # Always update df_matched when a new trace file is selected
+    st.session_state.df_matched = pd.read_csv(csv_trace_file)  
 
 def set_session_peak_perf_bw(selected_config):
     CONFIGS_DIR = _get_configs_dir()
@@ -488,7 +487,7 @@ def plot_experiments_bound_breakdown(df, chunk_size=40):
         ax.yaxis.get_offset_text().set_fontsize(constants.YTICK_SIZE)
         ax.set_xlabel('Combination of parallelism strategies: DP,TP,SP,PP,FSDP', fontsize=constants.LABEL_SIZE)
         ax.set_ylabel('Time (Cycles)', fontsize=constants.LABEL_SIZE)
-        ax.set_title(f'Execution Breakdown per Experiment - #NPUs is {num_npus}', fontsize=constants.TITLE_SIZE)#(Experiments {start + 1} to {end})', fontsize=constants.TITLE_SIZE)
+        ax.set_title(f'Execution Breakdown per Experiment - #NPUs is {num_npus} - (Experiments {start + 1} to {end})', fontsize=constants.TITLE_SIZE)
         if (i == 0):
             ax.legend(
                 fontsize=constants.LEGEND_SIZE,

@@ -14,6 +14,44 @@ st.markdown("""
         }
         #MainMenu {visibility: hidden;}
         .stAppDeployButton {display:none;}
+        
+        /* Remove margins from h4 elements and their wrapper divs */
+        .stMarkdown h4 {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        
+        /* Target all h4 elements globally */
+        h4 {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* Target Streamlit's markdown container divs */
+        .stMarkdown > div {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* More specific targeting for markdown containers */
+        .element-container .stMarkdown {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* Target the div that contains markdown elements */
+        .element-container {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* Alternative approach for all header elements if needed */
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -244,15 +282,15 @@ st.markdown("""
 
 # Developer data
 developers = [
-    {"name": "Mohammad Nasser", "role": "Ph.D Student at Universitat Politècnica de Catalunya", "link": "https://es.linkedin.com/in/mohyna", "image": ""},
-    {"name": "Tomás Gadea", "role": "Former Researcher at Universitat Politècnica de Catalunya", "link": "https://ch.linkedin.com/in/tomas-gadea", "image": ""},
-    {"name": "Xavier Querol Bassols", "role": "Masters Student at Universitat Politècnica de Catalunya", "link": "https://es.linkedin.com/in/xavier-querol", "image": ""},
-    {"name": "Abhijit Das", "role": "Director of Research and Group Leader at the N3Cat at Universitat Politècnica de Catalunya", "link": "https://abhijitcse.github.io/", "image": ""},
-    {"name": "Àlex Batlle", "role": "Researcher at Qualcomm Europe, Inc.", "link": "https://es.linkedin.com/in/atellas23", "image": ""},
-    {"name": "Adrián Pérez", "role": "Researcher at Qualcomm Technologies, Inc.", "link": "https://www.linkedin.com/in/aperezdieguez", "image": ""},
-    {"name": "Jordi Cortadella", "role": "Professor in the Computer Science Department at the Universitat Politècnica de Catalunya", "link": "https://www.cs.upc.edu/~jordicf/", "image": ""},
-    {"name": "Sergi Abadal", "role": "Distinguished Researcher at Universitat Politècnica de Catalunya", "link": "https://sergiabadal.com/", "image": ""},
-    {"name": "Jordi Ros", "role": "Director of Engineering at Qualcomm Europe, Inc.", "link": "https://www.linkedin.com/in/jordi-ros-giralt-phd", "image": ""}
+    {"name": "Mohammad Nasser", "role": "Universitat Politècnica de Catalunya", "link": "https://es.linkedin.com/in/mohyna", "image": ""},
+    {"name": "Tomás Gadea", "role": "Universitat Politècnica de Catalunya", "link": "https://ch.linkedin.com/in/tomas-gadea", "image": ""},
+    {"name": "Xavier Querol Bassols", "role": "Universitat Politècnica de Catalunya", "link": "https://es.linkedin.com/in/xavier-querol", "image": ""},
+    {"name": "Abhijit Das", "role": "Universitat Politècnica de Catalunya", "link": "https://abhijitcse.github.io/", "image": ""},
+    {"name": "Àlex Batlle", "role": "Qualcomm Europe, Inc.", "link": "https://es.linkedin.com/in/atellas23", "image": ""},
+    {"name": "Adrián Pérez", "role": "Qualcomm Technologies, Inc.", "link": "https://www.linkedin.com/in/aperezdieguez", "image": ""},
+    {"name": "Jordi Cortadella", "role": "Universitat Politècnica de Catalunya", "link": "https://www.cs.upc.edu/~jordicf/", "image": ""},
+    {"name": "Sergi Abadal", "role": "Universitat Politècnica de Catalunya", "link": "https://sergiabadal.com/", "image": ""},
+    {"name": "Jordi Ros", "role": "Qualcomm Europe, Inc.", "link": "https://www.linkedin.com/in/jordi-ros-giralt-phd", "image": ""}
 ]
 
 # Display developers in responsive grid using Streamlit columns
@@ -266,6 +304,10 @@ st.markdown("""
     margin: 0.3em 0;
     border: 1px solid #e9ecef;
     min-height: 110px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }
 .team-member-card img {
     border-radius: 50%;
@@ -275,20 +317,27 @@ st.markdown("""
     object-fit: cover;
 }
 .team-member-card h4 {
-    margin: 0.3em 0 0.1em 0;
+    margin: 0.2em 0.1em 0.1em 0.1em;
     color: #333;
     font-size: 0.95em;
+    text-align: center;
+    width: 100%;
 }
 .team-member-card p {
-    margin: 0 0 0.3em 0;
+    margin: 0.1em 0.1em 0.2em 0.1em;
     color: #666;
-    font-size: 0.78em;
-    line-height: 1.3;
+    font-size: 0.75em;
+    line-height: 1.2;
+    text-align: center;
+    width: 100%;
 }
 .team-member-card a {
     color: #4F8BF9;
     text-decoration: none;
     font-size: 0.88em;
+    text-align: center;
+    display: block;
+    width: 100%;
 }
 @media (max-width: 768px) {
     .team-member-card img {
@@ -299,7 +348,7 @@ st.markdown("""
         font-size: 0.9em;
     }
     .team-member-card p {
-        font-size: 0.7em;
+        font-size: 0.6em;
     }
 }
 </style>
@@ -315,7 +364,6 @@ for j, dev in enumerate(first_row_developers):
         img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/60x60/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
         st.markdown(f"""
         <div class="team-member-card">
-            <!--<img src="{img_src}" alt="{dev['name']}">-->
             <h4><a href='{dev["link"]}' target="_blank">{dev["name"]}</a></h4>
             <p>{dev["role"]}</p>
         </div>
@@ -330,7 +378,6 @@ for j, dev in enumerate(second_row_developers):
         img_src = dev["image"] if dev["image"] else f"https://via.placeholder.com/60x60/4F8BF9/white?text={dev['name'].replace(' ', '+')}"
         st.markdown(f"""
         <div class="team-member-card">
-            <!--<img src="{img_src}" alt="{dev['name']}">-->
             <h4><a href='{dev["link"]}' target="_blank">{dev["name"]}</a></h4>
             <p>{dev["role"]}</p>
         </div>

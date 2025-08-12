@@ -195,6 +195,11 @@ def render(df):
             "- Helps in understanding how each feature affects the prediction."
         ),
     )
+    st.info(
+        "**Note:** When changing the value of one parallelism approach (e.g., Data Parallelism - DP), "
+        "other parallelism approaches must be adjusted (Tensor Parallelism - TP, Sequence Parallelism - SP, "
+        "Pipeline Parallelism - PP) to ensure the correctness of the equation: **DP × TP × SP × PP = #NPUs**"
+    )
     col0, col1 = st.columns(2)
     with col0:
         st.write("Random Forest:")
@@ -202,7 +207,7 @@ def render(df):
             best_rf,
             X_test,
             features,
-            "RF: Normalized Partial Dependence on Total",
+            "Normalized Partial Dependence over Time",
             possible_degree_val,
         )
         st.pyplot(rf_pdp_fig)
@@ -213,7 +218,7 @@ def render(df):
             best_xgb,
             X_test,
             features,
-            "XGB: Normalized Partial Dependence on Total",
+            "Normalized Partial Dependence over Time",
             possible_degree_val,
         )
         st.pyplot(xgb_pdp_fig)

@@ -345,6 +345,7 @@ def analysis_across_topologies(selected_model):
     stats_df = compute_summary_stats(merged_df, selected_files)
     fig = get_summary_plot(stats_df)
     st.pyplot(fig)
+    st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666; margin-top: 1em;'>Average execution time breakdown across different network topologies, aggregated over all parallelism strategies. Shows the proportion of overlapped execution (blue), exposed communication (red), and exposed computation (green). Lower total bars indicate better overall topology performance.</p>", unsafe_allow_html=True)
     #**#st.header("Summary Statistics per Topology - ordered by avg_exec (lower to higher)")
     #**#st.dataframe(stats_df.sort_values('avg_exec (s)'))
 

@@ -80,6 +80,7 @@ def visualize_simulation_results(sim_outputs):
         plots = sr.plot_sim_results(sim_outputs["res_log"])
         for pl in plots:
             st.write(pl)
+        st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666;'>Per plot simulation results, showcasing the amount of overlapped compute and communication along with the exposed computation and communication.</p>", unsafe_allow_html=True)
 
 
 def _setup_dirs(temp_dir):

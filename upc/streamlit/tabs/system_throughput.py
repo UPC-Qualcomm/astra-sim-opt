@@ -8,6 +8,8 @@ def render_system_throughput(df):
     set_parallelism_strategy(df_sys)
     fig = get_sys_throughput_plots(df_sys)
     st.pyplot(fig)
+    st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666;'>System throughput measured in tokens per second for different parallelism strategies. Higher values indicate better performance. The top 50 performing configurations are shown, sorted by throughput in descending order.</p>", unsafe_allow_html=True)
+
 
 def calculate_num_tokens(df):
     df["num_tokens"] = df["file_name"].apply(lambda x: int(x.split(".")[1].split("_")[1]) * int(x.split(".")[2].split("_")[1]))

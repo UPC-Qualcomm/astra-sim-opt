@@ -28,11 +28,15 @@ def run_simulation_for_solver(params, sys_content, net_content):
     returncode, elapsed_time = _run_astrasim_bin(
         paths, temp_sys_path, temp_net_path, params["temp_dir"]
     )
-    if "df_matched" not in st.session_state:
+    
+    # Process the simulation results
+    comm_cycles, comp_cycles = _handle_sim_result(returncode, elapsed_time, paths, sys_content)
+    
+    # Create df_matched for visualization after successful simulation
+    if returncode == 0:
         st.session_state.df_matched = tv.get_timings_df(
             paths['trace_file'], paths["timed_trace"]
         )
-    comm_cycles, comp_cycles = _handle_sim_result(returncode, elapsed_time, paths, sys_content)
 
     return {
         "elapsed_time": elapsed_time,
@@ -89,7 +93,7 @@ def _run_astrasim_bin(paths, temp_sys_path, temp_net_path, temp_dir):
         returncode = subprocess.run(cmd, shell=True, cwd=None).returncode
         elapsed_time = time.time() - start_time
         # Clear all session state safely, preserving important keys
-        keys_to_preserve = {'temp_dir', 'session_id'}
+        keys_to_preserve = {'temp_dir', 'session_id', 'df_matched', 'peak_perf', 'peak_bw', 'show_npu_plots'}
         preserved_values = {}
         
         # Save values we want to keep

@@ -71,6 +71,7 @@ def plot_elapsed_times(
     chart_height = max(
         unique_nodes * constants.FONT_SIZE * 1.5, max_height
     )  # min/max to keep reasonable bounds
+    font_local_controller = -8
     return (
         alt.Chart(df)
         #.transform_calculate(
@@ -106,7 +107,7 @@ def plot_elapsed_times(
             title=["Elapsed Time Of Compute and Communication Operations", f"NPU {npu}{exp}"]
         )
         .configure_axis(
-            labelFontSize=constants.XTICK_SIZE+2,
+            labelFontSize=constants.XTICK_SIZE+2 + font_local_controller,
             labelColor='black',
             titleFontSize=constants.LABEL_SIZE+2,
             titleFont='Arial',
@@ -117,15 +118,15 @@ def plot_elapsed_times(
             labelLimit=300
         )
         .configure_title(
-            fontSize=constants.TITLE_SIZE+2,
+            fontSize=constants.TITLE_SIZE+2 + font_local_controller,
             font='Arial',
             anchor='start',
             color='black',
             fontWeight="normal"
         )
         .configure_legend(
-            labelFontSize=constants.LEGEND_SIZE+2,
-            titleFontSize=constants.LEGEND_SIZE+2,
+            labelFontSize=constants.LEGEND_SIZE+2 + font_local_controller,
+            titleFontSize=constants.LEGEND_SIZE+2 + font_local_controller,
             labelColor='black',
             titleColor='black'
         )
@@ -162,6 +163,7 @@ def get_overlapped_blocks(df: pd.DataFrame) -> dict[str, list[int]]:
 
 @st.cache_data
 def plot_overlapped_blocks(df: pd.DataFrame, npu, exp = "") -> alt.Chart:
+    font_local_controller = -8
     type_labels = {"COMMUNICATION": "COMM", "COMPUTATION": "COMP"}
     df = df.copy()
     df["type_label"] = df["node_type"].map(type_labels)
@@ -188,23 +190,23 @@ def plot_overlapped_blocks(df: pd.DataFrame, npu, exp = "") -> alt.Chart:
         .configure_axis(
             grid=False,
             ticks=False,
-            labelFontSize=constants.XTICK_SIZE,
-            titleFontSize=constants.LABEL_SIZE,
+            labelFontSize=constants.XTICK_SIZE + font_local_controller,
+            titleFontSize=constants.LABEL_SIZE + font_local_controller,
             labelColor="black",
             titleColor="black",
         )
         .configure_title(
-            fontSize=constants.TITLE_SIZE,
+            fontSize=constants.TITLE_SIZE + font_local_controller,
             color="black",
             fontWeight="normal"
         )
         .configure_legend(
-            labelFontSize=constants.LEGEND_SIZE,
+            labelFontSize=constants.LEGEND_SIZE + font_local_controller,
             labelColor="black"
         )
         .properties(
             height=400,
-            width=1200,
+            width=1000,
             title=["Operation Blocks Duration Through Time", exp],
         )
     )
@@ -230,4 +232,8 @@ def plot_one_npu(df, npu=0, plot_blocks=True, plot_times=False, exp = ""):
 def plot_all_npus(df):
     for npu in range(64):
         df_0 = df.query(f"sys_id == {npu}")
-        plot_one_npu(df, npu, plot_blocks=True, plot_times=False, exp = "")
+        chart = plot_one_npu(df, npu, plot_blocks=True, plot_times=False, exp = "")
+        if chart:
+            chart = chart.resolve_scale(x='shared').configure_view(strokeWidth=0, continuousHeight=400, continuousWidth=1000).configure_axis(grid=False).configure_concat(spacing=20)
+            st.altair_chart(chart, use_container_width=True)
+            st.markdown("<div style='margin-bottom: 50px;'></div>", unsafe_allow_html=True)

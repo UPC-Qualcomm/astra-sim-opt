@@ -126,6 +126,12 @@ def selected_dims_3d_fig(
 
     if global_min != -1 and global_min in df.index:
         min_point = df.loc[global_min]
+        cycles_in_billions = min_point[z_dim] / 1e9
+        global_min_hover = (
+            f"Parallelism Strategy:<br>"
+            f"DP: {min_point.get('dp', 'N/A')}, TP: {min_point.get('tp', 'N/A')}, SP: {min_point.get('sp', 'N/A')}, PP: {min_point.get('pp', 'N/A')}, FSDP: {min_point.get('fsdp', 'N/A')}<br>"
+            f"Time in cycles: {cycles_in_billions:.2f}B"
+        )
         fig.add_trace(
             go.Scatter3d(
                 x=[min_point[x_dim]],
@@ -136,10 +142,23 @@ def selected_dims_3d_fig(
                 text=["Min total"],
                 textposition="top center",
                 name="Global Min",
+                hovertemplate=global_min_hover + "<extra></extra>",
+                hoverinfo="text",
             )
         )
 
     if not local_min_df.empty:
+        # Create custom hover text for local minima
+        local_min_hover = []
+        for idx, row in local_min_df.iterrows():
+            cycles_in_billions = row[z_dim] / 1e9
+            hover_text = (
+                f"Parallelism Strategy:<br>"
+                f"DP: {row.get('dp', 'N/A')}, TP: {row.get('tp', 'N/A')}, SP: {row.get('sp', 'N/A')}, PP: {row.get('pp', 'N/A')}, FSDP: {row.get('fsdp', 'N/A')}<br>"
+                f"Time in cycles: {cycles_in_billions:.2f}B"
+            )
+            local_min_hover.append(hover_text)
+        
         fig.add_trace(
             go.Scatter3d(
                 x=local_min_df[x_dim],
@@ -148,8 +167,22 @@ def selected_dims_3d_fig(
                 mode="markers",
                 marker=dict(size=5, color="purple", symbol="diamond"),
                 name="Local Minima",
+                hovertemplate="%{customdata}<extra></extra>",
+                customdata=local_min_hover,
+                hoverinfo="text",
             )
         )
+
+    # Create custom hover text for all data points
+    data_hover = []
+    for idx, row in df.iterrows():
+        cycles_in_billions = row[z_dim] / 1e9
+        hover_text = (
+            f"Parallelism Strategy:<br>"
+            f"DP: {row.get('dp', 'N/A')}, TP: {row.get('tp', 'N/A')}, SP: {row.get('sp', 'N/A')}, PP: {row.get('pp', 'N/A')}, FSDP: {row.get('fsdp', 'N/A')}<br>"
+            f"Time in cycles: {cycles_in_billions:.2f}B"
+        )
+        data_hover.append(hover_text)
 
     fig.add_trace(
         go.Scatter3d(
@@ -159,6 +192,9 @@ def selected_dims_3d_fig(
             mode="markers",
             marker=dict(size=4, color=df[color_dim], colorscale=colorscale),
             name="Data Points",
+            hovertemplate="%{customdata}<extra></extra>",
+            customdata=data_hover,
+            hoverinfo="text",
         )
     )
 
@@ -184,6 +220,7 @@ def selected_dims_3d_fig(
                 mode="lines",
                 line=dict(color="black", width=2),
                 showlegend=False,
+                hoverinfo="skip",
             )
         )
 
@@ -544,7 +581,7 @@ def ml_random_forest(df, X_train, X_test, y_train, y_test):
         {
             "Model": ["Random Forest"],
             "R2 Score": [r2_score(y_test, preds_rf)],
-            "RMSE": [np.sqrt(mean_squared_error(y_test, preds_rf))],
+            #"RMSE": [np.sqrt(mean_squared_error(y_test, preds_rf))],
             "NRMSE": [
                 np.sqrt(mean_squared_error(y_test, preds_rf))
                 / (df["total"].max() - df["total"].min())
@@ -579,7 +616,7 @@ def ml_xgboost(df, X_train, X_test, y_train, y_test):
         {
             "Model": ["XGBoost"],
             "R2 Score": [r2_score(y_test, preds_xgb)],
-            "RMSE": [np.sqrt(mean_squared_error(y_test, preds_xgb))],
+            #"RMSE": [np.sqrt(mean_squared_error(y_test, preds_xgb))],
             "NRMSE": [
                 np.sqrt(mean_squared_error(y_test, preds_xgb))
                 / (df["total"].max() - df["total"].min())
@@ -603,7 +640,7 @@ def ml_mlp(df, X_train, X_test, y_train, y_test):
         {
             "Model": ["MLP"],
             "R2 Score": [r2_score(y_test, preds_mlp)],
-            "RMSE": [np.sqrt(mean_squared_error(y_test, preds_mlp))],
+            #"RMSE": [np.sqrt(mean_squared_error(y_test, preds_mlp))],
             "NRMSE": [
                 np.sqrt(mean_squared_error(y_test, preds_mlp))
                 / (df["total"].max() - df["total"].min())
@@ -663,12 +700,12 @@ def compute_and_plot_pdp(model, X_test, features, title, degree_val):
         norm_vals = (vals - np.min(vals)) / (np.max(vals) - np.min(vals))
         temp_df = pd.DataFrame(
             {
-                "Feature": feat,
+                "Feature": feat.upper(),
                 "Feature Value": axes_results[feat],
                 "Normalized Effect on Total": norm_vals,
             }
         )
-        plot_data = pd.concat([plot_data, temp_df])
+        plot_data = pd.concat([plot_data, temp_df], ignore_index=True)
 
     fig, ax = plt.subplots(figsize=(12, 4))
     sns.lineplot(
@@ -679,9 +716,9 @@ def compute_and_plot_pdp(model, X_test, features, title, degree_val):
         ax=ax,
     )
     ax.set_title(title)
-    ax.set_ylabel("Normalized Effect on Total")
-    ax.set_xlabel("Feature Value")
-    ax.legend(title="Feature")
+    ax.set_ylabel("Normalized Effect\non the Time (Cycles)")
+    ax.set_xlabel("Parallelism Degree")
+    ax.legend(title="")
     ax.grid(True)
     ax.set_xticks(degree_val)
 

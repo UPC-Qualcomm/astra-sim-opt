@@ -45,13 +45,16 @@ with col2:
     )
 
 with col1:
+    #TODO: Switch variables rather than hardcoded values
     st.info(f"""
         **Peak performance**: {st.session_state.peak_perf} TFLOPs, \t
-        **Peak memory bandwidth**: {st.session_state.peak_bw} GB/s
+        **Peak memory bandwidth**: {st.session_state.peak_bw} GB/s, \n
+        **Inter node Bandwidth**: {200} GB/s, \t
+        **Intra node Bandwidth**: {900} GB/s, \t
+        **Number of NPUs**: {32}
     """)
 
 df = picker.get_all_parallelism_strategies_data(selected_model, selected_config, option)
-
 
 df_sorted = df.sort_values(by="total", ascending=True)
 figs = picker.plot_experiments_bound_breakdown(
@@ -59,6 +62,8 @@ figs = picker.plot_experiments_bound_breakdown(
 )
 for fig in figs:
     st.pyplot(fig)
+
+st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666; margin-top: 1em;'>Execution breakdown showing the percentage of time spent on memory-bound operations (blue), compute-bound operations (green), and exposed communication (red) for different parallelism strategies. Lower total execution time indicates better performance.</p>", unsafe_allow_html=True)
 
 st.markdown("---")
 # Custom CSS for colored tab backgrounds
@@ -102,18 +107,18 @@ with tabs[0]:
         local_min_df_all_axis = helper.find_local_minima_all_axis(
             df[df["fsdp"] == selected_fsdp], "dp", "tp", "sp", "pp", value_col="total"
         )        
-        cols_to_show = ["dp", "tp", "sp", "pp", "fsdp", "mem_percent", "comp_percent", "comm_percent"]
+        cols_to_show = ["dp", "tp", "sp", "pp", "fsdp", "total", "mem_percent", "comp_percent", "comm_percent"]
         col_rename_map = {
             "dp": "Data Parallelism",
             "tp": "Tensor Parallelism",
             "sp": "Sequence Parallelism",
             "pp": "Pipeline Parallelism",
             "fsdp": "Full Sharded",
+            "total": "Time in cycles",
             "mem_percent": "Memory Bound Op (%)",
             "comp_percent": "Compute Bound Op (%)",
-            "comm_percent": "Expose Comm (%)"
+            "comm_percent": "Expose Comm (%)",
         }
-        st.write(local_min_df_all_axis[cols_to_show].rename(columns=col_rename_map))
         global_min_idx = local_min_df_all_axis["total"].idxmin()
 
         slider_dim1, slider_value1 = helper.select_dim(
@@ -148,16 +153,28 @@ with tabs[0]:
         ]
 
         st.subheader("Data Slice:", help=("View the data slice based on selected dimensions."))
-        st.write(filtered_df.sort_values("total")[cols_to_show].rename(columns=col_rename_map))
+        st.dataframe(filtered_df.sort_values("total")[cols_to_show].rename(columns=col_rename_map))
+        
+        if not filtered_df.empty:
+            local_min_df = helper.find_local_minima(
+                filtered_df, x_dim, y_dim, z_dim, value_col="total"
+            )
+        if not local_min_df.empty:
+            st.subheader(
+                "Local Minima Records on the Data Slice:",
+                help=(
+                    "View the local minima records for the data slice.\n"
+                    "- This helps in understanding the performance patterns at lower dimensions."
+                )
+            )
+            st.dataframe(local_min_df.sort_values("total")[cols_to_show].rename(columns=col_rename_map))
+        else:
+            st.write("No local minima found for the selected configuration.")
 
     with col1:
         if filtered_df.empty:
             st.warning("No data for the selected combination.")
         else:
-            local_min_df = helper.find_local_minima(
-                filtered_df, x_dim, y_dim, z_dim, value_col="total"
-            )
-
             fig = helper.selected_dims_3d_fig(
                 filtered_df,
                 local_min_df,
@@ -179,18 +196,8 @@ with tabs[0]:
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.plotly_chart(fig, use_container_width=True)
-            st.subheader(
-                "Local Minima Records on the Data Slice:",
-                help=(
-                    "View the local minima records for the data slice.\n"
-                    "- This helps in understanding the performance patterns at lower dimensions."
-                )
-            )
-            if not local_min_df.empty:
-                st.dataframe(local_min_df.sort_values("total")[cols_to_show].rename(columns=col_rename_map))
-            else:
-                st.write("No local minima found for the selected configuration.")
-
+            
+            
     st.subheader(
         "Local Minima Records on the Entire Data (unsliced):",
         help=(
@@ -218,7 +225,6 @@ with tabs[0]:
 with tabs[1]:
     
     sim_outputs = picker.set_sim_input(selected_model, selected_config)
-    
     st.markdown("---")
     if "df_matched" in st.session_state:
         tv.render_sim_output_section(sim_outputs)
@@ -259,3 +265,4 @@ with tabs[3]:
     fig.subplots_adjust(left=0.13, right=0.98, top=0.80, bottom=0.22)
     #fig.savefig("comm_percentag.svg", format="svg", bbox_inches="tight")
     st.pyplot(fig)
+    st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666; margin-top: 1em;'>Exposed communication percentage across different parallelism strategies, sorted in ascending order. Lower values indicate less communication overhead. Statistical measures include arithmetic mean (μ), standard deviation (σ), and geometric mean (gμ).</p>", unsafe_allow_html=True)
