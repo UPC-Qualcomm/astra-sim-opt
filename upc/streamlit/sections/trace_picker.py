@@ -233,7 +233,7 @@ def get_model_and_config():
 
     return selected_model, selected_config
 
-@st.cache_data
+@st.cache_data(show_spinner='Getting All Parallelism Strategies Data...')
 def get_all_parallelism_strategies_data(model, config, option):
     csv_files = get_files_list(os.path.join(_get_output_dir(), model, config), "_trace_matched_timing.csv")
     records = []
@@ -273,7 +273,7 @@ def get_all_parallelism_strategies_data(model, config, option):
 
     return pd.DataFrame(records)
 
-@st.cache_data
+@st.cache_data(show_spinner='Getting Files List...')
 def get_files_list(base_dir, end_with_str):
     files = os.listdir(base_dir)
     filtered = list()
@@ -282,7 +282,7 @@ def get_files_list(base_dir, end_with_str):
             filtered.append(os.path.join(base_dir, file))
     return filtered
 
-@st.cache_data
+@st.cache_data(show_spinner='Getting Slowest NPU...')
 def get_slowest_npu(df):
     max_tick = df['callback_tick'].max()
     slowest_npu = df.loc[df['callback_tick'] == max_tick, 'sys_id'].iloc[0]
@@ -294,7 +294,7 @@ def get_slowest_npu(df):
             bw=st.session_state.peak_bw,
         )
 
-@st.cache_data
+@st.cache_data(show_spinner='Getting Fastest NPU...')
 def get_fastest_npu(df):
     max_callback = df.groupby('sys_id')['callback_tick'].max().reset_index()
     fastest_npu = max_callback.loc[max_callback['callback_tick'].idxmin(), 'sys_id']
@@ -306,7 +306,7 @@ def get_fastest_npu(df):
             bw=st.session_state.peak_bw,
         )
 
-@st.cache_data
+@st.cache_data(show_spinner='Getting Averaged NPUs...')
 def get_averaged_npus(df):
     max_npu = df["sys_id"].max() + 1
     mem_tot = 0
@@ -416,7 +416,7 @@ def get_max_mem_npu(df):
 #        plots.append(fig)
 #
 #    return plots
-@st.cache_data
+@st.cache_data(show_spinner='Rendering Experiments Bound Breakdown...')
 def plot_experiments_bound_breakdown(df, chunk_size=40):
     plt.rcParams.update({
         'font.size': constants.FONT_SIZE,  # change this value as needed

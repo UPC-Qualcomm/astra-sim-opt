@@ -1,6 +1,7 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 
+@st.cache_data(show_spinner='Loading System Throughput Data...')
 def render_system_throughput(df):
     df_sys = df.copy()
     calculate_num_tokens(df_sys)

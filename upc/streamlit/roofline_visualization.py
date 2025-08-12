@@ -274,7 +274,7 @@ def plot_roofline(df, beta=2000, pi=300):
     final_chart = (chart + beta_line + pi_line).interactive()
     return final_chart
 
-@st.cache_data
+@st.cache_data(show_spinner="Rendering...")
 def plot_roofline_timestep(df, beta=2000, pi=300):
     # Compute intersection point
     I_c = (pi * 1e12) / (beta * 1e9)

@@ -7,26 +7,26 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import helper.constants as constants
 
-@st.cache_data
+@st.cache_data(show_spinner='Loading Batch Data...')
 def load_batch_data(selected_model, selected_config, batch_size_dir="batch_study"):
     batch_res_file = f"../results/{selected_model}/{selected_config}/{batch_size_dir}/{selected_config}.csv"
     df = pd.read_csv(batch_res_file).sort_values(by="exec_cycles", ascending=True)
     return df
 
-@st.cache_data
+@st.cache_data(show_spinner='Getting Unique Strategies and Batches...')
 def get_unique_strategies_and_batches(df):
     strategies = df["dp_mp_sp_pp_sharded"].unique()
     batches = sorted(df['batch'].astype(int).unique())
     return strategies, batches
 
-@st.cache_data
+@st.cache_data(show_spinner='Filtering and Preparing DataFrame...')
 def filter_and_prepare_df(df, selected_strategies, selected_batch_sizes):
     df = df[df["dp_mp_sp_pp_sharded"].isin(selected_strategies) & df["batch"].isin(selected_batch_sizes)]
     df["overlap"] = df['exec_cycles'] - df['exposed_comm_cycles'] - df['exposed_comp_cycles']
     df["strategy"] = df["dp_mp_sp_pp_sharded"]
     return df
 
-@st.cache_data
+@st.cache_data(show_spinner='Plotting Simulation Time Breakdown...')
 def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, selected_config):
     labels = ['Overlap', 'Exposed Comp', 'Exposed Comm']  # Flipped order
     colors = ['lightblue', 'lightgreen', 'lightcoral']         # Flipped colors
@@ -115,7 +115,7 @@ def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, sel
 
     st.pyplot(fig)
 
-@st.cache_data
+@st.cache_data(show_spinner='Plotting 3D Simulation Time Breakdown...')
 def plot_3d_simulation_time_breakdown(df, selected_batch_sizes, selected_model, selected_config):
     strategies = df['strategy'].unique()
     strategy_indices = {strategy: i for i, strategy in enumerate(strategies)}
@@ -301,8 +301,8 @@ else:
 
         #TODO: Switch variables rather than hardcoded values
         st.info(f"""
-            **Peak performance for Single NPU**: {st.session_state.peak_perf} TFLOPs, \t
-            **Peak memory bandwidth**: {st.session_state.peak_bw} GB/s, \n
+            **Peak performance for Single NPU**: {989} TFLOPs, \t
+            **Peak memory bandwidth**: {3350} GB/s, \n
             **Inter node Bandwidth**: {200} GB/s, \t
             **Intra node Bandwidth**: {900} GB/s, \t
             **Number of NPUs**: {32}

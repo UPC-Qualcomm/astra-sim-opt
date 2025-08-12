@@ -4,6 +4,7 @@ import numpy as np
 import streamlit as st
 import helper.constants as constants
 
+@st.cache_data(show_spinner='Rendering...')
 def plot_sim_results(csv_file):
     df = pd.read_csv(csv_file)
     df["sys_id"] = df["sys_id"].astype(int)

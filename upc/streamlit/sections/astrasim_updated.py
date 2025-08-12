@@ -48,7 +48,7 @@ def run_astrasim_unified(params):
     }
 
 
-@st.cache_data
+@st.cache_data(show_spinner='Visualizing Simulation Results...')
 def visualize_simulation_results(sim_outputs):
     if "show_npu_plots" not in st.session_state:
         st.session_state.show_npu_plots = False

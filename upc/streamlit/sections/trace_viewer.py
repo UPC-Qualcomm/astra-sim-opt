@@ -105,7 +105,7 @@ def _plot_selector(df, npu, max_npu):
     elif st.session_state.active_plot == "roofline_2d_timestep":
         _show_2d_roofline_timestep(df, npu)
 
-@st.cache_data
+@st.cache_data(show_spinner='Loading 3D Roofline plot...')
 def _show_3d_roofline(df, npu, time_window):
     st.subheader("Visualize 3D roofline model.")
     st.plotly_chart(
@@ -118,7 +118,7 @@ def _show_3d_roofline(df, npu, time_window):
         )
     )
 
-@st.cache_data
+@st.cache_data(show_spinner='Loading 2D Roofline plot...')
 def _show_2d_roofline(df, npu):
     st.subheader("Visualize 2D roofline model.")
     
@@ -134,7 +134,7 @@ def _show_2d_roofline(df, npu):
     st.image(png_bytes)
     
 
-@st.cache_data
+@st.cache_data(show_spinner='Loading 2D Roofline plot over time...')
 def _show_2d_roofline_over_time(df, npu, time_window):
     st.subheader("Visualize 2D roofline model overtime.")
     st.altair_chart(

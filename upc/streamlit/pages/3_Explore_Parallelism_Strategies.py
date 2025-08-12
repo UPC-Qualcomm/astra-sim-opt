@@ -233,6 +233,34 @@ with tabs[2]:
     render_tab2(df)
 
 with tabs[3]:
+    @st.cache_data(show_spinner='Analyzing Communication Overhead...')
+    def analyze_communication_percentage(df):
+        """Analyze and plot exposed communication percentage across experiments."""
+        comm_mean, comm_std, comm_gmean = (
+            df["comm_percent"].mean(),
+            df["comm_percent"].std(),
+            gmean(df["comm_percent"][df["comm_percent"] > 0]),
+        )
+
+        sorted_comm = np.sort(df["comm_percent"].values)
+
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.plot(sorted_comm, marker="o", linestyle="-", color="blue")
+        ax.set_xlabel("Number of Experiments (Different Parallelism Strategies)", fontsize=18)
+        ax.set_ylabel("Exposed\nComm. Time\n(%)", fontsize=18)
+        ax.set_title(
+            f"Sorted - Exposed Communication Percentage per Experiment\n(μ={comm_mean:.2f}%, σ={comm_std:.2f}%, gμ={comm_gmean:.2f}%)",
+            fontsize=18,
+        )
+        ax.grid(True)
+
+        ax.tick_params(axis="both", which="major", labelsize=16)
+        ax.tick_params(axis="both", which="minor", labelsize=16)
+
+        fig.subplots_adjust(left=0.13, right=0.98, top=0.80, bottom=0.22)
+        
+        return fig
+
     st.subheader(
         "Analyze the Exposed Communication Percentage",
         help=(
@@ -241,28 +269,7 @@ with tabs[3]:
             "- It includes mean, standard deviation, and geometric mean."
         )
     )
-    comm_mean, comm_std, comm_gmean = (
-        df["comm_percent"].mean(),
-        df["comm_percent"].std(),
-        gmean(df["comm_percent"][df["comm_percent"] > 0]),
-    )
-
-    sorted_comm = np.sort(df["comm_percent"].values)
-
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(sorted_comm, marker="o", linestyle="-", color="blue")
-    ax.set_xlabel("Number of Experiments (Different Parallelism Strategies)", fontsize=18)
-    ax.set_ylabel("Exposed\nComm. Time\n(%)", fontsize=18)
-    ax.set_title(
-        f"Sorted - Exposed Communication Percentage per Experiment\n(μ={comm_mean:.2f}%, σ={comm_std:.2f}%, gμ={comm_gmean:.2f}%)",
-        fontsize=18,
-    )
-    ax.grid(True)
-
-    ax.tick_params(axis="both", which="major", labelsize=16)
-    ax.tick_params(axis="both", which="minor", labelsize=16)
-
-    fig.subplots_adjust(left=0.13, right=0.98, top=0.80, bottom=0.22)
-    #fig.savefig("comm_percentag.svg", format="svg", bbox_inches="tight")
+    
+    fig = analyze_communication_percentage(df)
     st.pyplot(fig)
     st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666; margin-top: 1em;'>Exposed communication percentage across different parallelism strategies, sorted in ascending order. Lower values indicate less communication overhead. Statistical measures include arithmetic mean (μ), standard deviation (σ), and geometric mean (gμ).</p>", unsafe_allow_html=True)

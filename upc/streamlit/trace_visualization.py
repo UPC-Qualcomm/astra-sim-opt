@@ -48,7 +48,7 @@ def get_timings_df(csv_trace_file, output_file_name) -> pd.DataFrame:
 
     return merged_df
 
-@st.cache_data
+@st.cache_data(show_spinner='Rendering...')
 def plot_elapsed_times(
     df: pd.DataFrame, npu, sys_id: int = 0, max_height: int = 600, exp = ""
 ) -> alt.Chart:
@@ -134,7 +134,7 @@ def plot_elapsed_times(
         .interactive()
     )
 
-@st.cache_data
+@st.cache_data(show_spinner='Computing Overlapped Blocks...')
 def get_overlapped_blocks(df: pd.DataFrame) -> dict[str, list[int]]:
     """df should be filtered by sys_id and node_type."""
     df_sorted = df.sort_values("issue_tick")
@@ -161,7 +161,7 @@ def get_overlapped_blocks(df: pd.DataFrame) -> dict[str, list[int]]:
     blocks["end"].append(prev_end)
     return blocks
 
-@st.cache_data
+@st.cache_data(show_spinner='Rendering Overlapped Blocks...')
 def plot_overlapped_blocks(df: pd.DataFrame, npu, exp = "") -> alt.Chart:
     font_local_controller = -8
     type_labels = {"COMMUNICATION": "COMM", "COMPUTATION": "COMP"}
@@ -213,7 +213,7 @@ def plot_overlapped_blocks(df: pd.DataFrame, npu, exp = "") -> alt.Chart:
 
     return chart.interactive()
 
-@st.cache_data
+@st.cache_data(show_spinner='Rendering...')
 def plot_one_npu(df, npu=0, plot_blocks=True, plot_times=False, exp = ""):
     df_0 = df.query(f"sys_id == {npu}")
     df_0_comp = pd.DataFrame.from_dict(

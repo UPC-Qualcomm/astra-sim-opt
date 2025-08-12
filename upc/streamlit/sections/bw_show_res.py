@@ -119,7 +119,7 @@ def plot_overlapped(df, strategy, chunk_size=30):
 
     return figures
 
-@st.cache_data
+@st.cache_data(show_spinner='Filtering DataFrame...')
 def get_filtered_df(result_path, strategy):
     files = glob.glob(str(result_path / f"{strategy}_*.csv"))
     records = []
@@ -155,7 +155,7 @@ def get_filtered_df(result_path, strategy):
     df_filtered["strategy"] = strategy.split(".")[0] 
     return df_filtered
 
-@st.cache_data
+@st.cache_data(show_spinner='Generating Total Cycles Plot...')
 def get_total_cycles_plot(
     df,
     title,
@@ -252,6 +252,7 @@ def get_total_cycles_plot(
 
     return fig
 
+@st.cache_data(show_spinner='Generating Total Cycles Split by Intra Plot...')
 def get_total_cycles_split_by_intra(
     df,
     title,
@@ -437,7 +438,7 @@ def get_total_cycles_split_by_intra(
     #     )
     return fig
 
-@st.cache_data
+@st.cache_data(show_spinner='Generating 3D Total Cycles Plot...')
 def get_total_cycles_plot_3d(
     df,
     title,
@@ -550,7 +551,7 @@ def show_res_across_configs(parallelism_strategy, res_dirs_configs, is_3d=False)
     else:
         st.warning(f"No data found for the parallelsim strategy {parallelism_strategy}")
 
-@st.cache_data
+@st.cache_data(show_spinner='Combining Data Across Configurations...')
 def combine_data_across_config(parallelism_strategy, res_dirs_configs):
     all_data = []
 
@@ -563,7 +564,7 @@ def combine_data_across_config(parallelism_strategy, res_dirs_configs):
 
     return all_data
 
-@st.cache_data
+@st.cache_data(show_spinner='Getting Combined DataFrame...')
 def get_combined_df(data, group_by="strategy"):
     combined_df = pd.concat(data).reset_index(drop=True)
     combined_df_sorted = combined_df.sort_values(["intra_bw", "inter_bw"])

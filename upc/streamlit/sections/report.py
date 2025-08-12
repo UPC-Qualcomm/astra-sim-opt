@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import sections.trace_picker as picker
 import helper.constants as constants
 
-@st.cache_data
+@st.cache_data(show_spinner='Loading and Preparing File...')
 def load_and_prepare_file(file_path, selected_files):
     """Load result CSV, convert cycles to seconds, and rename columns."""
     file_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -32,12 +32,12 @@ def load_and_prepare_file(file_path, selected_files):
 
     return df
 
-@st.cache_data
+@st.cache_data(show_spinner='Merging DataFrames...')
 def merge_dataframes(df_list):
     """Merge multiple DataFrames on 'dp_mp_sp_pp_sharded'."""
     return pd.concat(df_list, ignore_index=True) #reduce(lambda left, right: pd.merge(left, right, on="dp_mp_sp_pp_sharded", how="inner"), df_list)
 
-@st.cache_data
+@st.cache_data(show_spinner='Getting Merged DataFrame...')
 def compute_summary_stats(merged_df, selected_files):
     """Compute avg, std, and geomean for exec, comm, and comp cycles."""
     summary_stats = []
@@ -74,7 +74,7 @@ def compute_summary_stats(merged_df, selected_files):
 
     return pd.DataFrame(summary_stats)
 
-@st.cache_data
+@st.cache_data(show_spinner='Generating Summary Plot...')
 def get_summary_plot(summary_df, figsize=(10, 4)):
     font_increment = -14  # Adjust this value to increase font size
     summary_df['avg_overlap (s)'] = summary_df['avg_exec (s)'] - summary_df['avg_exposed_comm (s)'] - summary_df['avg_exposed_comp (s)']
@@ -134,6 +134,7 @@ def get_summary_plot(summary_df, figsize=(10, 4)):
 
     return fig
 
+@st.cache_data(show_spinner='Comparing Topologies per Range...')
 def get_compare_topology_per_range(merged_df, selected_configs, selected_files):
     labels = ['Overlap', 'Exposed Comp', 'Exposed Comm']
     colors = ['lightblue', 'lightgreen', 'lightcoral']
@@ -248,7 +249,7 @@ def get_compare_topology_per_range(merged_df, selected_configs, selected_files):
     #fig.savefig("topo_2.svg", format='svg', bbox_extra_artists=[legend], bbox_inches='tight')
     return fig
 
-@st.cache_data
+@st.cache_data(show_spinner='Computing...')
 def add_topology_and_min_exec_cycles(merged_df):
     """Add columns for topology with lowest exec_cycles and its value per config."""
 
@@ -274,7 +275,7 @@ def add_topology_and_min_exec_cycles(merged_df):
 
     return min_exec_cycles_df
 
-@st.cache_data
+@st.cache_data(show_spinner='Getting Top N Configs...')
 def get_top_n_configs(merged_df, selected_configs):
     """Get selected configs with their topology and exec_cycles values."""
     top_configs = merged_df[
@@ -283,7 +284,7 @@ def get_top_n_configs(merged_df, selected_configs):
 
     return top_configs
 
-@st.cache_data
+@st.cache_data(show_spinner='Counting Best Topologies...')
 def count_best_topologies(merged_df):
     """Count how many times each topology had the best exec_cycles."""
     counts = merged_df['topology'].value_counts().reset_index()
