@@ -85,7 +85,7 @@ def _plot_selector(df, npu, max_npu):
     time_window = 0
     if st.session_state.active_plot in ["roofline_3d", "roofline_2d_over_time"]:
         time_window = st.number_input(
-            "Averaging Time Window (cycles)", value=10000, step=1000
+            "Averaging Time Window (cycles)", value=10000000, step=1000
         )
 
     if st.session_state.active_plot == "chakra_times":
@@ -358,12 +358,12 @@ def render_sim_output_section(sim_outputs):
             _show_2d_roofline(st.session_state.df_matched, npu)
         elif plot_mode == "Averaged over time - 3D":
             time_window = st.number_input(
-                    "Averaging Time Window (cycles)", value=10000, step=1000, key="time_window_3d"
+                    "Averaging Time Window (cycles)", value=10000000, step=1000, key="time_window_3d"
                 )
             _show_3d_roofline(st.session_state.df_matched, npu, time_window)
         elif plot_mode == "Averaged over time - 2D":
             time_window = st.number_input(
-                "Averaging Time Window (cycles)", value=10000, step=1000, key="time_window_2d"
+                "Averaging Time Window (cycles)", value=10000000, step=1000, key="time_window_2d"
             )
             _show_2d_roofline_over_time(st.session_state.df_matched, npu, time_window)
         else:
