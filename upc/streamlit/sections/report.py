@@ -231,8 +231,8 @@ def get_compare_topology_per_range(merged_df, selected_configs, selected_files):
             ax.yaxis.get_offset_text().set_fontsize(constants.YTICK_SIZE + font_increment)
             ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE + font_increment)
         else:
-            ax.set_yticks([])
-            ax.set_yticklabels([])
+            ax.yaxis.get_offset_text().set_fontsize(constants.YTICK_SIZE + font_increment)
+            ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE + font_increment)
 
         config_clean = config.replace('_res', '')
         dp, tp, sp, pp, fsdp = config_clean.split('_')

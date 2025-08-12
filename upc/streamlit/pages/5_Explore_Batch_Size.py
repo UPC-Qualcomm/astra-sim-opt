@@ -91,7 +91,7 @@ def plot_simulation_time_breakdown(df, selected_batch_sizes, selected_model, sel
             ax.yaxis.get_offset_text().set_fontsize(constants.FONT_SIZE)
         else:
             ax.set_ylabel("")
-            ax.tick_params(axis='y', labelleft=False)
+            ax.tick_params(axis='y', labelsize=constants.YTICK_SIZE)
             ax.yaxis.get_offset_text().set_fontsize(constants.FONT_SIZE)
     # Remove unused subplots
     for j in range(idx + 1, len(axes)):
@@ -283,7 +283,7 @@ df = load_batch_data(selected_model, selected_config, BATCH_SIZE_DIR)
 parallelism_strategies, sorted_batches = get_unique_strategies_and_batches(df)
 max_select = 8
 selected_strategies = st.multiselect(
-    "Select Strategies (dp_tp_sp_pp_fsdp) [max 20]", 
+    f"Select Strategies (dp_tp_sp_pp_fsdp) [max {max_select}]", 
     parallelism_strategies, 
     default=parallelism_strategies[:max_select], 
     max_selections=max_select
