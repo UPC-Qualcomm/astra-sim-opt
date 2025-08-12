@@ -386,15 +386,39 @@ for j, dev in enumerate(second_row_developers):
 # Add simple footer to sidebar with contact information
 # Add contact information at the bottom of the sidebar
 with st.sidebar:
-    # Push content to bottom with spacer
-    st.markdown("<div style='height: 50vh;'></div>", unsafe_allow_html=True)
-    
-    st.markdown("---")
+    # Use CSS for flexible positioning instead of fixed height
     st.markdown("""
-    <div style='text-align: center; padding: 1em; background-color: #f8f9fa; border-radius: 8px;'>
-        <p style='margin: 0; color: #666; font-size: 0.9em;'>
-            <strong>Contact Info:</strong> mohammad.nasser@upc.edu
+    <style>
+    .sidebar-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        max-width: 244px; /* Sidebar width */
+        padding: 1em;
+        margin: 0.5em;
+        z-index: 1000;
+    }
+    
+    @media (max-height: 600px) {
+        .sidebar-footer {
+            position: relative;
+            margin-top: 1em;
+        }
+    }
+    
+    .sidebar-footer p {
+        margin: 0;
+        font-size: 0.9em;
+        text-align: center;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class='sidebar-footer'>
+        <p>
+            <strong>Contact Info:</strong><br>mohammad.nasser@upc.edu
         </p>
     </div>
     """, unsafe_allow_html=True)
-
