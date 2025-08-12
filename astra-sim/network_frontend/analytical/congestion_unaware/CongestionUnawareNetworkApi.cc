@@ -70,7 +70,7 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
     auto arg = std::make_unique<decltype(chunk_arrival_arg)>(chunk_arrival_arg);
     const auto arg_ptr = static_cast<void*>(arg.release());
 
-    // compute send communication delay (in AstraSim format)
+    // create log data
     std::map<std::string, std::string> log_data;
     if (AstraNetworkAPI::network_enabled_log) {
         log_data["tag"] = std::to_string(tag);
@@ -83,8 +83,8 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
 
     if (AstraNetworkAPI::network_enabled_log) {
         LoggerFactory::get_network_logger()->info(
-            ",send,{},{},{},{},{},{},{},{},{},{},{},{}", src, dst,
-            count, tag, workload_node_id, Sys::boostedTick(),
+            ",send,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst, src, dst,
+            count, tag, workload_node_id, chunk_id, Sys::boostedTick(),
             log_data["bandwidth"], log_data["dims_count"], log_data["topology"],
             log_data["hops"], log_data["latency"], log_data["delay"]);
     }

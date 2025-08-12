@@ -129,7 +129,7 @@ void LoggerFactory::init_default_components(
     network_logger = std::make_shared<spdlog::logger>("network", network_sink);
     spdlog::register_logger(network_logger);
     // Set the header
-    network_logger->info(",action,src,dst,tensor_size,tag,workload_node_id,issue_tick,bandwidth,dims_count,topology,hops,latency,delay");
+    network_logger->info(",action,src_origin,dst_final,src,dst,tensor_size,tag,workload_node_id,chunk_id,issue_tick,bandwidth,dims_count,topology,hops,latency,delay");
 
 
     // Initialize system logger

@@ -87,6 +87,14 @@ int CongestionAwareNetworkApi::sim_send(void* const buffer,
     chunk->set_callback_arg(arg_ptr);
 
     // initiate transmission from src -> dst.
+
+    if (AstraNetworkAPI::network_enabled_log) {
+        LoggerFactory::get_network_logger()->info(
+            ",issue,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst,
+            src, dst, count, tag, workload_node_id, chunk_id, Sys::boostedTick(),
+            0, 0, 0, 0, 0, 0);
+    }
+
     topology->send(std::move(chunk));
 
     // return
@@ -113,8 +121,9 @@ void CongestionAwareNetworkApi::process_chunk_arrival(void* args) noexcept {
 
             if (AstraNetworkAPI::network_enabled_log) {
                 LoggerFactory::get_network_logger()->info(
-                    ",send,{},{},{},{},{},{},{},{},{},{},{},{}", src_log, dst_log,
-                    count, tag, workload_node_id, Sys::boostedTick(),
+                    ",send_mini,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", 
+                    src, dest, src_log, dst_log,
+                    count, tag, workload_node_id, chunk_id, entry.start_time,
                     bandwidth, 0, 0, 0, latency, delay);
             }
         }
