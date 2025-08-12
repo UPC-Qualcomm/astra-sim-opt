@@ -47,7 +47,7 @@ with col2:
 with col1:
     #TODO: Switch variables rather than hardcoded values
     st.info(f"""
-        **Peak performance**: {st.session_state.peak_perf} TFLOPs, \t
+        **Peak performance for Single NPU**: {st.session_state.peak_perf} TFLOPs, \t
         **Peak memory bandwidth**: {st.session_state.peak_bw} GB/s, \n
         **Inter node Bandwidth**: {200} GB/s, \t
         **Intra node Bandwidth**: {900} GB/s, \t

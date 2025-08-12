@@ -50,11 +50,12 @@ def add_comm_points(df, npu=0):
 
     return df_combined_sorted
 
+
 def expand_df_and_average(df, time_window=50000):
     new_rows = []
     buffer_row = None
     remaining_time = 0
-    
+
     for i in range(len(df)):
         row = df.iloc[i].copy()
 
@@ -272,6 +273,7 @@ def plot_roofline(df, beta=2000, pi=300):
 
     final_chart = (chart + beta_line + pi_line).interactive()
     return final_chart
+
 @st.cache_data
 def plot_roofline_timestep(df, beta=2000, pi=300):
     # Compute intersection point
