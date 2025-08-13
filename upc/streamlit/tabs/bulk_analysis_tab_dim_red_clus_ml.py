@@ -184,8 +184,7 @@ def render(df):
         #**#)
         #**#st.dataframe(perm_xgb_df)
         #**#st.pyplot(fig)
-
-    possible_degree_val = df["dp"].unique()
+    possible_degree_val = max([df["dp"].unique(), df['tp'].unique(), df['sp'].unique(), df['pp'].unique()], key=len)
 
     st.subheader(
         "Partial Dependence Plots",

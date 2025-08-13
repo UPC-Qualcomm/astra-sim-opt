@@ -185,6 +185,13 @@ with st.expander("**Workload Modeling & Simulation**", expanded=False):
     - **Trace Visualization**: Comprehensive visualization of execution traces and performance metrics.
     """)
 
+with st.expander("**Solver**", expanded=False):
+    st.markdown("""
+    - **Automated Optimization**: Random search-based solver for optimal parallelism strategies.
+    - **Configurable Search Space**: User-defined constraints for each parallelism dimension.
+    - **Performance Ranking**: Comprehensive comparison with detailed cycle breakdowns.
+    """)
+    
 with st.expander("**Parallelism Strategy Exploration**", expanded=False):
     st.markdown("""
     - **Multi-dimensional Analysis**: Systematic exploration of Data Parallel (DP), Pipeline Parallel (PP), Tensor Parallel (TP), and Sequence Parallel (SP) strategies.
@@ -203,13 +210,6 @@ with st.expander("**Batch Size Exploration**", expanded=False):
     st.markdown("""
     - **Batch Size Analysis**: Study how batch size affects training efficiency of a single training step across parallelism strategies. Testing with multiple steps is ongoing.
     - **Performance Breakdown**: Detailed visualization of computation, communication, and overlap cycles.
-    """)
-
-with st.expander("**Solver**", expanded=False):
-    st.markdown("""
-    - **Automated Optimization**: Random search-based solver for optimal parallelism strategies.
-    - **Configurable Search Space**: User-defined constraints for each parallelism dimension.
-    - **Performance Ranking**: Comprehensive comparison with detailed cycle breakdowns.
     """)
 
 ##st.markdown("## Technical Foundation")

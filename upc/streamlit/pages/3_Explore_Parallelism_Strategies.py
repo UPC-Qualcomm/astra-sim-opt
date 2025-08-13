@@ -142,7 +142,11 @@ with tabs[0]:
             remaining_dims, excluded_dim=slider_dim2
         )
         x_dim = st.selectbox("Select x-axis dimension:", remaining_dims, index=0)
-        y_dim = st.selectbox("Select y-axis dimension:", remaining_dims, index=1)
+
+        remaining_dims = helper.get_remaining_dims(
+            remaining_dims, excluded_dim=x_dim
+        )
+        y_dim = st.selectbox("Select y-axis dimension:", remaining_dims, index=0)
         z_dim = "total"
         color_dim = "total"  # st.selectbox("Select color dimension:", remaining_dims, index=3 if len(remaining_dims) > 3 else 0)
 

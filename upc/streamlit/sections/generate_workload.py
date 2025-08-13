@@ -46,7 +46,6 @@ def generate_workload_and_run_simulation():
     
     # --- Parallelism Strategy Section (Outside form for dynamic updates) ---
     st.subheader("Parallelism Strategy")
-    st.info("**Real-time Validation**: Configuration updates automatically as you change values!")
     parallelism_params = _render_parallelism_strategy(hardware_params['total_npu_count'])
     
     # --- Configuration Summary ---

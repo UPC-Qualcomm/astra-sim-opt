@@ -31,9 +31,9 @@ def plot_sim_results(csv_file):
     avg_overlap_pct = 100 * avg_overlap / avg_exec
 
     # Colors for the three divisions
-    colors = ['lightblue', 'lightcoral', 'lightgreen']
+    colors = ['lightblue', 'lightgreen', 'lightcoral']
     # Darker colors for average bars
-    avg_colors = ['blue', 'red', 'green']
+    avg_colors = ['blue', 'green', 'red']
 
     plots = []
     for i in range(num_chunks):
@@ -45,11 +45,11 @@ def plot_sim_results(csv_file):
         # Bottom layer: Overlap (blue)
         ax.bar(y_pos, chunk["overlap_cycles"], color=colors[0], label="Overlap (comm, comp)")
         
-        # Middle layer: Exposed Comp (lightcoral)
+        # Middle layer: Exposed Comp (lightgreen)
         ax.bar(y_pos, chunk["exposed_comp_cycles"], 
                bottom=chunk["overlap_cycles"], color=colors[1], label="Exposed Comp")
         
-        # Top layer: Exposed Comm (lightgreen)
+        # Top layer: Exposed Comm (lightcoral)
         ax.bar(y_pos, chunk["exposed_comm_cycles"], 
                bottom=chunk["overlap_cycles"] + chunk["exposed_comp_cycles"], 
                color=colors[2], label="Exposed Comm")

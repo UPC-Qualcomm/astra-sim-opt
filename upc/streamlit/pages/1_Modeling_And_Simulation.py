@@ -57,11 +57,6 @@ if st.session_state.simulation_completed and "df_matched" in st.session_state:
     current_config_hash = _get_config_hash(params)
     stored_config_hash = st.session_state.get('last_config_hash', '')
     
-    if current_config_hash != stored_config_hash and stored_config_hash:
-        st.warning(
-            "**Configuration Changed**: The current configuration differs from the one used to generate "
-            "these results. Run a new simulation to see updated results."
-        )
     
     # Render the visualization tabs directly
     tv.render_sim_output_section(st.session_state.last_sim_outputs)

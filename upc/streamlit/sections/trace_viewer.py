@@ -346,10 +346,10 @@ def render_sim_output_section(sim_outputs):
                 "Select Mode", 
                 ["2D", "Averaged over time - 3D", "Averaged over time - 2D", "On individual time steps"],
                 help=(
-                    "Choose the roofline visualization mode:\n\n"
-                    "• **2D**: Traditional roofline plot showing operational intensity vs performance\n"
-                    "• **Averaged over time - 3D**: 3D roofline with time dimension, averaged over specified window\n" 
-                    "• **Averaged over time - 2D**: 2D roofline plot with time-based averaging (Trajectory of the 3D plot)\n"
+                    "Choose the roofline visualization mode:  \n\n"
+                    "• **2D**: Traditional roofline plot showing operational intensity vs performance  \n"
+                    "• **Averaged over time - 3D**: 3D roofline with time dimension, averaged over specified window  \n" 
+                    "• **Averaged over time - 2D**: 2D roofline plot with time-based averaging (Trajectory of the 3D plot)  \n"
                     "• **On individual time steps**: Interactive roofline at specific timesteps with playback controls"
                 )
             )
