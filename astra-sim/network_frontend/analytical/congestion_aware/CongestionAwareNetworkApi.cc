@@ -151,7 +151,6 @@ void CongestionAwareNetworkApi::process_chunk_arrival(void* args) noexcept {
         // so that recv callback will be invoked immediately
         // when sim_recv() is called
         entry.value()->set_transmission_finished();
-
-    delete log_arg; // Clean up
     }
+    delete log_arg; // Clean up
 }

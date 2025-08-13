@@ -115,7 +115,7 @@ class ASTRASimNetwork : public AstraSim::AstraNetworkAPI {
                          int type,
                          int dst_id,
                          int tag,
-                         uint64_t, workload_node_id,
+                         uint64_t workload_node_id,
                          AstraSim::sim_request* request,
                          void (*msg_handler)(void* fun_arg),
                          void* fun_arg) {
