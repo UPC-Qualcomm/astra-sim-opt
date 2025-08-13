@@ -108,7 +108,9 @@ void LoggerFactory::init_default_components(
     trace_logger = std::make_shared<spdlog::logger>("trace", trace_sink);
     spdlog::register_logger(trace_logger);
     // Set the header
-    trace_logger->info(",action,sys_id,node_id,node_name,col_type,node_type,num_ops,tensor_size,perf,operational_intensity,issue_tick");
+    trace_logger->info(
+        ",action,sys_id,node_id,node_name,col_type,node_type,num_ops,tensor_"
+        "size,perf,operational_intensity,issue_tick");
 
     // Initialize roofeline logger
     auto roofline_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
@@ -121,7 +123,7 @@ void LoggerFactory::init_default_components(
     roofline_logger->info(",sys_id,node_id,node_name,num_ops,tensor_size,perf,"
                           "operational_intensity,"
                           "elapsed_time,issue_tick,callback_tick");
-    
+
     // Initialize network logger
     auto network_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
         log_config_path + "_network.csv", 1024 * 1024 * 10 * 100, 10);
@@ -129,8 +131,9 @@ void LoggerFactory::init_default_components(
     network_logger = std::make_shared<spdlog::logger>("network", network_sink);
     spdlog::register_logger(network_logger);
     // Set the header
-    network_logger->info(",action,src_origin,dst_final,src,dst,tensor_size,tag,workload_node_id,chunk_id,issue_tick,bandwidth,dims_count,topology,hops,latency,delay");
-
+    network_logger->info(
+        ",action,src_origin,dst_final,src,dst,tensor_size,tag,workload_node_id,"
+        "chunk_id,issue_tick,bandwidth,dims_count,topology,hops,latency,delay");
 
     // Initialize system logger
     /*auto system_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(

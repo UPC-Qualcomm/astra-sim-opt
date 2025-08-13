@@ -51,7 +51,6 @@ class CongestionAwareNetworkApi final : public CommonNetworkApi {
      */
     static void process_chunk_arrival(void* args) noexcept;
 
-
   private:
     /// topology
     static std::shared_ptr<Topology> topology;

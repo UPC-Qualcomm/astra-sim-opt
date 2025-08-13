@@ -87,7 +87,6 @@ class AstraNetworkAPI {
     int rank;
     bool enable_network_logger;
     static bool network_enabled_log;
-    
 };
 
 }  // namespace AstraSim

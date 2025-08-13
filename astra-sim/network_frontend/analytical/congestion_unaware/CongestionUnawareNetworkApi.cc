@@ -77,18 +77,19 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
     }
 
     // compute send communication delay (in AstraSim format)
-    const auto send_delay_ns = topology->send(src, dst, count, AstraNetworkAPI::network_enabled_log ? &log_data : nullptr);
+    const auto send_delay_ns = topology->send(
+        src, dst, count,
+        AstraNetworkAPI::network_enabled_log ? &log_data : nullptr);
     const auto send_delay = static_cast<double>(send_delay_ns);
     const auto delta = timespec_t({NS, send_delay});
 
     if (AstraNetworkAPI::network_enabled_log && workload_node_id != -1) {
         LoggerFactory::get_network_logger()->info(
-            ",send,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst, src, dst,
-            count, tag, workload_node_id, chunk_id, Sys::boostedTick(),
+            ",send,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst, src,
+            dst, count, tag, workload_node_id, chunk_id, Sys::boostedTick(),
             log_data["bandwidth"], log_data["dims_count"], log_data["topology"],
             log_data["hops"], log_data["latency"], log_data["delay"]);
     }
-
 
     // Log Network Info
     // LogNetwork::getInstance().write(std::to_string(src) + ","+

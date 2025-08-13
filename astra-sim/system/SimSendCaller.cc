@@ -34,8 +34,8 @@ SimSendCaller::SimSendCaller(Sys* sys,
 
 void SimSendCaller::call(EventType type, CallData* data) {
     sys->comm_NI->sim_send(this->buffer, this->count, this->type, this->dst,
-                           this->tag, this->workload_node_id, &this->request, this->msg_handler,
-                           this->fun_arg);
+                           this->tag, this->workload_node_id, &this->request,
+                           this->msg_handler, this->fun_arg);
     if (should_cleanup) {
         delete this;
     }

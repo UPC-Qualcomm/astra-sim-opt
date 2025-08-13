@@ -44,11 +44,10 @@ void DoubleBinaryTreeAllReduce::run(EventType event, CallData* data) {
         snd_req.tag = stream->stream_id;
         snd_req.reqType = UINT8;
         snd_req.vnet = this->stream->current_queue_id;
-        stream->owner->front_end_sim_send(0, Sys::dummy_data, data_size, UINT8,
-                                          parent, stream->stream_id, 
-                                          stream->workload_node_id, &snd_req, 
-                                          Sys::FrontEndSendRecvType::COLLECTIVE,
-                                          &Sys::handleEvent, nullptr);
+        stream->owner->front_end_sim_send(
+            0, Sys::dummy_data, data_size, UINT8, parent, stream->stream_id,
+            stream->workload_node_id, &snd_req,
+            Sys::FrontEndSendRecvType::COLLECTIVE, &Sys::handleEvent, nullptr);
         // receiving
         sim_request rcv_req;
         rcv_req.vnet = this->stream->current_queue_id;
@@ -123,11 +122,10 @@ void DoubleBinaryTreeAllReduce::run(EventType event, CallData* data) {
         snd_req.tag = stream->stream_id;
         snd_req.reqType = UINT8;
         snd_req.vnet = this->stream->current_queue_id;
-        stream->owner->front_end_sim_send(0, Sys::dummy_data, data_size, UINT8,
-                                          parent, stream->stream_id, 
-                                          stream->workload_node_id, &snd_req,
-                                          Sys::FrontEndSendRecvType::COLLECTIVE,
-                                          &Sys::handleEvent, nullptr);
+        stream->owner->front_end_sim_send(
+            0, Sys::dummy_data, data_size, UINT8, parent, stream->stream_id,
+            stream->workload_node_id, &snd_req,
+            Sys::FrontEndSendRecvType::COLLECTIVE, &Sys::handleEvent, nullptr);
         // receiving
         sim_request rcv_req;
         rcv_req.vnet = this->stream->current_queue_id;
@@ -158,7 +156,7 @@ void DoubleBinaryTreeAllReduce::run(EventType event, CallData* data) {
         snd_req.vnet = this->stream->current_queue_id;
         stream->owner->front_end_sim_send(
             0, Sys::dummy_data, data_size, UINT8, left_child, stream->stream_id,
-            stream->workload_node_id, &snd_req, 
+            stream->workload_node_id, &snd_req,
             Sys::FrontEndSendRecvType::COLLECTIVE, &Sys::handleEvent, nullptr);
         sim_request snd_req2;
         snd_req2.srcRank = stream->owner->id;
@@ -168,7 +166,7 @@ void DoubleBinaryTreeAllReduce::run(EventType event, CallData* data) {
         snd_req2.vnet = this->stream->current_queue_id;
         stream->owner->front_end_sim_send(
             0, Sys::dummy_data, data_size, UINT8, right_child,
-            stream->stream_id, stream->workload_node_id, &snd_req2, 
+            stream->stream_id, stream->workload_node_id, &snd_req2,
             Sys::FrontEndSendRecvType::COLLECTIVE, &Sys::handleEvent, nullptr);
         exit();
         return;
@@ -206,7 +204,7 @@ void DoubleBinaryTreeAllReduce::run(EventType event, CallData* data) {
         snd_req.vnet = this->stream->current_queue_id;
         stream->owner->front_end_sim_send(
             0, Sys::dummy_data, data_size, UINT8, only_child_id,
-            stream->stream_id, stream->workload_node_id, &snd_req, 
+            stream->stream_id, stream->workload_node_id, &snd_req,
             Sys::FrontEndSendRecvType::COLLECTIVE, &Sys::handleEvent, nullptr);
         exit();
         return;

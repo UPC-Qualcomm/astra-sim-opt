@@ -39,9 +39,9 @@ void ChakraImpl::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
             // Note that we're using the comm size as hardcoded in the Impl
             // Chakra et, ed through the comm. api, and ignore the comm.size fed
             // in the workload chakra et. TODO: fix.
-            node->comm_size(), UINT8, node->comm_dst(), node->comm_tag(), node->id(),
-            &snd_req, Sys::FrontEndSendRecvType::NATIVE, &Sys::handleEvent,
-            sehd);
+            node->comm_size(), UINT8, node->comm_dst(), node->comm_tag(),
+            node->id(), &snd_req, Sys::FrontEndSendRecvType::NATIVE,
+            &Sys::handleEvent, sehd);
     } else if (type == ChakraNodeType::COMM_RECV_NODE) {
         sim_request rcv_req;
         RecvPacketEventHandlerData* rcehd = new RecvPacketEventHandlerData;

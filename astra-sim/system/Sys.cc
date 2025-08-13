@@ -1064,8 +1064,8 @@ DataSet* Sys::generate_collective(
             if (communicator_group != nullptr) {
                 stream_id = communicator_group->num_streams++;
             }
-            StreamBaseline* newStream = new StreamBaseline(
-                this, dataset, stream_id, vect, pri);
+            StreamBaseline* newStream =
+                new StreamBaseline(this, dataset, stream_id, vect, pri);
             newStream->current_queue_id = -1;
             newStream->workload_node_id = node_id;
             newStream->current_com_type = collective_type;
@@ -1425,12 +1425,13 @@ void Sys::proceed_to_next_vnet_baseline(StreamBaseline* stream) {
     }
     if (stream->my_current_phase.algorithm != nullptr) {
         // auto logger = LoggerFactory::get_logger("system-flow");
-        // logger->info("[T={}] [NPU={}] [StreamID={}] FINISH_PHASE: queue_id={}, type={}",
+        // logger->info("[T={}] [NPU={}] [StreamID={}] FINISH_PHASE:
+        // queue_id={}, type={}",
         //              Sys::boostedTick(),
         //              id,
         //              stream->stream_id,
         //              stream->current_queue_id,
-        //              static_cast<int>(stream->current_com_type)); 
+        //              static_cast<int>(stream->current_com_type));
         delete stream->my_current_phase.algorithm;
     }
     if (stream->phases_to_go.size() == 0) {
@@ -1468,7 +1469,8 @@ void Sys::proceed_to_next_vnet_baseline(StreamBaseline* stream) {
 
     // Add this log for phase start
     // auto logger = LoggerFactory::get_logger("system-flow");
-    // logger->info("[T={}] [NPU={}] [StreamID={}] START_PHASE: queue_id={}, type={}",
+    // logger->info("[T={}] [NPU={}] [StreamID={}] START_PHASE: queue_id={},
+    // type={}",
     //              Sys::boostedTick(),
     //              id,
     //              stream->stream_id,
@@ -1523,10 +1525,11 @@ int Sys::front_end_sim_send(Tick delay,
         sys_panic("A type of RENDZVOUS should never issued in frontend");
     }
     if (rendezvous_enabled) {
-        return rendezvous_sim_send(delay, buffer, count, type, dst, tag, workload_node_id,
-                                   request, msg_handler, fun_arg);
+        return rendezvous_sim_send(delay, buffer, count, type, dst, tag,
+                                   workload_node_id, request, msg_handler,
+                                   fun_arg);
     } else {
-        return sim_send(delay, buffer, count, type, dst, tag, workload_node_id, 
+        return sim_send(delay, buffer, count, type, dst, tag, workload_node_id,
                         request, msg_handler, fun_arg);
     }
 }
@@ -1575,9 +1578,9 @@ int Sys::rendezvous_sim_send(Tick delay,
         sys_panic("tag is bigger than RENDEZVOUS_COMM_TAG_OFFSET, \
         which means it might be mistakenly used as a rendezvous tag.");
     }
-    RendezvousSendData* rsd =
-        new RendezvousSendData(id, this, buffer, count, type, dst, tag, workload_node_id,
-                               *request, msg_handler, fun_arg);
+    RendezvousSendData* rsd = new RendezvousSendData(
+        id, this, buffer, count, type, dst, tag, workload_node_id, *request,
+        msg_handler, fun_arg);
     sim_request newReq = *request;
     uint64_t rendevouz_size = 8192;
     newReq.dstRank = request->srcRank;
@@ -1633,7 +1636,7 @@ int Sys::sim_send(Tick delay,
                           request, msg_handler, fun_arg);
     } else {
         try_register_event(new SimSendCaller(this, buffer, count, type, dst,
-                                             tag, workload_node_id, *request, 
+                                             tag, workload_node_id, *request,
                                              msg_handler, fun_arg, true),
                            EventType::General, nullptr, delay);
     }

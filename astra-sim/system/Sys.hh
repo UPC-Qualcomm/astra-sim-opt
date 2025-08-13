@@ -14,10 +14,10 @@ LICENSE file in the root directory of this source tree.
 #include "astra-sim/system/CollectivePhase.hh"
 #include "astra-sim/system/CommunicatorGroup.hh"
 #include "astra-sim/system/MemBus.hh"
+#include "astra-sim/system/Memory.hh"
 #include "astra-sim/system/Roofline.hh"
 #include "astra-sim/system/UsageTracker.hh"
 #include "astra-sim/system/topology/RingTopology.hh"
-#include "astra-sim/system/Memory.hh"
 #include "astra-sim/workload/Workload.hh"
 
 namespace AstraSim {
@@ -122,25 +122,25 @@ class Sys : public Callable {
     // Collective Communication Primitives
     // --------------------------------------
     DataSet* generate_all_reduce(uint64_t size,
-                             std::vector<bool> involved_dimensions,
-                             CommunicatorGroup* communicator_group,
-                             int explicit_priority,
-                             uint64_t node_id = 0);
-    DataSet* generate_all_to_all(uint64_t size,
-                             std::vector<bool> involved_dimensions,
-                             CommunicatorGroup* communicator_group,
-                             int explicit_priority,
-                             uint64_t node_id = 0);
-    DataSet* generate_all_gather(uint64_t size,
-                             std::vector<bool> involved_dimensions,
-                             CommunicatorGroup* communicator_group,
-                             int explicit_priority,
-                             uint64_t node_id = 0);
-    DataSet* generate_reduce_scatter(uint64_t size,
                                  std::vector<bool> involved_dimensions,
                                  CommunicatorGroup* communicator_group,
                                  int explicit_priority,
                                  uint64_t node_id = 0);
+    DataSet* generate_all_to_all(uint64_t size,
+                                 std::vector<bool> involved_dimensions,
+                                 CommunicatorGroup* communicator_group,
+                                 int explicit_priority,
+                                 uint64_t node_id = 0);
+    DataSet* generate_all_gather(uint64_t size,
+                                 std::vector<bool> involved_dimensions,
+                                 CommunicatorGroup* communicator_group,
+                                 int explicit_priority,
+                                 uint64_t node_id = 0);
+    DataSet* generate_reduce_scatter(uint64_t size,
+                                     std::vector<bool> involved_dimensions,
+                                     CommunicatorGroup* communicator_group,
+                                     int explicit_priority,
+                                     uint64_t node_id = 0);
     DataSet* generate_collective(
         uint64_t size,
         LogicalTopology* topology,

@@ -4,9 +4,9 @@ LICENSE file in the root directory of this source tree.
 *******************************************************************************/
 
 #include "congestion_aware/CongestionAwareNetworkApi.hh"
-#include <astra-network-analytical/congestion_aware/Chunk.h>
 #include "astra-sim/common/Logging.hh"
 #include "astra-sim/system/Sys.hh"
+#include <astra-network-analytical/congestion_aware/Chunk.h>
 #include <cassert>
 
 using namespace AstraSim;
@@ -16,7 +16,8 @@ using namespace NetworkAnalyticalCongestionAware;
 
 std::shared_ptr<Topology> CongestionAwareNetworkApi::topology;
 struct ChunkArrivalLogArg {
-    std::tuple<int, int, int, uint64_t, int> tuple; // tag, src, dest, count, chunk_id
+    std::tuple<int, int, int, uint64_t, int>
+        tuple;  // tag, src, dest, count, chunk_id
     NetworkAnalyticalCongestionAware::Chunk* chunk_ptr;
     uint64_t workload_node_id;
 };
@@ -54,7 +55,7 @@ int CongestionAwareNetworkApi::sim_send(void* const buffer,
     const auto chunk_id =
         CongestionAwareNetworkApi::chunk_id_generator.create_send_chunk_id(
             tag, src, dst, count);
-    
+
     // search tracker
     const auto entry =
         callback_tracker.search_entry(tag, src, dst, count, chunk_id);
@@ -71,11 +72,13 @@ int CongestionAwareNetworkApi::sim_send(void* const buffer,
     }
 
     auto chunk_arrival_tuple = std::tuple(tag, src, dst, count, chunk_id);
-    NetworkAnalyticalCongestionAware::Chunk* chunk_ptr = nullptr; // will set after chunk is constructed
+    NetworkAnalyticalCongestionAware::Chunk* chunk_ptr =
+        nullptr;  // will set after chunk is constructed
 
     // Create the chunk first, then set the pointer in the struct
     auto chunk = std::make_unique<Chunk>(
-        count, topology->route(src, dst), CongestionAwareNetworkApi::process_chunk_arrival, nullptr);
+        count, topology->route(src, dst),
+        CongestionAwareNetworkApi::process_chunk_arrival, nullptr);
 
     chunk_ptr = chunk.get();
 
@@ -91,8 +94,8 @@ int CongestionAwareNetworkApi::sim_send(void* const buffer,
     if (AstraNetworkAPI::network_enabled_log && workload_node_id != -1) {
         LoggerFactory::get_network_logger()->info(
             ",issue,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst,
-            src, dst, count, tag, workload_node_id, chunk_id, Sys::boostedTick(),
-            0, 0, 0, 0, 0, 0);
+            src, dst, count, tag, workload_node_id, chunk_id,
+            Sys::boostedTick(), 0, 0, 0, 0, 0, 0);
     }
 
     topology->send(std::move(chunk));
@@ -119,12 +122,13 @@ void CongestionAwareNetworkApi::process_chunk_arrival(void* args) noexcept {
             auto latency = entry.latency;
             auto delay = entry.end_time - entry.start_time;
 
-            if (AstraNetworkAPI::network_enabled_log && workload_node_id != -1) {
+            if (AstraNetworkAPI::network_enabled_log &&
+                workload_node_id != -1) {
                 LoggerFactory::get_network_logger()->info(
-                    ",send_mini,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", 
-                    src, dest, src_log, dst_log,
-                    count, tag, workload_node_id, chunk_id, entry.start_time,
-                    bandwidth, 0, 0, 0, latency, delay);
+                    ",send_mini,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+                    src, dest, src_log, dst_log, count, tag, workload_node_id,
+                    chunk_id, entry.start_time, bandwidth, 0, 0, 0, latency,
+                    delay);
             }
         }
     }
@@ -152,5 +156,5 @@ void CongestionAwareNetworkApi::process_chunk_arrival(void* args) noexcept {
         // when sim_recv() is called
         entry.value()->set_transmission_finished();
     }
-    delete log_arg; // Clean up
+    delete log_arg;  // Clean up
 }
