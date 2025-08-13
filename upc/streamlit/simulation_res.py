@@ -13,7 +13,7 @@ def plot_sim_results(csv_file):
     df["exposed_comp_cycles"] = df["exposed_comp_cycles"].astype(float)
     
     # Calculate overlap cycles
-    df["overlap_cycles"] = df["exec_cycles"] - df["exposed_comp_cycles"]
+    df["overlap_cycles"] = df["exec_cycles"] - (df["exposed_comm_cycles"] + df["exposed_comp_cycles"])
 
     df = df.sort_values(by="sys_id", ascending=True)
     chunk_size = 32
