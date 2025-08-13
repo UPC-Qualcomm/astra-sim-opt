@@ -16,13 +16,14 @@ RESULTS_DIR = os.path.join(file_dir, "output")
 
 def list_workloads(root):
     filtered = []
-    for entry in os.listdir(root):
-        entry_path = os.path.join(root, entry)
-        if os.path.isdir(entry_path):
-            for file in os.listdir(entry_path):
-                if file.endswith(".0.et"):
-                    filtered.append(os.path.join(entry_path, file[:-5]))
-                    break  # Only need one match per trace folder
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        for file in filenames:
+            if file.endswith(".0.et"):
+                filtered.append(os.path.join(dirpath, file[:-5]))
+                # Only need one match per trace folder, so break after first match in this directory
+                break
+
     return filtered
 
 def find_networks(directory):
