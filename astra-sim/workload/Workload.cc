@@ -176,7 +176,7 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
             if (sys->trace_enabled) {
                 LoggerFactory::get_trace_logger()->info(
                     ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
-                    node->name(), 99, static_cast<uint64_t>(node->type()), 0, 0, 0,
+                    node->name(), -1, static_cast<uint64_t>(node->type()), 0, 0, 0,
                     0, Sys::boostedTick());
             }
             issue_remote_mem(node);
@@ -207,7 +207,7 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                 } else {
                     LoggerFactory::get_trace_logger()->info(
                         ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
-                        node->name(), 99,
+                        node->name(), -1,
                         static_cast<uint64_t>(node->type()), 0, 0, 0, 0, Sys::boostedTick());
                 }
             }
@@ -282,7 +282,7 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     if (sys->trace_enabled) {
         LoggerFactory::get_trace_logger()->info(
             ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
-            node->name(), 99, static_cast<uint64_t>(node->type()), node->num_ops(),
+            node->name(), -1, static_cast<uint64_t>(node->type()), node->num_ops(),
             node->tensor_size(), perf, operational_intensity,
             Sys::boostedTick());
     }
@@ -474,7 +474,7 @@ void Workload::call(EventType event, CallData* data) {
             if (sys->trace_enabled) {
                 LoggerFactory::get_trace_logger()->info(
                     ",callback,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
-                    node->name(), 99, static_cast<uint64_t>(node->type()), 0, 0, 0,
+                    node->name(), -1, static_cast<uint64_t>(node->type()), 0, 0, 0,
                     0, Sys::boostedTick());
             }
             hw_resource->release(node);

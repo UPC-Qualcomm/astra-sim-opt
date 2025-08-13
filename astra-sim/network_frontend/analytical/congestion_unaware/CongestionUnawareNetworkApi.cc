@@ -81,7 +81,7 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
     const auto send_delay = static_cast<double>(send_delay_ns);
     const auto delta = timespec_t({NS, send_delay});
 
-    if (AstraNetworkAPI::network_enabled_log) {
+    if (AstraNetworkAPI::network_enabled_log && workload_node_id != -1) {
         LoggerFactory::get_network_logger()->info(
             ",send,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst, src, dst,
             count, tag, workload_node_id, chunk_id, Sys::boostedTick(),

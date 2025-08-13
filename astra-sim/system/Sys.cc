@@ -1613,7 +1613,7 @@ int Sys::rendezvous_sim_recv(Tick delay,
     newReq.reqCount = rendevouz_size;
     int newTag = tag + Sys::FrontEndSendRecvType::RENDEZVOUS;
     newReq.tag = newTag;
-    sim_send(delay, buffer, rendevouz_size, type, src, newTag, 0, &newReq,
+    sim_send(delay, buffer, rendevouz_size, type, src, newTag, -1, &newReq,
              &Sys::handleEvent, rrd);
     return 1;
 }
