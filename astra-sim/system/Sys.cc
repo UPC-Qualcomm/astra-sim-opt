@@ -494,6 +494,14 @@ bool Sys::initialize_sys(string name) {
             this->trace_enabled = false;
         }
     }
+    this->network_logger_enabled = false;
+    if (j.contains("enable_network_logger")) {
+        if (j["enable_network_logger"] != 0) {
+            this->network_logger_enabled = true;
+        } else {
+            this->network_logger_enabled = false;
+        }
+    }
     this->memory->trace_mem = false;
     if (j.contains("trace-mem")) {
         if (j["trace-mem"] != 0) {
@@ -727,76 +735,84 @@ vector<CollectiveImpl*> Sys::get_collective_implementation(ComType comm_type) {
 DataSet* Sys::generate_all_reduce(uint64_t size,
                                   vector<bool> involved_dimensions,
                                   CommunicatorGroup* communicator_group,
-                                  int explicit_priority) {
+                                  int explicit_priority,
+                                  uint64_t node_id) {
     if (communicator_group == nullptr) {
         return generate_collective(size, logical_topologies["AllReduce"],
                                    all_reduce_implementation_per_dimension,
                                    involved_dimensions, ComType::All_Reduce,
-                                   explicit_priority, communicator_group);
+                                   explicit_priority, communicator_group,
+                                   node_id);
     } else {
         CollectivePlan* plan =
             communicator_group->get_collective_plan(ComType::All_Reduce);
         return generate_collective(
             size, plan->topology, plan->implementation_per_dimension,
             plan->dimensions_involved, ComType::All_Reduce, explicit_priority,
-            communicator_group);
+            communicator_group, node_id);
     }
 }
 
 DataSet* Sys::generate_all_to_all(uint64_t size,
                                   vector<bool> involved_dimensions,
                                   CommunicatorGroup* communicator_group,
-                                  int explicit_priority) {
+                                  int explicit_priority,
+                                  uint64_t node_id) {
     if (communicator_group == nullptr) {
         return generate_collective(size, logical_topologies["AllToAll"],
                                    all_to_all_implementation_per_dimension,
                                    involved_dimensions, ComType::All_to_All,
-                                   explicit_priority, communicator_group);
+                                   explicit_priority, communicator_group,
+                                   node_id);
     } else {
         CollectivePlan* plan =
             communicator_group->get_collective_plan(ComType::All_to_All);
         return generate_collective(
             size, plan->topology, plan->implementation_per_dimension,
             plan->dimensions_involved, ComType::All_to_All, explicit_priority,
-            communicator_group);
+            communicator_group, node_id);
     }
 }
 
 DataSet* Sys::generate_all_gather(uint64_t size,
                                   vector<bool> involved_dimensions,
                                   CommunicatorGroup* communicator_group,
-                                  int explicit_priority) {
+                                  int explicit_priority,
+                                  uint64_t node_id) {
     if (communicator_group == nullptr) {
         return generate_collective(size, logical_topologies["AllGather"],
                                    all_gather_implementation_per_dimension,
                                    involved_dimensions, ComType::All_Gather,
-                                   explicit_priority, communicator_group);
+                                   explicit_priority, communicator_group,
+                                   node_id);
     } else {
         CollectivePlan* plan =
             communicator_group->get_collective_plan(ComType::All_Gather);
         return generate_collective(
             size, plan->topology, plan->implementation_per_dimension,
             plan->dimensions_involved, ComType::All_Gather, explicit_priority,
-            communicator_group);
+            communicator_group, node_id);
     }
 }
 
 DataSet* Sys::generate_reduce_scatter(uint64_t size,
                                       vector<bool> involved_dimensions,
                                       CommunicatorGroup* communicator_group,
-                                      int explicit_priority) {
+                                      int explicit_priority,
+                                      uint64_t node_id) {
     if (communicator_group == nullptr) {
         return generate_collective(size, logical_topologies["ReduceScatter"],
                                    reduce_scatter_implementation_per_dimension,
                                    involved_dimensions, ComType::Reduce_Scatter,
-                                   explicit_priority, communicator_group);
+                                   explicit_priority, communicator_group,
+                                   node_id);
     } else {
         CollectivePlan* plan =
             communicator_group->get_collective_plan(ComType::Reduce_Scatter);
         return generate_collective(
             size, plan->topology, plan->implementation_per_dimension,
             plan->dimensions_involved, ComType::Reduce_Scatter,
-            explicit_priority, communicator_group);
+            explicit_priority, communicator_group, node_id);
     }
 }
 
@@ -807,7 +823,8 @@ DataSet* Sys::generate_collective(
     vector<bool> dimensions_involved,
     ComType collective_type,
     int explicit_priority,
-    CommunicatorGroup* communicator_group) {
+    CommunicatorGroup* communicator_group,
+    uint64_t node_id) {
     uint64_t chunk_size = determine_chunk_size(size, collective_type);
     uint64_t recommended_chunk_size = chunk_size;
     int streams = ceil(((double)size) / chunk_size);
@@ -1050,6 +1067,10 @@ DataSet* Sys::generate_collective(
             StreamBaseline* newStream =
                 new StreamBaseline(this, dataset, stream_id, vect, pri);
             newStream->current_queue_id = -1;
+            newStream->workload_node_id = node_id;
+            newStream->current_com_type = collective_type;
+            newStream->initial_data_size = remain_size;
+            newStream->creation_time = Sys::boostedTick();
             insert_into_ready_list(newStream);
         } else {
             dataset->active = false;
@@ -1403,6 +1424,14 @@ void Sys::proceed_to_next_vnet_baseline(StreamBaseline* stream) {
         stream->net_message_latency.back() /= stream->net_message_counter;
     }
     if (stream->my_current_phase.algorithm != nullptr) {
+        // auto logger = LoggerFactory::get_logger("system-flow");
+        // logger->info("[T={}] [NPU={}] [StreamID={}] FINISH_PHASE:
+        // queue_id={}, type={}",
+        //              Sys::boostedTick(),
+        //              id,
+        //              stream->stream_id,
+        //              stream->current_queue_id,
+        //              static_cast<int>(stream->current_com_type));
         delete stream->my_current_phase.algorithm;
     }
     if (stream->phases_to_go.size() == 0) {
@@ -1438,6 +1467,16 @@ void Sys::proceed_to_next_vnet_baseline(StreamBaseline* stream) {
     stream->current_queue_id = stream->phases_to_go.front().queue_id;
     stream->current_com_type = stream->phases_to_go.front().comm_type;
 
+    // Add this log for phase start
+    // auto logger = LoggerFactory::get_logger("system-flow");
+    // logger->info("[T={}] [NPU={}] [StreamID={}] START_PHASE: queue_id={},
+    // type={}",
+    //              Sys::boostedTick(),
+    //              id,
+    //              stream->stream_id,
+    //              stream->current_queue_id,
+    //              static_cast<int>(stream->current_com_type));
+
     CollectivePhase vi = stream->phases_to_go.front();
     stream->my_current_phase = vi;
     stream->phases_to_go.pop_front();
@@ -1469,6 +1508,7 @@ int Sys::front_end_sim_send(Tick delay,
                             int type,
                             int dst,
                             int tag,
+                            uint64_t workload_node_id,
                             sim_request* request,
                             Sys::FrontEndSendRecvType send_type,
                             void (*msg_handler)(void* fun_arg),
@@ -1486,10 +1526,11 @@ int Sys::front_end_sim_send(Tick delay,
     }
     if (rendezvous_enabled) {
         return rendezvous_sim_send(delay, buffer, count, type, dst, tag,
-                                   request, msg_handler, fun_arg);
+                                   workload_node_id, request, msg_handler,
+                                   fun_arg);
     } else {
-        return sim_send(delay, buffer, count, type, dst, tag, request,
-                        msg_handler, fun_arg);
+        return sim_send(delay, buffer, count, type, dst, tag, workload_node_id,
+                        request, msg_handler, fun_arg);
     }
 }
 
@@ -1529,6 +1570,7 @@ int Sys::rendezvous_sim_send(Tick delay,
                              int type,
                              int dst,
                              int tag,
+                             uint64_t workload_node_id,
                              sim_request* request,
                              void (*msg_handler)(void* fun_arg),
                              void* fun_arg) {
@@ -1536,9 +1578,9 @@ int Sys::rendezvous_sim_send(Tick delay,
         sys_panic("tag is bigger than RENDEZVOUS_COMM_TAG_OFFSET, \
         which means it might be mistakenly used as a rendezvous tag.");
     }
-    RendezvousSendData* rsd =
-        new RendezvousSendData(id, this, buffer, count, type, dst, tag,
-                               *request, msg_handler, fun_arg);
+    RendezvousSendData* rsd = new RendezvousSendData(
+        id, this, buffer, count, type, dst, tag, workload_node_id, *request,
+        msg_handler, fun_arg);
     sim_request newReq = *request;
     uint64_t rendevouz_size = 8192;
     newReq.dstRank = request->srcRank;
@@ -1574,7 +1616,7 @@ int Sys::rendezvous_sim_recv(Tick delay,
     newReq.reqCount = rendevouz_size;
     int newTag = tag + Sys::FrontEndSendRecvType::RENDEZVOUS;
     newReq.tag = newTag;
-    sim_send(delay, buffer, rendevouz_size, type, src, newTag, &newReq,
+    sim_send(delay, buffer, rendevouz_size, type, src, newTag, -1, &newReq,
              &Sys::handleEvent, rrd);
     return 1;
 }
@@ -1585,16 +1627,17 @@ int Sys::sim_send(Tick delay,
                   int type,
                   int dst,
                   int tag,
+                  uint64_t workload_node_id,
                   sim_request* request,
                   void (*msg_handler)(void* fun_arg),
                   void* fun_arg) {
     if (delay == 0) {
-        comm_NI->sim_send(buffer, count, type, dst, tag, request, msg_handler,
-                          fun_arg);
+        comm_NI->sim_send(buffer, count, type, dst, tag, workload_node_id,
+                          request, msg_handler, fun_arg);
     } else {
         try_register_event(new SimSendCaller(this, buffer, count, type, dst,
-                                             tag, *request, msg_handler,
-                                             fun_arg, true),
+                                             tag, workload_node_id, *request,
+                                             msg_handler, fun_arg, true),
                            EventType::General, nullptr, delay);
     }
     return 1;
@@ -1609,6 +1652,20 @@ int Sys::sim_recv(Tick delay,
                   sim_request* request,
                   void (*msg_handler)(void* fun_arg),
                   void* fun_arg) {
+    // Add this logging statement
+    // auto logger = LoggerFactory::get_logger("network-flow");
+    // logger->info("[T={}] [NPU={}] SIM_RECV: src={}, size={}, tag={}",
+    //              Sys::boostedTick() + delay,
+    //              id,
+    //              src,
+    //              count,
+    //              tag);
+
+    // if (this->network_enabled) {
+    //     LoggerFactory::get_network_logger()->info(
+    //         ",recv,{},{},{},{},{}", src, id,
+    //         count, tag, Sys::boostedTick()+delay);
+    // }
     if (delay == 0) {
         comm_NI->sim_recv(buffer, count, type, src, tag, request, msg_handler,
                           fun_arg);

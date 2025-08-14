@@ -175,9 +175,9 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
             (node->type() == ChakraNodeType::MEM_STORE_NODE)) {
             if (sys->trace_enabled) {
                 LoggerFactory::get_trace_logger()->info(
-                    ",issue,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
-                    node->name(), static_cast<uint64_t>(node->type()), 0, 0, 0,
-                    0, Sys::boostedTick());
+                    ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+                    node->name(), -1, static_cast<uint64_t>(node->type()), 0, 0,
+                    0, 0, Sys::boostedTick());
             }
             issue_remote_mem(node);
         } else if (node->type() == ChakraNodeType::COMP_NODE) {
@@ -198,10 +198,20 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                    node->type() == ChakraNodeType::COMM_SEND_NODE ||
                    node->type() == ChakraNodeType::COMM_RECV_NODE) {
             if (sys->trace_enabled) {
-                LoggerFactory::get_trace_logger()->info(
-                    ",issue,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
-                    node->name(), static_cast<uint64_t>(node->type()), 0, 0, 0,
-                    0, Sys::boostedTick());
+                if (node->type() == ChakraNodeType::COMM_COLL_NODE) {
+                    LoggerFactory::get_trace_logger()->info(
+                        ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id,
+                        node->id(), node->name(),
+                        static_cast<uint64_t>(node->comm_type()),
+                        static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                        Sys::boostedTick());
+                } else {
+                    LoggerFactory::get_trace_logger()->info(
+                        ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id,
+                        node->id(), node->name(), -1,
+                        static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                        Sys::boostedTick());
+                }
             }
             issue_comm(node);
         } else if (node->type() == ChakraNodeType::INVALID_NODE) {
@@ -273,9 +283,9 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     }
     if (sys->trace_enabled) {
         LoggerFactory::get_trace_logger()->info(
-            ",issue,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
-            node->name(), static_cast<uint64_t>(node->type()), node->num_ops(),
-            node->tensor_size(), perf, operational_intensity,
+            ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+            node->name(), -1, static_cast<uint64_t>(node->type()),
+            node->num_ops(), node->tensor_size(), perf, operational_intensity,
             Sys::boostedTick());
     }
     sys->register_event(this, EventType::General, wlhd, runtime);
@@ -324,26 +334,26 @@ void Workload::issue_coll_comm(
     const auto comm_priority = node->comm_priority<uint32_t>();  // default 0u
 
     if (comm_type == ChakraCollectiveCommType::ALL_REDUCE) {
-        DataSet* fp = sys->generate_all_reduce(comm_size, involved_dims,
-                                               comm_group, comm_priority);
+        DataSet* fp = sys->generate_all_reduce(
+            comm_size, involved_dims, comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::ALL_TO_ALL) {
-        DataSet* fp = sys->generate_all_to_all(comm_size, involved_dims,
-                                               comm_group, comm_priority);
+        DataSet* fp = sys->generate_all_to_all(
+            comm_size, involved_dims, comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::ALL_GATHER) {
-        DataSet* fp = sys->generate_all_gather(comm_size, involved_dims,
-                                               comm_group, comm_priority);
+        DataSet* fp = sys->generate_all_gather(
+            comm_size, involved_dims, comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::REDUCE_SCATTER) {
-        DataSet* fp = sys->generate_reduce_scatter(comm_size, involved_dims,
-                                                   comm_group, comm_priority);
+        DataSet* fp = sys->generate_reduce_scatter(
+            comm_size, involved_dims, comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
@@ -388,9 +398,9 @@ void Workload::issue_send_comm(
     sehd->wlhd = new WorkloadLayerHandlerData;
     sehd->wlhd->node_id = node->id();
     sehd->event = EventType::PacketSent;
-    sys->front_end_sim_send(0, Sys::dummy_data, size, UINT8, dst, tag, &snd_req,
-                            Sys::FrontEndSendRecvType::NATIVE,
-                            &Sys::handleEvent, sehd);
+    sys->front_end_sim_send(
+        0, Sys::dummy_data, size, UINT8, dst, tag, node->id(), &snd_req,
+        Sys::FrontEndSendRecvType::NATIVE, &Sys::handleEvent, sehd);
 }
 
 void Workload::issue_recv_comm(
@@ -440,8 +450,9 @@ void Workload::call(EventType event, CallData* data) {
 
         if (sys->trace_enabled) {
             LoggerFactory::get_trace_logger()->info(
-                ",callback,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
-                node->name(), static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                ",callback,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+                node->name(), static_cast<uint64_t>(node->comm_type()),
+                static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
                 Sys::boostedTick());
         }
         hw_resource->release(node);
@@ -465,9 +476,10 @@ void Workload::call(EventType event, CallData* data) {
 
             if (sys->trace_enabled) {
                 LoggerFactory::get_trace_logger()->info(
-                    ",callback,{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
-                    node->name(), static_cast<uint64_t>(node->type()), 0, 0, 0,
-                    0, Sys::boostedTick());
+                    ",callback,{},{},{},{},{},{},{},{},{},{}", sys->id,
+                    node->id(), node->name(), -1,
+                    static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                    Sys::boostedTick());
             }
             hw_resource->release(node);
 

@@ -35,6 +35,7 @@ class BaseStream : public Callable, public StreamStat {
     static std::map<int, int> ready_counter;
     static std::map<int, std::list<BaseStream*>> suspended_streams;
     int stream_id;
+    uint64_t workload_node_id;
     int total_packets_sent;
     SchedulingPolicy preferred_scheduling;
     std::list<CollectivePhase> phases_to_go;

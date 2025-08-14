@@ -93,6 +93,9 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < npus_count; i++) {
         systems[i]->comm_NI->init_logger(
             network_log, systems[i]->comm_NI->enable_network_logger);
+        if (systems[i]->network_logger_enabled) {
+            AstraNetworkAPI::network_enabled_log = true;
+        }
 
         systems[i]->workload->fire();
     }
