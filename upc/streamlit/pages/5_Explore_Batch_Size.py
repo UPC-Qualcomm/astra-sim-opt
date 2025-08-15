@@ -274,6 +274,14 @@ st.subheader(
         "- Understand the trade-offs between batch size and simulation time."
     )
 )
+st.markdown("""
+<div style='background-color: #fde8e8; border-left: 4px solid #F94F4F; padding: 1em; margin: 1.5em 0; border-radius: 4px;'>
+    <p style='margin: 0; color: #822c2c; font-size: 0.95em;'>
+        <strong>Note:</strong> DAI is a work in progress. This version has limited many of the functionalities for the demo purposes.<br>
+        <strong>Note:</strong> The demo is designed to work on a PC. Thus, it may not work as expected on a mobile device.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 BATCH_SIZE_DIR = "batch_study"
 selected_model, selected_config = picker.get_model_and_config()
