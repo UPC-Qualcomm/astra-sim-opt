@@ -1,0 +1,38 @@
+# CMake Requirement
+cmake_minimum_required(VERSION 3.15)
+
+# C++ requirement
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Set the build type to Release if not specified
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif ()
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -Wall -Wextra -Wuninitialized -Wunused-function -Wno-unused-parameter -Wno-empty-body -fsanitize=address,undefined,leak -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
+# Safer: only in debug mode
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_options(-Wno-reorder)
+  add_compile_options(-Wno-type-limits)
+  add_compile_options(-Wno-sign-compare)
+endif()
+
+
+# TODO: Remove this once binary_function deprecation is resolved.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
+
+# Setup project
+project(AstraSim_G2)
+
+# Compilation target
+set(BUILDTARGET "all" CACHE STRING "Compilation target (g2)")
+
+# Compile AstraSim library
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../ AstraSim)
+
+# build appropriate g2 network backend as library
+set(NETWORK_BACKEND_BUILD_AS_LIBRARY ON)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../extern/network_backend/g2/ G2)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../astra-sim/network_frontend/g2/ AstraSim_G2)
