@@ -6,6 +6,7 @@ LICENSE file in the root directory of this source tree.
 #include "g2/CongestionUnawareNetworkApi.hh"
 #include "astra-sim/common/Logging.hh"
 #include "astra-sim/system/Sys.hh"
+#include "network.h"
 #include <cassert>
 
 using namespace AstraSim;
@@ -14,6 +15,8 @@ using namespace NetworkAnalytical;
 using namespace NetworkAnalyticalCongestionUnaware;
 
 std::shared_ptr<Topology> CongestionUnawareNetworkApi::topology;
+Network* CongestionUnawareNetworkApi::network = nullptr;
+CongestionUnawareNetworkApi* CongestionUnawareNetworkApi::api_instance = nullptr;
 
 void CongestionUnawareNetworkApi::set_topology(
     std::shared_ptr<Topology> topology_ptr) noexcept {
@@ -29,10 +32,34 @@ void CongestionUnawareNetworkApi::set_topology(
         CongestionUnawareNetworkApi::topology->get_bandwidth_per_dim();
 }
 
+void CongestionUnawareNetworkApi::set_network(Network* network_ptr) noexcept {
+    assert(network_ptr != nullptr);
+    CongestionUnawareNetworkApi::network = network_ptr;
+}
+
+void CongestionUnawareNetworkApi::handle_network_update(void* args) noexcept {
+    const auto current_time = event_queue->get_current_time();
+    const auto current_time_seconds = static_cast<double>(current_time) / 1'000'000'000.0;
+    auto fastest_flows = network->removeMessages(current_time_seconds);
+
+    for (const auto& flow : fastest_flows) {
+        auto [tag, src, dst, count, chunk_id] = flow;
+
+        // create chunk
+        auto chunk_arrival_arg = std::make_tuple(tag, src, dst, count, chunk_id);
+        auto arg = std::make_unique<decltype(chunk_arrival_arg)>(chunk_arrival_arg);
+        const auto arg_ptr = static_cast<void*>(arg.release());
+        CongestionUnawareNetworkApi::process_chunk_arrival(arg_ptr);
+    }
+}
+
 CongestionUnawareNetworkApi::CongestionUnawareNetworkApi(
     const int rank) noexcept
     : CommonNetworkApi(rank) {
     assert(rank >= 0);
+    if (rank == 0) {
+        CongestionUnawareNetworkApi::api_instance = this;
+    }
 }
 
 int CongestionUnawareNetworkApi::sim_send(void* const buffer,
@@ -65,10 +92,6 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
         new_entry->register_send_callback(msg_handler, fun_arg);
     }
 
-    // create chunk
-    auto chunk_arrival_arg = std::tuple(tag, src, dst, count, chunk_id);
-    auto arg = std::make_unique<decltype(chunk_arrival_arg)>(chunk_arrival_arg);
-    const auto arg_ptr = static_cast<void*>(arg.release());
 
     // create log data
     std::map<std::string, std::string> log_data;
@@ -76,32 +99,34 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
         log_data["tag"] = std::to_string(tag);
     }
 
-    // compute send communication delay (in AstraSim format)
-    const auto send_delay_ns = topology->send(
-        src, dst, count,
-        AstraNetworkAPI::network_enabled_log ? &log_data : nullptr);
-    const auto send_delay = static_cast<double>(send_delay_ns);
-    const auto delta = timespec_t({NS, send_delay});
-
-    if (AstraNetworkAPI::network_enabled_log && workload_node_id != -1) {
-        LoggerFactory::get_network_logger()->info(
-            ",send,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst, src,
-            dst, count, tag, workload_node_id, chunk_id, Sys::boostedTick(),
-            log_data["bandwidth"], log_data["dims_count"], log_data["topology"],
-            log_data["hops"], log_data["latency"], log_data["delay"]);
+    // add route for network-level simulation
+    if (CongestionUnawareNetworkApi::network != nullptr) {
+        CongestionUnawareNetworkApi::network->addRoute(tag, src, dst, count, chunk_id);
     }
 
-    // Log Network Info
-    // LogNetwork::getInstance().write(std::to_string(src) + ","+
-    // std::to_string(dst) + ",");
-
-    // register chunk arrival event after send communication delay
-    sim_schedule(delta, CongestionUnawareNetworkApi::process_chunk_arrival,
-                 arg_ptr);
+    // The scheduling of process_chunk_arrival is now handled by update_network_congestion
+    // to account for network congestion.
 
     // return
     return 0;
 }
+
+int CongestionUnawareNetworkApi::update_network_congestion() {
+    if (CongestionUnawareNetworkApi::network == nullptr) {
+        return 0;
+    }
+
+    double last_time_update = CongestionUnawareNetworkApi::network->getNextMessages();
+
+    const auto delay = static_cast<double>(last_time_update * 1'000'000'000); // s to ns
+    const auto delta = timespec_t({NS, delay});
+
+    assert(api_instance != nullptr); // Ensure the instance is set
+    api_instance->sim_schedule(delta, CongestionUnawareNetworkApi::handle_network_update, nullptr);
+
+    return 0;
+}
+
 
 void CongestionUnawareNetworkApi::log_network(std::string str) {
 

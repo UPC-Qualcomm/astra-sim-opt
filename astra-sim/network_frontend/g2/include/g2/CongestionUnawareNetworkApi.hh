@@ -6,10 +6,12 @@ LICENSE file in the root directory of this source tree.
 #pragma once
 
 #include "common/CommonNetworkApi.hh"
+#include "network.h"
 #include <astra-network-g2/common/Type.h>
 #include <astra-network-g2/g2/Topology.h>
 #include <string>
 #include <vector>
+#include <tuple>
 
 using namespace AstraSim;
 using namespace AstraSimAnalytical;
@@ -30,6 +32,27 @@ class CongestionUnawareNetworkApi final : public CommonNetworkApi {
      * @param topology_ptr pointer to the to
      */
     static void set_topology(std::shared_ptr<Topology> topology_ptr) noexcept;
+
+    /**
+     * Set the network object to be used.
+     *
+     * @param network_ptr pointer to the network object
+     */
+    static void set_network(Network* network_ptr) noexcept;
+    
+    /**
+     * Internal callback to handle network updates.
+     *
+     * @param args arguments of the callback function
+     */
+
+    static void handle_network_update(void* args) noexcept;
+    /**
+     * Update network congestion and schedule message arrivals.
+     * Should be called periodically from the simulation loop.
+     */
+
+    static int update_network_congestion();
 
     /**
      * Constructor.
@@ -57,6 +80,12 @@ class CongestionUnawareNetworkApi final : public CommonNetworkApi {
   private:
     /// topology
     static std::shared_ptr<Topology> topology;
+
+    /// network
+    static Network* network;
+
+    /// An instance of the API to call non-static methods from static ones.
+    static CongestionUnawareNetworkApi* api_instance;
 };
 
 }  // namespace AstraSimAnalyticalCongestionUnaware

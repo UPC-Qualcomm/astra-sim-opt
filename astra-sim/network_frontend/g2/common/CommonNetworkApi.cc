@@ -20,6 +20,8 @@ int CommonNetworkApi::dims_count = -1;
 
 std::vector<Bandwidth> CommonNetworkApi::bandwidth_per_dim = {};
 
+std::vector<TopologyBuildingBlock> CommonNetworkApi::topology_per_dim = {};
+
 bool AstraNetworkAPI::network_enabled_log = false;
 
 void CommonNetworkApi::set_event_queue(

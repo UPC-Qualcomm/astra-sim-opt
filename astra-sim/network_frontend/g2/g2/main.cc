@@ -55,16 +55,21 @@ int main(int argc, char* argv[]) {
     const auto network_parser = NetworkParser(network_configuration);
     const auto topology = construct_topology(network_parser);
 
+
     // Get topology information
     const auto npus_count = topology->get_npus_count();
     const auto npus_count_per_dim = topology->get_npus_count_per_dim();
     const auto dims_count = topology->get_dims_count();
+    const auto bandwidth_per_dim = topology->get_bandwidth_per_dim();
+    const auto topologies_per_dim = network_parser.get_topologies_per_dim();
 
     // Set up Network API
     CongestionUnawareNetworkApi::set_event_queue(event_queue);
     CongestionUnawareNetworkApi::set_topology(topology);
 
-    Network net;
+    Network net(npus_count, npus_count_per_dim, dims_count, bandwidth_per_dim,
+                topologies_per_dim);
+    CongestionUnawareNetworkApi::set_network(&net);
 
     // Create ASTRA-sim related resources
     auto network_apis =
@@ -106,6 +111,7 @@ int main(int argc, char* argv[]) {
     // run simulation
     while (!event_queue->finished()) {
         event_queue->proceed();
+        CongestionUnawareNetworkApi::update_network_congestion();
     }
 
     for (auto it : systems) {

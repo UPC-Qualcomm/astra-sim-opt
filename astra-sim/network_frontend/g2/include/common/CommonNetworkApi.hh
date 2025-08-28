@@ -97,6 +97,9 @@ class CommonNetworkApi : public AstraNetworkAPI {
     /// bandwidth per each network dimension of the topology
     static std::vector<Bandwidth> bandwidth_per_dim;
 
+    /// topology type per each network dimension of the topology
+    static std::vector<TopologyBuildingBlock> topology_per_dim;
+
     /// number of network dimensions of the topology
     static int dims_count;
 };
