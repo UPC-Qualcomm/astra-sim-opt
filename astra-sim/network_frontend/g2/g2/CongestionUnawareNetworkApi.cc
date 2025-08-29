@@ -38,9 +38,17 @@ void CongestionUnawareNetworkApi::set_network(Network* network_ptr) noexcept {
 }
 
 void CongestionUnawareNetworkApi::handle_network_update(void* args) noexcept {
-    const auto current_time = event_queue->get_current_time();
-    const auto current_time_seconds = static_cast<double>(current_time) / 1'000'000'000.0;
-    auto fastest_flows = network->removeMessages(current_time_seconds);
+
+    assert(args != nullptr);
+    const auto last_time_calculated = *static_cast<double*>(args);
+    delete static_cast<double*>(args);
+
+    if (network->isEarlierThanUpdate(last_time_calculated)) {
+        return;
+    }
+
+    auto fastest_flows = network->removeMessages(last_time_calculated);
+
 
     for (const auto& flow : fastest_flows) {
         auto [tag, src, dst, count, chunk_id] = flow;
@@ -116,13 +124,21 @@ int CongestionUnawareNetworkApi::update_network_congestion() {
         return 0;
     }
 
-    double last_time_update = CongestionUnawareNetworkApi::network->getNextMessages();
+    if (!CongestionUnawareNetworkApi::network->len_network()) {
+        return 0;
+    }
 
-    const auto delay = static_cast<double>(last_time_update * 1'000'000'000); // s to ns
+    const auto current_time = event_queue->get_current_time();
+    const auto current_time_seconds = static_cast<double>(current_time) / 1'000'000'000.0;
+
+    double scheduled_time_seconds = CongestionUnawareNetworkApi::network->getNextMessages(current_time_seconds);
+
+    const auto delay = static_cast<double>((scheduled_time_seconds - current_time_seconds) * 1'000'000'000.0); // s to ns
     const auto delta = timespec_t({NS, delay});
 
     assert(api_instance != nullptr); // Ensure the instance is set
-    api_instance->sim_schedule(delta, CongestionUnawareNetworkApi::handle_network_update, nullptr);
+    auto* arg = new double(current_time_seconds);
+    api_instance->sim_schedule(delta, CongestionUnawareNetworkApi::handle_network_update, static_cast<void*>(arg));
 
     return 0;
 }

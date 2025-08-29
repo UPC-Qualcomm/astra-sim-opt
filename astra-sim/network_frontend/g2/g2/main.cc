@@ -67,7 +67,7 @@ int main(int argc, char* argv[]) {
     CongestionUnawareNetworkApi::set_event_queue(event_queue);
     CongestionUnawareNetworkApi::set_topology(topology);
 
-    Network net(npus_count, npus_count_per_dim, dims_count, bandwidth_per_dim,
+    Network net(npus_count_per_dim, bandwidth_per_dim,
                 topologies_per_dim);
     CongestionUnawareNetworkApi::set_network(&net);
 
