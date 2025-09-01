@@ -189,10 +189,8 @@ def plot_roofline(df, beta=2000, pi=300):
     I_c = (pi * 1e12) / (beta * 1e9)
     P_c = pi
 
-    x_min = max(0, df["operational_intensity"].min() * 0.9)
-    x_max = df["operational_intensity"].max() * 1.1
-    y_min = max(0, df["perf"].min() * 0.9)
-    y_max = max(df["perf"].max(), pi) * 1.2
+    x_min = max(0, df["operational_intensity"].min())
+    x_max = df["operational_intensity"].max() * 1.1  # Add 10% headroom
     x_vals = np.linspace(x_min, x_max, 200)
 
     # Create dataframes for the roofline model lines
@@ -210,15 +208,9 @@ def plot_roofline(df, beta=2000, pi=300):
         .mark_circle()
         .encode(
             x=alt.X(
-                "operational_intensity:Q", 
-                title="Operational Intensity (FLOPs/byte)",
-                scale=alt.Scale(domain=[x_min, x_max])
+                "operational_intensity:Q", title="Operational Intensity (FLOPs/byte)"
             ),
-            y=alt.Y(
-                "perf:Q", 
-                title="Performance (TFLOPs/sec)",
-                scale=alt.Scale(domain=[y_min, y_max])
-            ),
+            y=alt.Y("perf:Q", title="Performance (TFLOPs/sec)"),
             size=alt.value(100),
             tooltip=list(df.columns),
         )
@@ -229,36 +221,16 @@ def plot_roofline(df, beta=2000, pi=300):
         )
     )
 
-    # Bandwidth line (sloped) - only up to intersection point
-    beta_line_data = roofline_data[roofline_data['operational_intensity'] <= I_c].copy()
-    # Add intersection point to ensure the line goes exactly to I_c
-    if I_c not in beta_line_data['operational_intensity'].values:
-        intersection_row = pd.DataFrame({
-            'operational_intensity': [I_c],
-            'beta_line': [(beta * I_c) * 1e-3],
-            'pi_line': [pi]
-        })
-        beta_line_data = pd.concat([beta_line_data, intersection_row], ignore_index=True)
-        beta_line_data = beta_line_data.sort_values('operational_intensity').reset_index(drop=True)
+    # Bandwidth line (sloped)
     beta_line = (
-        alt.Chart(beta_line_data)
+        alt.Chart(roofline_data)
         .mark_line(color="red")
         .encode(x="operational_intensity:Q", y="beta_line:Q")
     )
 
-    # Peak performance line (horizontal) - only from intersection point onwards
-    pi_line_data = roofline_data[roofline_data['operational_intensity'] >= I_c].copy()
-    # Add intersection point to ensure the line goes exactly to I_c
-    if I_c not in pi_line_data['operational_intensity'].values:
-        intersection_row = pd.DataFrame({
-            'operational_intensity': [I_c],
-            'beta_line': [(beta * I_c) * 1e-3],
-            'pi_line': [pi]
-        })
-        pi_line_data = pd.concat([pi_line_data, intersection_row], ignore_index=True)
-        pi_line_data = pi_line_data.sort_values('operational_intensity').reset_index(drop=True)
+    # Peak performance line (horizontal)
     pi_line = (
-        alt.Chart(pi_line_data)
+        alt.Chart(roofline_data)
         .mark_line(color="green")
         .encode(x="operational_intensity:Q", y="pi_line:Q")
     )
@@ -274,7 +246,7 @@ def plot_roofline(df, beta=2000, pi=300):
     final_chart = (chart + beta_line + pi_line).interactive()
     return final_chart
 
-@st.cache_data(show_spinner="Rendering...")
+
 def plot_roofline_timestep(df, beta=2000, pi=300):
     # Compute intersection point
     I_c = (pi * 1e12) / (beta * 1e9)
@@ -321,39 +293,20 @@ def plot_roofline_timestep(df, beta=2000, pi=300):
         )
     )
 
-    beta_line_data = roofline_data[roofline_data['operational_intensity'] <= I_c].copy()
-    # Add intersection point to ensure the line goes exactly to I_c
-    if I_c not in beta_line_data['operational_intensity'].values:
-        intersection_row = pd.DataFrame({
-            'operational_intensity': [I_c],
-            'beta_line': [(beta * I_c) * 1e-3],
-            'pi_line': [pi]
-        })
-        beta_line_data = pd.concat([beta_line_data, intersection_row], ignore_index=True)
-        beta_line_data = beta_line_data.sort_values('operational_intensity').reset_index(drop=True)
+    # Bandwidth line (sloped)
     beta_line = (
-        alt.Chart(beta_line_data)
+        alt.Chart(roofline_data)
         .mark_line(color="red", strokeDash=[5, 5])
         .encode(x="operational_intensity:Q", y="beta_line:Q")
     )
 
-    # Peak performance line (horizontal) - only from intersection point onwards
-    pi_line_data = roofline_data[roofline_data['operational_intensity'] >= I_c].copy()
-    # Add intersection point to ensure the line goes exactly to I_c
-    if I_c not in pi_line_data['operational_intensity'].values:
-        intersection_row = pd.DataFrame({
-            'operational_intensity': [I_c],
-            'beta_line': [(beta * I_c) * 1e-3],
-            'pi_line': [pi]
-        })
-        pi_line_data = pd.concat([pi_line_data, intersection_row], ignore_index=True)
-        pi_line_data = pi_line_data.sort_values('operational_intensity').reset_index(drop=True)
+    # Peak performance line (horizontal)
     pi_line = (
-        alt.Chart(pi_line_data)
+        alt.Chart(roofline_data)
         .mark_line(color="green", strokeDash=[3, 3])
         .encode(x="operational_intensity:Q", y="pi_line:Q")
     )
-    
+
     # Intersection point marker
     intersect_point = pd.DataFrame({"operational_intensity": [I_c], "perf": [P_c]})
     intersection = (
@@ -504,17 +457,11 @@ def plot_3d_roofline(df, beta=2000, pi=300):
     )
 
     # Add Compute limit surface
-    # Calculate intersection point
-    I_c = pi / beta
-    
-    # Create compute limit surface that only starts from intersection point
-    perf_compute_limited = np.where(OI_grid >= I_c, pi, np.nan)
-    
     fig.add_trace(
         go.Surface(
             x=OI_grid,
             y=T_grid,
-            z=perf_compute_limited,
+            z=perf_compute,
             colorscale=[[0, "green"], [1, "green"]],
             opacity=0.3,
             showscale=False,
@@ -559,7 +506,7 @@ def get_3d_roofline_plot(df, npu=0, bw=2000, perf=300, time_window=0):
 def get_2d_roofline_plot_normal(df, npu=0, bw=2000, perf=300):
     df_single_npu = df[df["sys_id"] == npu].copy()
     df_single_npu["perf"] = df_single_npu["perf"] / 1e12
-    return plot_roofline_timestep(
+    return plot_roofline(
         df_single_npu.loc[
             :, ["perf", "operational_intensity", "issue_tick", "node_id", "node_name"]
         ].drop_duplicates(),
@@ -571,7 +518,6 @@ def get_2d_roofline_plot_normal(df, npu=0, bw=2000, perf=300):
 def get_2d_roofline_plot_with_time(df, npu=0, bw=2000, perf=300, time_window=0):
     df_single_npu = df[df["sys_id"] == npu].copy()
     df_single_npu["perf"] = df_single_npu["perf"] / 1e12
-
     if time_window != 0:
         df_single_npu = expand_df_and_average(df_single_npu, time_window=time_window)
     return plot_roofline_time(
@@ -590,6 +536,7 @@ def get_timesteps(df, npu=0, time_window=0):
         df_single_npu = expand_df_and_average(df_single_npu, time_window=time_window)
     timesteps = df_single_npu["issue_tick"].unique()
     return df_single_npu, timesteps
+
 
 def get_2d_roofline_plot_timestep(df, bw=2000, perf=300):
     return plot_roofline_timestep(

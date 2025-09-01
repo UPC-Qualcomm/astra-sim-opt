@@ -148,8 +148,10 @@ def extract_slowest_npu(logs, output_filename):
         slowest_row = df[df["sys_id"] == df["sys_id"].min()].copy()
         
         file_base = os.path.splitext(log)[0].split('/')[-1]
-        parallelism_str = file_base  # or file_base[:9] if format is fixed
-
+        info = file_base.split(".")
+        parallelism_str = info[0]  # or file_base[:9] if format is fixed
+        seq = info[1].split("_")[1]
+        batch = info[2].split("_")[1]
         parallelism_list = parallelism_str.split("_")
         slowest_row["dp_mp_sp_pp_sharded"] = f'{parallelism_list[0]}_{parallelism_list[1]}_{parallelism_list[2]}_{parallelism_list[3]}_{parallelism_list[4]}'
         slowest_row["dp"] = parallelism_list[0]
@@ -157,6 +159,8 @@ def extract_slowest_npu(logs, output_filename):
         slowest_row["sp"] = parallelism_list[2]
         slowest_row["pp"] = parallelism_list[3]
         slowest_row["sharding"] = parallelism_list[4]
+        slowest_row["seq"] = seq
+        slowest_row["batch"] = batch  
 
         slowest_rows.append(slowest_row)
 
@@ -196,13 +200,15 @@ if __name__ == "__main__":
         logs = list_logs(args.sim_logfile, file_identifier)
         with multiprocessing.Pool() as pool:
             pool.starmap(extract_runtime_results_dir, [(log, args.output_filename, file_identifier) for log in logs])
-
+        
+        # Filter the slowest NPU data in all the experiments the belong to a topology.
+        print(args.output_filename)
+        logs = list_logs(args.output_filename, "_res.csv")
+        out_filename = args.output_filename + ".csv" if len(args.output_filename.split("/")) == 4 else args.output_filename + args.output_filename.split("/")[3] + ".csv"
+        extract_slowest_npu(logs, out_filename)
     else:
         raise ValueError(f"{args.sim_logfile} is neither a file nor a directory.")
 
 
-    # Filter the slowest NPU data in all the experiments the belong to a topology.
-    print(args.output_filename)
-    logs = list_logs(args.output_filename, "_res.csv")
-    extract_slowest_npu(logs, args.output_filename+".csv")
+    
     

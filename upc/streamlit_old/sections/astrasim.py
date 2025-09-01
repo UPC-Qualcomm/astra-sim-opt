@@ -5,35 +5,22 @@ import subprocess
 import json
 import time
 import simulation_res as sr
+
+import streamlit as st
+import os
+from pathlib import Path
+import subprocess
+import json
 import trace_visualization as tv
 
 
 def run_astrasim(params):
-    st.header(
-        "Run AstraSim",
-        help=(
-            "This section allows you to run AstraSim on the generated workload trace.\n"
-            "- Choose a network configuration from the available options.\n"
-            "- Modify the system and network configurations if needed.\n"
-            "- Click **Run AstraSim** to execute the simulation."
-        )
-    )
+    st.title("Run AstraSim")
     config_dir, sim_dir = _setup_dirs(params["temp_dir"])
     configs = _get_config_names(config_dir)
 
-    st.subheader("Simulation Configuration")
-    config_display_map = {
-        "2D_Torus": "2D Torus",
-        "3D_Torus": "3D Torus", 
-        "Dragonfly": "Dragonfly",
-        "FoldedClos": "Folded-Clos"
-    }
-    
-    display_options = [config_display_map.get(config, config) for config in configs]
-    selected_display_name = st.selectbox("Select a Topology", display_options)
-    
-    reverse_map = {v: k for k, v in config_display_map.items()}
-    selected_config_name = reverse_map.get(selected_display_name, selected_display_name)
+    st.subheader("Configuration")
+    selected_config_name = st.selectbox("Select a config", configs)
 
     paths = _compute_paths(params, config_dir, sim_dir)
     col1, col2 = st.columns(2)
@@ -54,10 +41,10 @@ def run_astrasim(params):
                 returncode, elapsed_time = _run_astrasim_bin(
                     paths, temp_sys_path, temp_net_path, params["temp_dir"]
                 )
-                #if "df_matched" not in st.session_state:
-                st.session_state.df_matched = tv.get_timings_df(
-                    paths['trace_file'], paths["timed_trace"]
-                )
+                if "df_matched" not in st.session_state:
+                    st.session_state.df_matched = tv.get_timings_df(
+                        paths['trace_file'], paths["timed_trace"]
+                    )
                 _handle_sim_result(returncode, elapsed_time, paths, updated_sys_content)
         else:
             st.warning("No Configurations Found.")
@@ -71,16 +58,16 @@ def run_astrasim(params):
         "timed_trace": paths["timed_trace"]
     }
 
-@st.cache_data(show_spinner='Visualizing Simulation Results...')
+
 def visualize_simulation_results(sim_outputs):
     if "show_npu_plots" not in st.session_state:
         st.session_state.show_npu_plots = False
 
     if st.session_state.show_npu_plots:
+        st.title("📊 Visualize the exposed communications for all NPUs")
         plots = sr.plot_sim_results(sim_outputs["res_log"])
         for pl in plots:
             st.write(pl)
-        st.markdown("<p style='text-align: center; font-size: 0.9em; color: #666;'>Per plot simulation results, showcasing the amount of overlapped compute and communication along with the exposed computation and communication.</p>", unsafe_allow_html=True)
 
 
 def _setup_dirs(temp_dir):
@@ -98,22 +85,14 @@ def _compute_paths(params, config_dir, sim_dir):
     as_bin = (
         "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware"
     )
-    prefix = f"{params['dp']}_{params['tp']}_{params['sp']}_{params['pp']}_{params['sharding_val']}"
-    temp_path = Path(params["temp_dir"])
-    base_file_name = prefix
-    for f in temp_path.iterdir():
-        if f.is_file() and f.name.startswith(prefix):
-            base_file_name = f.name.rsplit(".", 2)[0]  
-            break
     workload = os.path.join(
         params["temp_dir"],
-        base_file_name,
+        f"{params['dp']}_{params['tp']}_{params['sp']}_{params['pp']}_{params['sharding_val']}",
     )
     log = os.path.join(
         sim_dir,
-        base_file_name,
+        f"{params['dp']}_{params['tp']}_{params['sp']}_{params['pp']}_{params['sharding_val']}",
     )
-    # Find base file name in parent of temp_dir
     trace_file_name = f"{log}_trace.csv"
     timed_trace_file_name = f"{log}_trace_matched_timing.csv"
     memory = os.path.join(config_dir, "RemoteMemory.json")
@@ -127,8 +106,7 @@ def _compute_paths(params, config_dir, sim_dir):
         "network_log": network_log,
         "res_log": res_log,
         "trace_file": trace_file_name,
-        "timed_trace": timed_trace_file_name,
-        "base_file_name": base_file_name
+        "timed_trace": timed_trace_file_name
     }
 
 
@@ -156,7 +134,7 @@ def _show_config_editors(col1, col2, sys_content, net_content):
 
 def _clear_sim_dir(sim_dir):
     if os.path.isdir(sim_dir):
-        subprocess.run(f"rm -rf {sim_dir}*", shell=True, cwd=None)
+        subprocess.run(f"rm {sim_dir}*", shell=True, cwd=None)
 
 
 def _save_temp_configs(sim_dir, sys_content, net_content):
@@ -184,9 +162,8 @@ def _run_astrasim_bin(paths, temp_sys_path, temp_net_path, temp_dir):
         start_time = time.time()
         returncode = subprocess.run(cmd, shell=True, cwd=None).returncode
         elapsed_time = time.time() - start_time
-        #for key in list(st.session_state.keys()):
-        #    if key != 'submitted':
-        #        del st.session_state[key]
+        for key in st.session_state.keys():
+            del st.session_state[key]
     return returncode, elapsed_time
 
 

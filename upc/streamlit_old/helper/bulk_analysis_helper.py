@@ -29,7 +29,7 @@ def select_dim(
     col0, col1 = st.columns([2, 4])
     with col0:
         selected_dim = st.selectbox(
-            select_msg,
+            "Select dimension for the slider:",
             dims,
             index=defualt_idx,
             key=f"{key_prefix}_selector",
@@ -47,11 +47,11 @@ def select_dim(
 def get_dims():
     return ["dp", "tp", "pp", "sp"]
 
-@st.cache_data(show_spinner='Computing Remaining Dimensions...')
+
 def get_remaining_dims(dims, excluded_dim):
     return [d for d in dims if d != excluded_dim]
 
-@st.cache_data(show_spinner='Finding Local Minima...')
+
 def find_local_minima(df, x_dim, y_dim, z_dim, value_col="total"):
     local_minima = []
     discrete_dims = ["dp", "tp", "pp", "sp"]
@@ -73,7 +73,7 @@ def find_local_minima(df, x_dim, y_dim, z_dim, value_col="total"):
     return pd.DataFrame(local_minima)
 
 
-@st.cache_data(show_spinner='Finding Local Minima...')
+@st.cache_data
 def find_local_minima_all_axis(df, x_dim, y_dim, z_dim, t_dim, value_col="total"):
     local_minima = []
     discrete_dims = ["dp", "tp", "pp", "sp"]
@@ -99,7 +99,7 @@ def find_local_minima_all_axis(df, x_dim, y_dim, z_dim, t_dim, value_col="total"
 
     return pd.DataFrame(local_minima)
 
-@st.cache_data(show_spinner='Finding Neighbors...')
+
 def get_neighbors(val, dim, df, discrete_dims):
     unique_vals = df[dim].unique()
     if dim in discrete_dims:
@@ -112,7 +112,7 @@ def get_neighbors(val, dim, df, discrete_dims):
     else:
         return []
 
-@st.cache_data(show_spinner='Rendering...')
+
 def selected_dims_3d_fig(
     df, local_min_df, x_dim, y_dim, z_dim, color_dim, global_min=-1
 ):
@@ -126,12 +126,6 @@ def selected_dims_3d_fig(
 
     if global_min != -1 and global_min in df.index:
         min_point = df.loc[global_min]
-        cycles_in_billions = min_point[z_dim] / 1e9
-        global_min_hover = (
-            f"Parallelism Strategy:<br>"
-            f"DP: {min_point.get('dp', 'N/A')}, TP: {min_point.get('tp', 'N/A')}, SP: {min_point.get('sp', 'N/A')}, PP: {min_point.get('pp', 'N/A')}, FSDP: {min_point.get('fsdp', 'N/A')}<br>"
-            f"Time in cycles: {cycles_in_billions:.2f}B"
-        )
         fig.add_trace(
             go.Scatter3d(
                 x=[min_point[x_dim]],
@@ -142,23 +136,10 @@ def selected_dims_3d_fig(
                 text=["Min total"],
                 textposition="top center",
                 name="Global Min",
-                hovertemplate=global_min_hover + "<extra></extra>",
-                hoverinfo="text",
             )
         )
 
     if not local_min_df.empty:
-        # Create custom hover text for local minima
-        local_min_hover = []
-        for idx, row in local_min_df.iterrows():
-            cycles_in_billions = row[z_dim] / 1e9
-            hover_text = (
-                f"Parallelism Strategy:<br>"
-                f"DP: {row.get('dp', 'N/A')}, TP: {row.get('tp', 'N/A')}, SP: {row.get('sp', 'N/A')}, PP: {row.get('pp', 'N/A')}, FSDP: {row.get('fsdp', 'N/A')}<br>"
-                f"Time in cycles: {cycles_in_billions:.2f}B"
-            )
-            local_min_hover.append(hover_text)
-        
         fig.add_trace(
             go.Scatter3d(
                 x=local_min_df[x_dim],
@@ -167,22 +148,8 @@ def selected_dims_3d_fig(
                 mode="markers",
                 marker=dict(size=5, color="purple", symbol="diamond"),
                 name="Local Minima",
-                hovertemplate="%{customdata}<extra></extra>",
-                customdata=local_min_hover,
-                hoverinfo="text",
             )
         )
-
-    # Create custom hover text for all data points
-    data_hover = []
-    for idx, row in df.iterrows():
-        cycles_in_billions = row[z_dim] / 1e9
-        hover_text = (
-            f"Parallelism Strategy:<br>"
-            f"DP: {row.get('dp', 'N/A')}, TP: {row.get('tp', 'N/A')}, SP: {row.get('sp', 'N/A')}, PP: {row.get('pp', 'N/A')}, FSDP: {row.get('fsdp', 'N/A')}<br>"
-            f"Time in cycles: {cycles_in_billions:.2f}B"
-        )
-        data_hover.append(hover_text)
 
     fig.add_trace(
         go.Scatter3d(
@@ -192,9 +159,6 @@ def selected_dims_3d_fig(
             mode="markers",
             marker=dict(size=4, color=df[color_dim], colorscale=colorscale),
             name="Data Points",
-            hovertemplate="%{customdata}<extra></extra>",
-            customdata=data_hover,
-            hoverinfo="text",
         )
     )
 
@@ -220,7 +184,6 @@ def selected_dims_3d_fig(
                 mode="lines",
                 line=dict(color="black", width=2),
                 showlegend=False,
-                hoverinfo="skip",
             )
         )
 
@@ -230,14 +193,14 @@ def selected_dims_3d_fig(
         scene=dict(
             xaxis_title=x_dim.upper(),
             yaxis_title=y_dim.upper(),
-            zaxis_title="Time (Cycles)",
+            zaxis_title=z_dim.upper(),
         ),
     )
 
     return fig
 
 
-@st.cache_data(show_spinner='Rendering...')
+@st.cache_data
 def get_neighbours_map_fig(df, x_dim, y_dim):
     x_values = sorted(df[x_dim].unique())
     y_values = sorted(df[y_dim].unique())
@@ -286,7 +249,7 @@ def select_umap_components(df_len):
         "minkowski",
         "canberra",
         "braycurtis",
-        #"haversine", This works for 2D only
+        "haversine",
         "mahalanobis",
         "wminkowski",
         "seuclidean",
@@ -297,7 +260,7 @@ def select_umap_components(df_len):
 
     return min_dist, n_neighbors, metric
 
-@st.cache_data(show_spinner='Rendering...')
+
 def get_1d_umap_fig(df, min_dist, n_neighbors, metric):
     df_cols_val = df[df.columns[:-1]].values
 
@@ -311,18 +274,18 @@ def get_1d_umap_fig(df, min_dist, n_neighbors, metric):
     X_embedded = reducer.fit_transform(df_cols_val)
     df["1d"] = X_embedded.flatten()
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(12, 8))
     ax.set_xlabel("UMAP 1D")
-    ax.set_title("Effect of Parallelism Parameters on\nPerformance via UMAP")
+    ax.set_title("Effect of Parallelism Parameters on Total via UMAP")
     sc = ax.scatter(df["1d"], df["total"], c=df["total"], cmap="viridis")
     cbar = plt.colorbar(sc, ax=ax)
-    cbar.set_label("Time (Cycles)")
-    ax.set_ylabel("Time (Cycles)")
+    cbar.set_label("Total")
+    ax.set_ylabel("Total")
     ax.grid(True)
 
     return fig
 
-@st.cache_data(show_spinner='Rendering...')
+
 def get_1d_pca_fig(df):
     df_cols_val = df[df.columns[:-1]].values
 
@@ -330,18 +293,18 @@ def get_1d_pca_fig(df):
     X_embedded = pca.fit_transform(df_cols_val)
     df["1d"] = X_embedded.flatten()
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(12, 8))
     ax.set_xlabel("PCA 1D")
-    ax.set_title("Effect of Parallelism Parameters on\nPerformance via PCA")
+    ax.set_title("Effect of Parallelism Parameters on Total via PCA")
     sc = ax.scatter(df["1d"], df["total"], c=df["total"], cmap="viridis")
     cbar = plt.colorbar(sc, ax=ax)
-    cbar.set_label("Time (Cycles)")
-    ax.set_ylabel("Time (Cycles)")
+    cbar.set_label("Total")
+    ax.set_ylabel("Total")
     ax.grid(True)
 
     return fig
 
-@st.cache_data(show_spinner='Rendering...')
+
 def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
     df_cols_val = df[cols].values
 
@@ -367,7 +330,7 @@ def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
                     size=5,
                     color=df["total"],
                     colorscale="Viridis",
-                    colorbar=dict(title="Time (Cycles)"),
+                    colorbar=dict(title="Total"),
                     opacity=0.8,
                 ),
             )
@@ -383,7 +346,7 @@ def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
             colorscale="Viridis",
             opacity=0.3,
             showscale=True,
-            colorbar=dict(title="Time (Cycles)"),
+            colorbar=dict(title="Total"),
         )
     )
 
@@ -391,15 +354,15 @@ def get_2d_umap_fig(df, cols, min_dist, n_neighbors, metric):
         scene=dict(
             xaxis_title="UMAP Component 1",
             yaxis_title="UMAP Component 2",
-            zaxis_title="Time (Cycles)",
+            zaxis_title="Total",
         ),
-        title="3D Plot: UMAP Components 1 & 2 vs Time (Cycles)",
-        height=550,
+        title="3D Plot: UMAP Components 1 & 2 vs Total",
+        height=700,
         width=900,
     )
     return fig
 
-@st.cache_data(show_spinner='Rendering...')
+
 def get_2d_pca_fig(df, cols):
     df_cols_val = df[cols].values
 
@@ -419,7 +382,7 @@ def get_2d_pca_fig(df, cols):
                     size=5,
                     color=df["total"],
                     colorscale="Viridis",
-                    colorbar=dict(title="Time (Cycles)"),
+                    colorbar=dict(title="Total"),
                     opacity=0.8,
                 ),
             )
@@ -435,7 +398,7 @@ def get_2d_pca_fig(df, cols):
             colorscale="Viridis",
             opacity=0.3,
             showscale=True,
-            colorbar=dict(title="Time (Cycles)"),
+            colorbar=dict(title="Total"),
         )
     )
 
@@ -443,15 +406,15 @@ def get_2d_pca_fig(df, cols):
         scene=dict(
             xaxis_title="PCA Component 1",
             yaxis_title="PCA Component 2",
-            zaxis_title="Time (Cycles)",
+            zaxis_title="Total",
         ),
-        title="3D Plot: PCA Components 1 & 2 vs Performance",
-        height=550,
-        width=800,
+        title="3D Plot: PCA Components 1 & 2 vs Total",
+        height=700,
+        width=900,
     )
     return fig
 
-@st.cache_data(show_spinner='Kmeans Clustering...')
+
 def cluster_kmeans(df, n_clusters=15):
     X_2d = StandardScaler().fit_transform(df[["dim_1", "dim_2"]])
     kmeans_2d = KMeans(n_clusters=n_clusters)
@@ -463,7 +426,7 @@ def cluster_kmeans(df, n_clusters=15):
 
     return labels_1d, labels_2d
 
-@st.cache_data(show_spinner='DBSCAN Clustering...')
+
 def cluster_dbscan(df, eps=0.35, min_samples=6, metric="euclidean"):
     X_2d = StandardScaler().fit_transform(df[["dim_1", "dim_2"]])
     db_2d = DBSCAN(eps=eps, min_samples=min_samples, metric=metric).fit(X_2d)
@@ -475,7 +438,7 @@ def cluster_dbscan(df, eps=0.35, min_samples=6, metric="euclidean"):
 
     return labels_1d, labels_2d
 
-@st.cache_data(show_spinner='Rendering...')
+
 def get_1d_clustering_fig(df, labels):
     fig, ax = plt.subplots(figsize=(12, 8))
     palette = sns.color_palette("viridis", n_colors=len(set(labels)))
@@ -494,7 +457,7 @@ def get_1d_clustering_fig(df, labels):
 
     return fig
 
-@st.cache_data(show_spinner='Rendering...')
+
 def get_2d_clustering_fig(df):
     fig = plt.figure(figsize=(12, 8))
     fig.add_subplot(111, projection="3d")
@@ -549,19 +512,19 @@ def get_2d_clustering_fig(df):
     )
     return fig
 
-@st.cache_data(show_spinner='Finding Best 1D Clusters...')
+
 def get_best_1d_clusters(df):
     return df.groupby("cluster_1d")["total"].mean().sort_values()
 
-@st.cache_data(show_spinner='Finding Best 2D Clusters...')
+
 def get_best_2d_clusters(df):
     return df.groupby("cluster_2d")["total"].mean().sort_values()
 
-@st.cache_data(show_spinner='Training Random Forest...')
+
 def ml_random_forest(df, X_train, X_test, y_train, y_test):
     param_dist = {
-        "n_estimators": [100, 300],
-        "max_depth": [30, 50, None],
+        "n_estimators": [100, 300, 500],
+        "max_depth": [10, 30, 50, None],
         "min_samples_split": [2, 5, 10],
         "min_samples_leaf": [1, 2, 4],
         "max_features": ["log2", "sqrt"],
@@ -581,7 +544,7 @@ def ml_random_forest(df, X_train, X_test, y_train, y_test):
         {
             "Model": ["Random Forest"],
             "R2 Score": [r2_score(y_test, preds_rf)],
-            #"RMSE": [np.sqrt(mean_squared_error(y_test, preds_rf))],
+            "RMSE": [np.sqrt(mean_squared_error(y_test, preds_rf))],
             "NRMSE": [
                 np.sqrt(mean_squared_error(y_test, preds_rf))
                 / (df["total"].max() - df["total"].min())
@@ -592,15 +555,15 @@ def ml_random_forest(df, X_train, X_test, y_train, y_test):
 
     return best_rf, preds_rf, metric
 
-@st.cache_data(show_spinner='Training XGBoost...')
+
 def ml_xgboost(df, X_train, X_test, y_train, y_test):
     X = pd.concat([X_train, X_test], ignore_index=True)
     y = pd.concat([y_train, y_test], ignore_index=True)
 
     xgb = XGBRegressor(
         random_state=42,
-        n_estimators=100,
-        max_depth=5,
+        n_estimators=1000,
+        max_depth=7,
         eta=0.1,
         subsample=0.7,
         colsample_bytree=0.8,
@@ -616,7 +579,7 @@ def ml_xgboost(df, X_train, X_test, y_train, y_test):
         {
             "Model": ["XGBoost"],
             "R2 Score": [r2_score(y_test, preds_xgb)],
-            #"RMSE": [np.sqrt(mean_squared_error(y_test, preds_xgb))],
+            "RMSE": [np.sqrt(mean_squared_error(y_test, preds_xgb))],
             "NRMSE": [
                 np.sqrt(mean_squared_error(y_test, preds_xgb))
                 / (df["total"].max() - df["total"].min())
@@ -627,7 +590,7 @@ def ml_xgboost(df, X_train, X_test, y_train, y_test):
 
     return xgb, preds_xgb, metric
 
-@st.cache_data(show_spinner='Training MLP...')
+
 def ml_mlp(df, X_train, X_test, y_train, y_test):
     mlp = MLPRegressor(
         hidden_layer_sizes=(64, 32), activation="relu", max_iter=1000, random_state=42
@@ -640,7 +603,7 @@ def ml_mlp(df, X_train, X_test, y_train, y_test):
         {
             "Model": ["MLP"],
             "R2 Score": [r2_score(y_test, preds_mlp)],
-            #"RMSE": [np.sqrt(mean_squared_error(y_test, preds_mlp))],
+            "RMSE": [np.sqrt(mean_squared_error(y_test, preds_mlp))],
             "NRMSE": [
                 np.sqrt(mean_squared_error(y_test, preds_mlp))
                 / (df["total"].max() - df["total"].min())
@@ -651,10 +614,10 @@ def ml_mlp(df, X_train, X_test, y_train, y_test):
 
     return mlp, preds_mlp, metric
 
-@st.cache_data(show_spinner='Plotting Feature Importance...')
-def plot_feature_importance(_model, features, title):
+
+def plot_feature_importance(model, features, title):
     """Plot and display model-based feature importances."""
-    importance = pd.Series(_model.feature_importances_, index=features).sort_values(
+    importance = pd.Series(model.feature_importances_, index=features).sort_values(
         ascending=False
     )
     importance_df = pd.DataFrame(
@@ -667,7 +630,7 @@ def plot_feature_importance(_model, features, title):
 
     return fig, importance_df
 
-@st.cache_data(show_spinner='Plotting Permutation Importance...')
+
 def plot_permutation_importance(model, X_test, y_test, features, title):
     """Plot and display permutation feature importances."""
     perm = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42)
@@ -680,15 +643,15 @@ def plot_permutation_importance(model, X_test, y_test, features, title):
 
     return fig, perm_df
 
-@st.cache_data(show_spinner='Computing and Plotting PDP...')
-def compute_and_plot_pdp(_model, X_test, features, title, degree_val):
+
+def compute_and_plot_pdp(model, X_test, features, title, degree_val):
     """Compute and plot partial dependence for a single model"""
     pdp_results = {}
     axes_results = {}
 
     for feat in features:
         disp = PartialDependenceDisplay.from_estimator(
-            _model, X_test, [feat], grid_resolution=100
+            model, X_test, [feat], grid_resolution=100
         )
         pdp = disp.lines_[0][0].get_ydata()
         axis = disp.lines_[0][0].get_xdata()
@@ -702,12 +665,12 @@ def compute_and_plot_pdp(_model, X_test, features, title, degree_val):
         norm_vals = (vals - np.min(vals)) / (np.max(vals) - np.min(vals))
         temp_df = pd.DataFrame(
             {
-                "Feature": feat.upper(),
+                "Feature": feat,
                 "Feature Value": axes_results[feat],
                 "Normalized Effect on Total": norm_vals,
             }
         )
-        plot_data = pd.concat([plot_data, temp_df], ignore_index=True)
+        plot_data = pd.concat([plot_data, temp_df])
 
     fig, ax = plt.subplots(figsize=(12, 4))
     sns.lineplot(
@@ -718,9 +681,9 @@ def compute_and_plot_pdp(_model, X_test, features, title, degree_val):
         ax=ax,
     )
     ax.set_title(title)
-    ax.set_ylabel("Normalized Effect\non the Time (Cycles)")
-    ax.set_xlabel("Parallelism Degree")
-    ax.legend(title="")
+    ax.set_ylabel("Normalized Effect on Total")
+    ax.set_xlabel("Feature Value")
+    ax.legend(title="Feature")
     ax.grid(True)
     ax.set_xticks(degree_val)
 

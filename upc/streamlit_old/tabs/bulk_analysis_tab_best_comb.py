@@ -16,7 +16,15 @@ import helper.bw_run_sim as bw_run
 
 
 def render(df, selected_model, selected_config):
-    df_range, start, end  = select_exp_slider(df) 
+    options = list(range(1, len(df) + 1))
+    start, end = st.slider(
+        "Select Range of Experiment Rankings (by 'total') to Consider:",
+        min_value=min(options),
+        max_value=max(options),
+        value=(2, 10)
+    )
+    df_sorted = df.sort_values(by="total", ascending=True).reset_index(drop=True)
+    df_range = df_sorted.iloc[start-1:end]  
     st.write(f"Showing experiments ranked from {start} to {end}:")
     st.dataframe(df_range)
 
@@ -68,18 +76,6 @@ def render(df, selected_model, selected_config):
     st.subheader("Study the effect of the bandwidth over network configurations")
     for parallelism_strategy in parallelism_strategies:
         bw_show.show_res_across_configs(parallelism_strategy, all_res_dirs_configs)
-
-def select_exp_slider(df):
-    options = list(range(0, len(df) + 1))
-    start, end = st.slider(
-        "Select Range of Experiment To Study - Sorted by Simulation time:",
-        min_value=min(options),
-        max_value=max(options),
-        value=(0, 4)
-    )
-    df_sorted = df.sort_values(by="total", ascending=True).reset_index(drop=True)
-    df_range = df_sorted.iloc[start:end] 
-    return df_range, start, end
 
 def get_exposed_comm_fig(df):
     comm_mean, comm_std, comm_gmean = (
