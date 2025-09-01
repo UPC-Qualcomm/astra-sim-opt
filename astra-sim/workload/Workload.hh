@@ -55,6 +55,7 @@ class Workload : public Callable {
     HardwareResource* hw_resource;
     Sys* sys;
     std::unordered_map<int, uint64_t> collective_comm_node_id_map;
+    std::unordered_map<uint64_t, uint64_t> stream_to_node_map;
     std::unordered_map<int, DataSet*> collective_comm_wrapper_map;
     bool is_finished;
 };

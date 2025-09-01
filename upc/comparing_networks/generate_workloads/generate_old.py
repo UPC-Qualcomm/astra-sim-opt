@@ -1,0 +1,71 @@
+import os
+from chakra.src.third_party.utils.protolib import encodeMessage as encode_message
+from chakra.schema.protobuf.et_def_pb2 import (
+    Node as ChakraNode,
+    GlobalMetadata,
+    AttributeProto as ChakraAttr,
+    COMM_SEND_NODE,
+    COMM_RECV_NODE
+)
+
+def generate_naive_all_to_all(npus_count: int, comm_size: int, num_concurrent_sends: int) -> None:
+    """
+    Generates a trace for each NPU that performs a naive all-to-all,
+    issuing many concurrent point-to-point sends and recvs.
+    This is designed to bypass the system-level collective algorithms
+    and create maximum network congestion.
+    """
+    dir_path = os.path.join(os.path.dirname(__file__), "..", "workload", "toy_naive_all_to_all")
+    os.makedirs(dir_path, exist_ok=True)
+
+    for src_npu in range(npus_count):
+        output_filename = f"{dir_path}/naive_all_to_all.{src_npu}.et"
+        with open(output_filename, "wb") as et:
+            # Chakra Metadata
+            encode_message(et, GlobalMetadata(version="0.0.4"))
+            node_id_counter = 1
+
+            message_pairs = [(0, 2), (1, 3)]
+
+            for src, dst in message_pairs:
+                comm_tag = src * npus_count + dst  # unique tag per pair
+
+                # SEND node (only in src's file)
+                if src_npu == src:
+                    send_node = ChakraNode()
+                    send_node.id = node_id_counter
+                    send_node.name = f"SEND_NPU{src}_to_NPU{dst}"
+                    send_node.type = COMM_SEND_NODE
+                    send_node.attr.append(ChakraAttr(name="comm_tag", int64_val=comm_tag))
+                    send_node.attr.append(ChakraAttr(name="comm_size", uint64_val=comm_size))
+                    send_node.attr.append(ChakraAttr(name="comm_src", int64_val=src))
+                    send_node.attr.append(ChakraAttr(name="comm_dst", int64_val=dst))
+                    encode_message(et, send_node)
+                    node_id_counter += 1
+
+                # RECV node (only in dst's file)
+                if src_npu == dst:
+                    recv_node = ChakraNode()
+                    recv_node.id = node_id_counter
+                    recv_node.name = f"RECV_NPU{dst}_from_NPU{src}"
+                    recv_node.type = COMM_RECV_NODE
+                    recv_node.attr.append(ChakraAttr(name="comm_tag", int64_val=comm_tag))
+                    recv_node.attr.append(ChakraAttr(name="comm_size", uint64_val=comm_size))
+                    recv_node.attr.append(ChakraAttr(name="comm_src", int64_val=src))
+                    recv_node.attr.append(ChakraAttr(name="comm_dst", int64_val=dst))
+                    encode_message(et, recv_node)
+                    node_id_counter += 1
+
+
+def main() -> None:
+    npus_count = 4
+    comm_size = 2 * 900 * 1000 * 1000 * 1000  # 1 MB
+    # Number of concurrent sends to issue.
+    # This, combined with active-chunks-per-dimension, controls concurrency.
+    num_concurrent_sends = 1
+
+    generate_naive_all_to_all(npus_count, comm_size, num_concurrent_sends)
+    print(f"Generated naive All-to-All traces in ./traces/toy_naive_all_to_all/ for {npus_count} NPUs.")
+
+if __name__ == "__main__":
+    main()

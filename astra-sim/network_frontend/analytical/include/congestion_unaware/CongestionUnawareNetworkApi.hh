@@ -46,6 +46,7 @@ class CongestionUnawareNetworkApi final : public CommonNetworkApi {
                  int type,
                  int dst,
                  int tag,
+                 uint64_t workload_node_id,
                  sim_request* request,
                  void (*msg_handler)(void* fun_arg),
                  void* fun_arg) override;

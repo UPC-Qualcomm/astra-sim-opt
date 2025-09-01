@@ -254,8 +254,8 @@ bool HalvingDoubling::ready() {
     snd_req.vnet = this->stream->current_queue_id;
     stream->owner->front_end_sim_send(
         0, Sys::dummy_data, packet.msg_size, UINT8, packet.preferred_dest,
-        stream->stream_id, &snd_req, Sys::FrontEndSendRecvType::COLLECTIVE,
-        &Sys::handleEvent,
+        stream->stream_id, stream->workload_node_id, &snd_req,
+        Sys::FrontEndSendRecvType::COLLECTIVE, &Sys::handleEvent,
         nullptr);  // stream_id+(packet.preferred_dest*50)
     sim_request rcv_req;
     rcv_req.vnet = this->stream->current_queue_id;
