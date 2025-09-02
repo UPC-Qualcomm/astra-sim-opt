@@ -5,19 +5,17 @@ LICENSE file in the root directory of this source tree.
 
 #include "astra-sim/common/Logging.hh"
 #include "common/CmdLineParser.hh"
-#include "g2/CongestionUnawareNetworkApi.hh"
-#include <astra-network-g2/common/EventQueue.h>
-#include <astra-network-g2/common/NetworkParser.h>
-#include <astra-network-g2/g2/Helper.h>
+#include "G2NetworkApi.hh"
+#include <common/EventQueue.h>
+#include <common/NetworkParser.h>
 #include <remote_memory_backend/analytical/AnalyticalRemoteMemory.hh>
 #include "network.h"
 
 using namespace AstraSim;
 using namespace Analytical;
 using namespace AstraSimAnalytical;
-using namespace AstraSimAnalyticalCongestionUnaware;
+using namespace AstraSimG2;
 using namespace NetworkAnalytical;
-using namespace NetworkAnalyticalCongestionUnaware;
 
 int main(int argc, char* argv[]) {
     // Parse command line arguments
@@ -53,27 +51,28 @@ int main(int argc, char* argv[]) {
 
     // Generate topology
     const auto network_parser = NetworkParser(network_configuration);
-    const auto topology = construct_topology(network_parser);
-
 
     // Get topology information
-    const auto npus_count = topology->get_npus_count();
-    const auto npus_count_per_dim = topology->get_npus_count_per_dim();
-    const auto dims_count = topology->get_dims_count();
-    const auto bandwidth_per_dim = topology->get_bandwidth_per_dim();
+    const auto npus_count_per_dim = network_parser.get_npus_counts_per_dim();
+    const auto dims_count = network_parser.get_dims_count();
+    const auto bandwidth_per_dim = network_parser.get_bandwidths_per_dim();
     const auto topologies_per_dim = network_parser.get_topologies_per_dim();
+    // Get total number of NPUs
+    auto npus_count = 1;
+    for (const auto& count : npus_count_per_dim) {
+        npus_count *= count;
+    }
 
     // Set up Network API
-    CongestionUnawareNetworkApi::set_event_queue(event_queue);
-    CongestionUnawareNetworkApi::set_topology(topology);
+    G2NetworkApi::set_event_queue(event_queue);
 
     Network net(npus_count_per_dim, bandwidth_per_dim,
                 topologies_per_dim);
-    CongestionUnawareNetworkApi::set_network(&net);
+    G2NetworkApi::set_network(&net);
 
     // Create ASTRA-sim related resources
     auto network_apis =
-        std::vector<std::unique_ptr<CongestionUnawareNetworkApi>>();
+        std::vector<std::unique_ptr<G2NetworkApi>>();
     const auto memory_api =
         std::make_unique<AnalyticalRemoteMemory>(remote_memory_configuration);
     auto systems = std::vector<Sys*>();
@@ -85,7 +84,7 @@ int main(int argc, char* argv[]) {
 
     for (int i = 0; i < npus_count; i++) {
         // create network and system
-        auto network_api = std::make_unique<CongestionUnawareNetworkApi>(i);
+        auto network_api = std::make_unique<G2NetworkApi>(i);
         auto* const system =
             new Sys(i, workload_configuration, comm_group_configuration,
                     system_configuration, memory_api.get(), network_api.get(),
@@ -111,7 +110,7 @@ int main(int argc, char* argv[]) {
     // run simulation
     while (!event_queue->finished()) {
         event_queue->proceed();
-        CongestionUnawareNetworkApi::update_network_congestion();
+        G2NetworkApi::update_network_congestion();
     }
 
     for (auto it : systems) {

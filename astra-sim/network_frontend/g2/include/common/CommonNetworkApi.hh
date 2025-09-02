@@ -7,8 +7,8 @@ LICENSE file in the root directory of this source tree.
 
 #include "common/CallbackTracker.hh"
 #include "common/ChunkIdGenerator.hh"
-#include <astra-network-g2/common/EventQueue.h>
-#include <astra-network-g2/common/NetworkLogger.h>
+#include <common/EventQueue.h>
+#include <common/NetworkLogger.h>
 #include <astra-sim/common/AstraNetworkAPI.hh>
 #include <astra-sim/system/Common.hh>
 #include <memory>

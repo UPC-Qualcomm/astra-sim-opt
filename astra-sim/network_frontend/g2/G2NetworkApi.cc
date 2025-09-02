@@ -3,41 +3,26 @@ This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
 *******************************************************************************/
 
-#include "g2/CongestionUnawareNetworkApi.hh"
+#include "G2NetworkApi.hh"
 #include "astra-sim/common/Logging.hh"
 #include "astra-sim/system/Sys.hh"
 #include "network.h"
 #include <cassert>
 
 using namespace AstraSim;
-using namespace AstraSimAnalyticalCongestionUnaware;
+using namespace AstraSimG2;
 using namespace NetworkAnalytical;
-using namespace NetworkAnalyticalCongestionUnaware;
 
-std::shared_ptr<Topology> CongestionUnawareNetworkApi::topology;
-Network* CongestionUnawareNetworkApi::network = nullptr;
-CongestionUnawareNetworkApi* CongestionUnawareNetworkApi::api_instance = nullptr;
+Network* G2NetworkApi::network = nullptr;
+G2NetworkApi* G2NetworkApi::api_instance = nullptr;
 
-void CongestionUnawareNetworkApi::set_topology(
-    std::shared_ptr<Topology> topology_ptr) noexcept {
-    assert(topology_ptr != nullptr);
 
-    // move topology
-    CongestionUnawareNetworkApi::topology = std::move(topology_ptr);
-
-    // set topology-related values
-    CongestionUnawareNetworkApi::dims_count =
-        CongestionUnawareNetworkApi::topology->get_dims_count();
-    CongestionUnawareNetworkApi::bandwidth_per_dim =
-        CongestionUnawareNetworkApi::topology->get_bandwidth_per_dim();
-}
-
-void CongestionUnawareNetworkApi::set_network(Network* network_ptr) noexcept {
+void G2NetworkApi::set_network(Network* network_ptr) noexcept {
     assert(network_ptr != nullptr);
-    CongestionUnawareNetworkApi::network = network_ptr;
+    G2NetworkApi::network = network_ptr;
 }
 
-void CongestionUnawareNetworkApi::handle_network_update(void* args) noexcept {
+void G2NetworkApi::handle_network_update(void* args) noexcept {
 
     assert(args != nullptr);
     const auto last_time_calculated = *static_cast<double*>(args);
@@ -57,20 +42,20 @@ void CongestionUnawareNetworkApi::handle_network_update(void* args) noexcept {
         auto chunk_arrival_arg = std::make_tuple(tag, src, dst, count, chunk_id);
         auto arg = std::make_unique<decltype(chunk_arrival_arg)>(chunk_arrival_arg);
         const auto arg_ptr = static_cast<void*>(arg.release());
-        CongestionUnawareNetworkApi::process_chunk_arrival(arg_ptr);
+        G2NetworkApi::process_chunk_arrival(arg_ptr);
     }
 }
 
-CongestionUnawareNetworkApi::CongestionUnawareNetworkApi(
+G2NetworkApi::G2NetworkApi(
     const int rank) noexcept
     : CommonNetworkApi(rank) {
     assert(rank >= 0);
     if (rank == 0) {
-        CongestionUnawareNetworkApi::api_instance = this;
+        G2NetworkApi::api_instance = this;
     }
 }
 
-int CongestionUnawareNetworkApi::sim_send(void* const buffer,
+int G2NetworkApi::sim_send(void* const buffer,
                                           const uint64_t count,
                                           const int type,
                                           const int dst,
@@ -82,7 +67,7 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
     // query chunk id
     const auto src = sim_comm_get_rank();
     const auto chunk_id =
-        CongestionUnawareNetworkApi::chunk_id_generator.create_send_chunk_id(
+        G2NetworkApi::chunk_id_generator.create_send_chunk_id(
             tag, src, dst, count);
 
     // search tracker
@@ -108,8 +93,8 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
     }
 
     // add route for network-level simulation
-    if (CongestionUnawareNetworkApi::network != nullptr) {
-        CongestionUnawareNetworkApi::network->addRoute(tag, src, dst, count, chunk_id);
+    if (G2NetworkApi::network != nullptr) {
+        G2NetworkApi::network->addRoute(tag, src, dst, count, chunk_id);
     }
 
     // The scheduling of process_chunk_arrival is now handled by update_network_congestion
@@ -119,39 +104,39 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
     return 0;
 }
 
-int CongestionUnawareNetworkApi::update_network_congestion() {
-    if (CongestionUnawareNetworkApi::network == nullptr) {
+int G2NetworkApi::update_network_congestion() {
+    if (G2NetworkApi::network == nullptr) {
         return 0;
     }
 
-    if (!CongestionUnawareNetworkApi::network->len_network()) {
+    if (!G2NetworkApi::network->len_network()) {
         return 0;
     }
 
     const auto current_time = event_queue->get_current_time();
     const auto current_time_seconds = static_cast<double>(current_time) / 1'000'000'000.0;
 
-    double scheduled_time_seconds = CongestionUnawareNetworkApi::network->getNextMessages(current_time_seconds);
+    double scheduled_time_seconds = G2NetworkApi::network->getNextMessages(current_time_seconds);
 
     const auto delay = static_cast<double>((scheduled_time_seconds - current_time_seconds) * 1'000'000'000.0); // s to ns
     const auto delta = timespec_t({NS, delay});
 
     assert(api_instance != nullptr); // Ensure the instance is set
     auto* arg = new double(current_time_seconds);
-    api_instance->sim_schedule(delta, CongestionUnawareNetworkApi::handle_network_update, static_cast<void*>(arg));
+    api_instance->sim_schedule(delta, G2NetworkApi::handle_network_update, static_cast<void*>(arg));
 
     return 0;
 }
 
 
-void CongestionUnawareNetworkApi::log_network(std::string str) {
+void G2NetworkApi::log_network(std::string str) {
 
     if (this->enable_network_logger) {
         NetworkLogger::getInstance().write(str);
     }
 }
 
-void CongestionUnawareNetworkApi::init_logger(std::string str,
+void G2NetworkApi::init_logger(std::string str,
                                               bool enable_network_logger) {
     NetworkLogger::getInstance().init(str, enable_network_logger);
 }

@@ -23,16 +23,16 @@ file(GLOB srcs_common
 )
 
 file(GLOB srcs_g2
-        ${CMAKE_CURRENT_SOURCE_DIR}/g2/*.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/*.cc
 )
 
-# Compile Congestion Unaware Backend
+# Compile G2
 if (BUILDTARGET STREQUAL "all" OR BUILDTARGET STREQUAL "g2")
     add_executable(AstraSim_G2_congestion ${srcs_g2} ${srcs_common})
-    target_sources(AstraSim_G2_congestion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/g2/main.cc)
+    target_sources(AstraSim_G2_congestion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/main.cc)
 
     # Copy python script to bin directory
-    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/../../../extern/network_backend/g2/g2/network_module/network.py
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/../../../extern/network_backend/g2/network.py
          DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/../bin/)
 
     # Link libraries
