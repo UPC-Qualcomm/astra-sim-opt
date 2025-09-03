@@ -34,4 +34,5 @@ cd ./extern/graph_frontend/chakra/
 
 pip3 install .
 
+cd ${ASTRA_SIM}
 pip3 install -r ./requirements.txt

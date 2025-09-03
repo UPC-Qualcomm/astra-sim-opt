@@ -558,6 +558,8 @@ def _render_parallelism_strategy(total_npu_count):
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         saved_dp = st.session_state.parallelism_config.get('dp', dims[-1])
+        if saved_dp is None or saved_dp >= len(dims):
+            saved_dp = dims[-1]
         try:
             dp_index = dims.index(saved_dp)
         except ValueError:
