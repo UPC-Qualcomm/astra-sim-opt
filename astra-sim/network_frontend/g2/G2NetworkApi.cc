@@ -126,11 +126,10 @@ int G2NetworkApi::update_network_congestion() {
     }
 
     const auto current_time = event_queue->get_current_time();
-    // const auto current_time_seconds = static_cast<double>(current_time) / 1'000'000'000.0;
 
-    double scheduled_time = G2NetworkApi::network->getNextMessages(current_time); //(current_time_seconds);
+    double scheduled_time = G2NetworkApi::network->getNextMessages(current_time);
 
-    const auto delay = static_cast<double>((scheduled_time - current_time));// * 1'000'000'000.0); // s to ns
+    const auto delay = static_cast<double>((scheduled_time - current_time));
     const auto delta = timespec_t({NS, delay});
 
     assert(api_instance != nullptr); // Ensure the instance is set
