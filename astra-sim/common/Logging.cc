@@ -133,7 +133,7 @@ void LoggerFactory::init_default_components(
     // Set the header
     network_logger->info(
         ",action,src_origin,dst_final,src,dst,tensor_size,tag,workload_node_id,"
-        "chunk_id,issue_tick,bandwidth,dims_count,topology,hops,latency,delay");
+        "chunk_id,issue_tick,bandwidth,dims_count,topology,hops,latency,delay,rate");
 
     // Initialize system logger
     /*auto system_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(

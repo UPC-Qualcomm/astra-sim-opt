@@ -36,7 +36,19 @@ void G2NetworkApi::handle_network_update(void* args) noexcept {
 
 
     for (const auto& flow : fastest_flows) {
-        auto [tag, src, dst, count, chunk_id] = flow;
+        auto [tag, src, dst, count, chunk_id, workload_node_id, times, rates] = flow;
+
+        if (AstraNetworkAPI::network_enabled_log && workload_node_id != -1) {
+            for (size_t i = 0; i < times.size(); ++i) {
+                double time = times[i];
+                double rate = rates[i];
+                LoggerFactory::get_network_logger()->info(
+                    ",update,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+                    src, dst, src, dst, count, tag, workload_node_id,
+                    chunk_id, time, 0, 0, 0, 0, 0,
+                    0, rate);
+            }
+        }
 
         // create chunk
         auto chunk_arrival_arg = std::make_tuple(tag, src, dst, count, chunk_id);
@@ -94,7 +106,7 @@ int G2NetworkApi::sim_send(void* const buffer,
 
     // add route for network-level simulation
     if (G2NetworkApi::network != nullptr) {
-        G2NetworkApi::network->addRoute(tag, src, dst, count, chunk_id);
+        G2NetworkApi::network->addRoute(tag, src, dst, count, chunk_id, workload_node_id);
     }
 
     // The scheduling of process_chunk_arrival is now handled by update_network_congestion

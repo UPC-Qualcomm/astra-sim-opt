@@ -85,10 +85,10 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
 
     if (AstraNetworkAPI::network_enabled_log && workload_node_id != -1) {
         LoggerFactory::get_network_logger()->info(
-            ",send,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst, src,
+            ",send,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst, src,
             dst, count, tag, workload_node_id, chunk_id, Sys::boostedTick(),
             log_data["bandwidth"], log_data["dims_count"], log_data["topology"],
-            log_data["hops"], log_data["latency"], log_data["delay"]);
+            log_data["hops"], log_data["latency"], log_data["delay"],0);
     }
 
     // Log Network Info

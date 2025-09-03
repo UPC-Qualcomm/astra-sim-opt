@@ -93,9 +93,9 @@ int CongestionAwareNetworkApi::sim_send(void* const buffer,
 
     if (AstraNetworkAPI::network_enabled_log && workload_node_id != -1) {
         LoggerFactory::get_network_logger()->info(
-            ",issue,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst,
+            ",issue,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst,
             src, dst, count, tag, workload_node_id, chunk_id,
-            Sys::boostedTick(), 0, 0, 0, 0, 0, 0);
+            Sys::boostedTick(), 0, 0, 0, 0, 0, 0,0);
     }
 
     topology->send(std::move(chunk));
@@ -125,10 +125,10 @@ void CongestionAwareNetworkApi::process_chunk_arrival(void* args) noexcept {
             if (AstraNetworkAPI::network_enabled_log &&
                 workload_node_id != -1) {
                 LoggerFactory::get_network_logger()->info(
-                    ",send_mini,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+                    ",send_mini,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
                     src, dest, src_log, dst_log, count, tag, workload_node_id,
                     chunk_id, entry.start_time, bandwidth, 0, 0, 0, latency,
-                    delay);
+                    delay,0);
             }
         }
     }
