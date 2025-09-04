@@ -6,7 +6,7 @@ import altair as alt
 import seaborn as sns
 from IPython.display import display
 import numpy as np
-
+import helper.constants as constants
 
 NodeType = {
     "INVALID_NODE": 0,
@@ -19,16 +19,6 @@ NodeType = {
     "COMM_COLL_NODE": 7,
 }
 node_types = list(NodeType.keys())
-
-
-# def get_timings_df(df: pd.DataFrame) -> pd.DataFrame:
-#    df_issues = df.query("action == 'issue'").drop(columns="action")
-#    df_callbacks = df.query("action == 'callback'").drop(columns="action")
-#    return df_issues.merge(
-#        df_callbacks,
-#        on=["sys_id", "node_id", "node_name", "node_type"],
-#        suffixes=("_issue", "_callback"),
-#    ).assign(elapsed_time=lambda d: d["tick_callback"] - d["tick_issue"])
 
 
 def get_timings_df(csv_trace_file, output_file_name) -> pd.DataFrame:
@@ -58,45 +48,93 @@ def get_timings_df(csv_trace_file, output_file_name) -> pd.DataFrame:
 
     return merged_df
 
-
+@st.cache_data(show_spinner='Rendering...')
 def plot_elapsed_times(
-    df: pd.DataFrame, npu, sys_id: int = 0, max_height: int = 600
+    df: pd.DataFrame, npu, sys_id: int = 0, max_height: int = 600, exp = ""
 ) -> alt.Chart:
-    font_size = 15
     df = df.query(f"sys_id == {sys_id}")
+    #df = df.sort_values("elapsed_time", ascending=False).reset_index(drop=True)
+    #df_sorted = df.sort_values("elapsed_time", ascending=False).reset_index(drop=True)
+
+    # Create 10 quantile-based bins
+    #df_sorted['bin'] = pd.qcut(df_sorted['elapsed_time'], q=100, duplicates='drop')
+
+    # Pick one row per bin (e.g. first occurrence)
+    #df_diverse = df_sorted.groupby('bin').first().reset_index(drop=True)
+
+    # Drop the helper column
+    # Drop the record with max elapsed time
+    #df_diverse = df_diverse[df_diverse["elapsed_time"] != df_diverse["elapsed_time"].max()]
+    #df = df_diverse
+    df = df[:100]
     unique_nodes = df["node_name"].nunique()
     chart_height = max(
-        unique_nodes * font_size * 1.5, max_height
+        unique_nodes * constants.FONT_SIZE * 1.5, max_height
     )  # min/max to keep reasonable bounds
-
+    font_local_controller = -8
     return (
         alt.Chart(df)
+        #.transform_calculate(
+        #    operation_type="datum.node_type == 4 ? 'COMP' : datum.node_type == 7 ? 'COMM' : 'OTHER'"
+        #)
         .mark_bar()
         .encode(
-            x=alt.X("elapsed_time:Q", title="Time (Cycles)"),
+            x=alt.X(
+                "elapsed_time:Q",
+                title="Time (M-Cycles)",
+                axis=alt.Axis(
+                    format=",d",
+                    labelExpr="datum.value / 1000000 + 'M'"
+                )
+            ),
             y=alt.Y(
                 "node_name:N",
                 sort=alt.SortField(field="elapsed_time", order="descending"),
-                title="Node Name",
+                title="",
             ),
+            #color=alt.Color(
+                #"operation_type:N",
+                #scale=alt.Scale(
+                #    domain=["COMM", "COMP"]
+                #),
+                #legend=alt.Legend(title=None)
+            #),
             tooltip=["node_name", "elapsed_time", "issue_tick"],
         )
         .properties(
             width=600,
             height=chart_height,
-            title=f"Elapsed Time by Node Name - NPU {npu}",
+            title=["Elapsed Time Of Compute and Communication Operations", f"NPU {npu}{exp}"]
         )
         .configure_axis(
-            labelFontSize=font_size,
-            labelLimit=250,
-            titleFontSize=18,
-            titlePadding=50,  # Increase this number as needed for your label lengths
+            labelFontSize=constants.XTICK_SIZE+2 + font_local_controller,
+            labelColor='black',
+            titleFontSize=constants.LABEL_SIZE+2,
+            titleFont='Arial',
+            titleColor='black',
+            labelFont='Arial',
+            labelBaseline="middle",
+            titlePadding=30,
+            labelLimit=300
+        )
+        .configure_title(
+            fontSize=constants.TITLE_SIZE+2 + font_local_controller,
+            font='Arial',
+            anchor='start',
+            color='black',
+            fontWeight="normal"
+        )
+        .configure_legend(
+            labelFontSize=constants.LEGEND_SIZE+2 + font_local_controller,
+            titleFontSize=constants.LEGEND_SIZE+2 + font_local_controller,
+            labelColor='black',
+            titleColor='black'
         )
         .configure_view(stroke=None)
         .interactive()
     )
 
-
+@st.cache_data(show_spinner='Computing Overlapped Blocks...')
 def get_overlapped_blocks(df: pd.DataFrame) -> dict[str, list[int]]:
     """df should be filtered by sys_id and node_type."""
     df_sorted = df.sort_values("issue_tick")
@@ -123,30 +161,60 @@ def get_overlapped_blocks(df: pd.DataFrame) -> dict[str, list[int]]:
     blocks["end"].append(prev_end)
     return blocks
 
-
-def plot_overlapped_blocks(df: pd.DataFrame, npu) -> alt.Chart:
+@st.cache_data(show_spinner='Rendering Overlapped Blocks...')
+def plot_overlapped_blocks(df: pd.DataFrame, npu, exp = "") -> alt.Chart:
+    font_local_controller = -8
+    type_labels = {"COMMUNICATION": "COMM", "COMPUTATION": "COMP"}
+    df = df.copy()
+    df["type_label"] = df["node_type"].map(type_labels)
+    df = df.sort_values("start").reset_index(drop=True)
     chart = (
         alt.Chart(df)
-        .mark_bar()
+        .mark_bar(size=70)
         .encode(
-            x=alt.X("start:Q", title="Time (Cycles)"),
+            x=alt.X(
+                "start:Q",
+                title="Time (Cycles)",
+                axis=alt.Axis(
+                    format=",.1f",
+                    tickMinStep=1000000,
+                    labelExpr="datum.value / 1e6 + 'M'",
+                    ticks=True, 
+                    labels=True   
+                )
+            ),
             x2="end:Q",
-            y=alt.Y("node_type:N", title="Node Type"),
-            color=alt.Color("node_type:N", legend=alt.Legend(title=None)),  # Different color for each node_type
+            y=alt.Y("type_label:N", title="Node Type", axis=alt.Axis(labels=False, ticks=False)),
+            color=alt.Color("type_label:N", legend=alt.Legend(title=None)),
         )
         .configure_axis(
-            grid=False,  # Remove the grid lines
+            grid=False,
             ticks=False,
+            labelFontSize=constants.XTICK_SIZE + font_local_controller,
+            titleFontSize=constants.LABEL_SIZE + font_local_controller,
+            labelColor="black",
+            titleColor="black",
+        )
+        .configure_title(
+            fontSize=constants.TITLE_SIZE + font_local_controller,
+            color="black",
+            fontWeight="normal"
+        )
+        .configure_legend(
+            labelFontSize=constants.LEGEND_SIZE + font_local_controller,
+            labelColor="black"
         )
         .properties(
-            height=450, width=800, title=f"Duration of Blocks by Node Type - NPU {npu}"
+            height=400,
+            width=1000,
+            title=["Operation Blocks Duration Through Time", exp],
         )
     )
 
     return chart.interactive()
 
-
-def plot_one_npu(df, npu=0, plot_blocks=True, plot_times=False):
+@st.cache_data(show_spinner='Rendering...')
+def plot_one_npu(df, npu=0, plot_blocks=True, plot_times=False, exp = ""):
     df_0 = df.query(f"sys_id == {npu}")
     df_0_comp = pd.DataFrame.from_dict(
         get_overlapped_blocks(df_0.query("node_type == 4"))
@@ -156,12 +224,16 @@ def plot_one_npu(df, npu=0, plot_blocks=True, plot_times=False):
     ).assign(node_type="COMMUNICATION")
     df_0_blocks = pd.concat([df_0_comp, df_0_comm])
     if plot_blocks:
-        return plot_overlapped_blocks(df_0_blocks, npu)
+        return plot_overlapped_blocks(df_0_blocks, npu, exp=exp)
     if plot_times:
-        return plot_elapsed_times(df, npu=npu, max_height=1500)
+        return plot_elapsed_times(df, npu=npu, max_height=1500, exp=exp)
 
 
 def plot_all_npus(df):
     for npu in range(64):
         df_0 = df.query(f"sys_id == {npu}")
-        plot_one_npu(df, npu, plot_blocks=True, plot_times=False)
+        chart = plot_one_npu(df, npu, plot_blocks=True, plot_times=False, exp = "")
+        if chart:
+            chart = chart.resolve_scale(x='shared').configure_view(strokeWidth=0, continuousHeight=400, continuousWidth=1000).configure_axis(grid=False).configure_concat(spacing=20)
+            st.altair_chart(chart, use_container_width=True)
+            st.markdown("<div style='margin-bottom: 50px;'></div>", unsafe_allow_html=True)

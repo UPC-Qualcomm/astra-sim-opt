@@ -33,10 +33,10 @@ def get_output_dir(selected_model, selected_config):
             + "/"
             + DIR_NAME
         )
-@st.cache_data(show_spinner='setting up results directory...')
+
 def get_results_dir(selected_model, selected_config):
     return Path(__file__).parent / "../../results" / selected_model / selected_config / DIR_NAME
-@st.cache_data(show_spinner='setting up network directory...')
+
 def get_network_dir(selected_model, selected_config):
     return (
             Path(__file__).parent / "../../network_log" / selected_model / selected_config / DIR_NAME
@@ -67,7 +67,7 @@ def intra_inter_simulations_run(
         # st.success("✅ All simulations completed successfully!")
 
 
-@st.cache_data(show_spinner='Running Bandwidth Sweep...')
+@st.cache_data
 def run_bandwidth_sweep_parallel(
     base_yml_path,
     parallelism_strategies,

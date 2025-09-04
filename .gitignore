@@ -45,9 +45,7 @@ upc/streamlit/temp
 upc/comparing_networks/output/
 upc/comparing_networks/workload/
 
-upc/*/__pycache__
-upc/*/*/__pycache__
-upc/__pycache__
+**/*/__pycache__
 
 *.ipynb_checkpoints/
 
