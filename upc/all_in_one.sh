@@ -179,7 +179,7 @@ python gather_all_NPUs_results.py --sim_logfile ${output}FoldedClos  --output_fi
 #python gather_results.py --sim_logfiles_dir ${output}Dragonfly --output_filename ${result}Dragonfly.csv
 python gather_all_NPUs_results.py --sim_logfile ${output}Dragonfly  --output_filename ${result}Dragonfly
 
-FullyConnected
+#FullyConnected
 python gather_results.py --sim_logfiles_dir ${output}FullyConnected --output_filename ${result}FullyConnected.csv
 python gather_all_NPUs_results.py --sim_logfile ${output}FullyConnected  --output_filename ${result}FullyConnected
 
