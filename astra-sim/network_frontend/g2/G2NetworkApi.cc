@@ -129,6 +129,10 @@ int G2NetworkApi::update_network_congestion() {
 
     double scheduled_time = G2NetworkApi::network->getNextMessages(current_time);
 
+    if (scheduled_time < 0) {
+        return 0; // No new routes to add, no update needed
+    }
+
     const auto delay = static_cast<double>((scheduled_time - current_time));
     const auto delta = timespec_t({NS, delay});
 
