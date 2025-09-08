@@ -5,6 +5,7 @@ from glob import glob
 file_dir = os.path.dirname(os.path.abspath(__file__))
 
 ASTRASIM_BINARIES = [
+    ("G2", os.path.join(file_dir, "../../build/astra_g2/build/bin/AstraSim_G2_Congestion")),
     ("Unaware", os.path.join(file_dir, "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware")),
     ("", os.path.join(file_dir, "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware")),
 ]

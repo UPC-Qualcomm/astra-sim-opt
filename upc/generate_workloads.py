@@ -73,6 +73,7 @@ class Model(Enum):
     llama_8B = 17
     GPT_30B = 18
     GPT_40B = 19
+    Simple = 20
 
     @staticmethod
     def get_model_params(model):
@@ -117,6 +118,8 @@ class Model(Enum):
             return [50257, 18432, 18432, 73728, [2048], 8192, 72, 118]
         elif model == Model.GPT_4_Estimated_over_1T:
             return [50257, 20480, 20480, 81920, [2048], 8192, 128, 128]
+        elif model == Model.Simple:
+            return [1024, 1024, 1024, 4096, 32, 32, 4, 4]
         else:
             return [51200, 25600, 25600, 25600 * 4, [1024], 1024, 1024, 32]
 
