@@ -192,10 +192,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    num_npus = 32
-    dp = {4}
-    mp = {4}
-    pp = {2}
+    num_npus = 64
+    dp = {1, 2, 4, 8, 16}
+    mp = {1, 2, 4, 8, 16}
+    pp = {1, 2, 4, 8, 16}
     sharded = {True, False}
     max_sp=16
     model = args.model
