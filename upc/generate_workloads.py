@@ -119,7 +119,7 @@ class Model(Enum):
         elif model == Model.GPT_4_Estimated_over_1T:
             return [50257, 20480, 20480, 81920, [2048], 8192, 128, 128]
         elif model == Model.Simple:
-            return [1024, 1024, 1024, 4096, 32, 32, 4, 4]
+            return [1024, 1024, 1024, 4096, [32], 32, 4, 4]
         else:
             return [51200, 25600, 25600, 25600 * 4, [1024], 1024, 1024, 32]
 
@@ -169,7 +169,7 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
         "extern",
         "symbolic_tensor_graph",
     )
-    #print(cmd)
+    print(cmd)
     run_command(cmd, cwd)
 
 if __name__ == "__main__":
