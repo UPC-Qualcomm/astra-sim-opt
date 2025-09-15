@@ -172,14 +172,18 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
         astrasim_bin = os.environ.get("ASTRA_SIM_BIN_UNAWARE")
     elif sim_type == "analytical_aware":
         astrasim_bin = os.environ.get("ASTRA_SIM_BIN_AWARE")
+    elif sim_type == "g2":
+        astrasim_bin = os.environ.get("G2_SIM_BIN")
     else:
         raise ValueError(f"Unknown sim_type: {sim_type}")
 
     if astrasim_bin is None:
         if sim_type == "analytical_unaware":
             raise RuntimeError("ASTRA_SIM_BIN_UNAWARE is not set.")
-        else:
+        elif sim_type == "analytical_aware":
             raise RuntimeError("ASTRA_SIM_BIN_AWARE is not set.")
+        elif sim_type == "g2":
+            raise RuntimeError("G2_SIM_BIN is not set.")
 
     file_dir = os.path.split(os.path.abspath(__file__))[0]
 
@@ -251,7 +255,7 @@ if __name__ == "__main__":
         "--sim_type",
         type=str,
         default="analytical_unaware",
-        choices=["analytical_unaware", "analytical_aware"],
+        choices=["analytical_unaware", "analytical_aware", "g2"],
         help="The type of simulator to run.",
     )
     args = parser.parse_args()
