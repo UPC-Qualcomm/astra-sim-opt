@@ -190,14 +190,58 @@ if __name__ == "__main__":
         required=False,
         default="Default",
     )
-    args = parser.parse_args()
-
+    
     num_npus = 64
     dp = {1, 2, 4, 8, 16}
     mp = {1, 2, 4, 8, 16}
     pp = {1, 2, 4, 8, 16}
     sharded = {True, False}
     max_sp=16
+
+    parser.add_argument(
+        "--num_npus",
+        type=int,
+        default=num_npus,
+        help="Number of NPUs"
+    )
+    parser.add_argument(
+        "--dp",
+        type=str,
+        default=", ".join(map(str, dp)),
+        help="Data parallelism degrees, comma-separated"
+    )
+    parser.add_argument(
+        "--mp",
+        type=str,
+        default=", ".join(map(str, mp)),
+        help="Model parallelism degrees, comma-separated"
+    )
+    parser.add_argument(
+        "--pp",
+        type=str,
+        default=", ".join(map(str, pp)),
+        help="Pipeline parallelism degrees, comma-separated"
+    )
+    parser.add_argument(
+        "--sharded",
+        type=str,
+        default=", ".join(map(str, sharded)),
+        help="Sharded options (True/False), comma-separated"
+    )
+    parser.add_argument(
+        "--max_sp",
+        type=int,
+        default=max_sp,
+        help="Maximum spatial parallelism"
+    )
+    args = parser.parse_args()
+
+    num_npus = args.num_npus
+    dp = set(map(int, args.dp.split(',')))
+    mp = set(map(int, args.mp.split(',')))
+    pp = set(map(int, args.pp.split(',')))
+    sharded = set(val.lower() == 'true' for val in args.sharded.split(','))
+    max_sp = args.max_sp
     model = args.model
     folder_name = args.folder_name
 
