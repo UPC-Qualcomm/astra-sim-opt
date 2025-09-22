@@ -91,7 +91,7 @@ class Model(Enum):
         elif model == Model.GPT_2_Medium:
             return [50257, 1024, 1024, 4096, [2048], 1024, 16, 24]
         elif model == Model.GPT_3_1300M:
-            return [50257, 2048, 2048, 8192, [512, 1024, 2048], 2048, 16, 24]
+            return [50257, 2048, 2048, 8192, [1024], 2048, 16, 24]
         elif model == Model.GPT_Neo_2700M:
             return [50257, 2560, 2560, 10240, [2048], 2048, 32, 32]
         elif model == Model.llama_8B:
@@ -207,25 +207,25 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dp",
         type=str,
-        default=", ".join(map(str, dp)),
+        default=",".join(map(str, dp)),
         help="Data parallelism degrees, comma-separated"
     )
     parser.add_argument(
         "--mp",
         type=str,
-        default=", ".join(map(str, mp)),
+        default=",".join(map(str, mp)),
         help="Model parallelism degrees, comma-separated"
     )
     parser.add_argument(
         "--pp",
         type=str,
-        default=", ".join(map(str, pp)),
+        default=",".join(map(str, pp)),
         help="Pipeline parallelism degrees, comma-separated"
     )
     parser.add_argument(
         "--sharded",
         type=str,
-        default=", ".join(map(str, sharded)),
+        default=",".join(map(str, sharded)),
         help="Sharded options (True/False), comma-separated"
     )
     parser.add_argument(
@@ -241,6 +241,7 @@ if __name__ == "__main__":
     mp = set(map(int, args.mp.split(',')))
     pp = set(map(int, args.pp.split(',')))
     sharded = set(val.lower() == 'true' for val in args.sharded.split(','))
+
     max_sp = args.max_sp
     model = args.model
     folder_name = args.folder_name
