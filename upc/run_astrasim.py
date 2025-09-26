@@ -207,7 +207,7 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
         f"--network-configuration={network} "
         f"--remote-memory-configuration={memory} "
         f"--comm-group-configuration={workload_path}.json "
-        f"--logging-configuration={log} "
+        f"--logging-folder={log} "
         f"--network-log={network_log} "
     )
     print(cmd)

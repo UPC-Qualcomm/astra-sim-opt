@@ -22,11 +22,12 @@ class LoggerFactory {
     static std::shared_ptr<spdlog::logger> get_network_logger();
     // static std::shared_ptr<spdlog::logger> get_system_logger();
     // static std::shared_ptr<spdlog::logger> get_workload_logger();
-    static void init(const std::string& log_conf_path = "empty");
+    static void init(const std::string& log_conf_path = "empty",
+                     const std::string& log_path = "log");
     static void shutdown(void);
 
   private:
-    static void init_default_components(const std::string& log_config_path);
+    static void init_default_components(const std::string& log_path);
     static std::unordered_set<spdlog::sink_ptr> default_sinks;
     static std::shared_ptr<spdlog::logger> memory_logger;
     static std::shared_ptr<spdlog::logger> trace_logger;

@@ -29,6 +29,8 @@ void CmdLineParser::define_options() noexcept {
         cxxopts::value<std::string>())(
         "logging-configuration", "Logging configuration file",
         cxxopts::value<std::string>()->default_value("empty"))(
+        "logging-folder", "Logging folder",
+        cxxopts::value<std::string>()->default_value("log"))(
         "num-queues-per-dim", "Number of queues per each dimension",
         cxxopts::value<int>()->default_value("1"))(
         "compute-scale", "Compute scale",
@@ -53,4 +55,8 @@ void CmdLineParser::parse(int argc, char* argv[]) noexcept {
                   << "Error parsing options: " << e.what() << std::endl;
         exit(-1);
     }
+}
+
+cxxopts::Options& CmdLineParser::get_options() {
+    return options;
 }

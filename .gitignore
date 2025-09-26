@@ -17,10 +17,12 @@ build/astra_g2/build_debug/
 build/astra_analytical/result/
 build/astra_garnet/build/
 build/astra_garnet/result/
+build/astra_htsim/build/
 
 # Generated Chakra ET files
 *.eg
 *.et
+!examples/**/*.et
 
 # vscode
 .vscode
