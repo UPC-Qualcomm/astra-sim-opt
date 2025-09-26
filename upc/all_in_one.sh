@@ -15,7 +15,7 @@
 #folder_name="GPT_2_Medium"
 #model_num=4
 
-folder_name="GPT_3_1300M"
+folder_name="GPT_3_1300M_teest"
 model_num=5
 
 #folder_name="GPT_Neo_2700M"
@@ -171,7 +171,7 @@ time python run_astrasim.py \
 time python gather_all_NPUs_results.py --sim_logfile ${output}2D_Torus  --output_filename ${result}2D_Torus
 
 #3D_Torus
-time time python gather_all_NPUs_results.py --sim_logfile ${output}3D_Torus  --output_filename ${result}3D_Torus
+time python gather_all_NPUs_results.py --sim_logfile ${output}3D_Torus  --output_filename ${result}3D_Torus
 
 #DGX_H100
 time python gather_all_NPUs_results.py --sim_logfile ${output}FoldedClos  --output_filename ${result}FoldedClos
