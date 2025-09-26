@@ -3,13 +3,21 @@
 #include "extern/remote_memory_backend/analytical/AnalyticalRemoteMemory.hh"
 #include <json/json.hpp>
 
-#include "astra-sim/common/Logging.hh"
+// monkey patch, the spdlog include <syslog.h> and define these macros, and
+// break the ns3 log enum keys
+#define NS3_LOG_COMPAT_UNDEF_SYSLOG
+#include "astra-sim/network_frontend/ns3/ns3_log_monkey_patch.h"
+
 #include "entry.h"
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
 #include "ns3/csma-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/network-module.h"
+
+#undef NS3_LOG_COMPAT_UNDEF_SYSLOG
+#include "astra-sim/network_frontend/ns3/ns3_log_monkey_patch.h"
+
 #include <execinfo.h>
 #include <fstream>
 #include <iostream>
@@ -116,7 +124,6 @@ class ASTRASimNetwork : public AstraSim::AstraNetworkAPI {
                          int type,
                          int dst_id,
                          int tag,
-                         uint64_t workload_node_id,
                          AstraSim::sim_request* request,
                          void (*msg_handler)(void* fun_arg),
                          void* fun_arg) {
@@ -265,8 +272,8 @@ void parse_args(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
-    LogComponentEnable("OnOffApplication", LOG_LEVEL_INFO);
-    LogComponentEnable("PacketSink", LOG_LEVEL_INFO);
+    LogComponentEnable("OnOffApplication", LOG_INFO);
+    LogComponentEnable("PacketSink", LOG_INFO);
 
     cout << "ASTRA-sim + NS3" << endl;
 

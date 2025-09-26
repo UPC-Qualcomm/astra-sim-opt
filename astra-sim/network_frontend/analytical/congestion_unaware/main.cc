@@ -36,6 +36,8 @@ int main(int argc, char* argv[]) {
         cmd_line_parser.get<std::string>("network-configuration");
     const auto logging_configuration =
         cmd_line_parser.get<std::string>("logging-configuration");
+    const auto logging_folder =
+        cmd_line_parser.get<std::string>("logging-folder");
     const auto num_queues_per_dim =
         cmd_line_parser.get<int>("num-queues-per-dim");
     const auto comm_scale = cmd_line_parser.get<double>("comm-scale");
@@ -45,7 +47,7 @@ int main(int argc, char* argv[]) {
     // Log Networking information
     const auto network_log = cmd_line_parser.get<std::string>("network-log");
 
-    AstraSim::LoggerFactory::init(logging_configuration);
+    AstraSim::LoggerFactory::init(logging_configuration, logging_folder);
 
     // Instantiate event queue
     const auto event_queue = std::make_shared<EventQueue>();

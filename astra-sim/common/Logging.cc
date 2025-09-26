@@ -1,4 +1,5 @@
 #include "astra-sim/common/Logging.hh"
+#include <filesystem>
 
 namespace AstraSim {
 
@@ -56,13 +57,12 @@ std::shared_ptr<spdlog::logger> LoggerFactory::get_network_logger() {
     return workload_logger;
 }*/
 
-void LoggerFactory::init(const std::string& log_config_path) {
+void LoggerFactory::init(const std::string& log_config_path,
+                         const std::string& log_path) {
     if (log_config_path != "empty") {
-        // spdlog_setup::from_file(log_config_path);
-        init_default_components(log_config_path);
-    } else {
-        init_default_components("log/log");
+        spdlog_setup::from_file(log_config_path);
     }
+    init_default_components(log_path);
 }
 
 void LoggerFactory::shutdown(void) {
@@ -71,8 +71,13 @@ void LoggerFactory::shutdown(void) {
     spdlog::shutdown();
 }
 
-void LoggerFactory::init_default_components(
-    const std::string& log_config_path) {
+void LoggerFactory::init_default_components(const std::string& log_path) {
+    std::filesystem::path folderPath = std::filesystem::path(log_path).parent_path();
+
+    if (!std::filesystem::exists(folderPath)) {
+        std::filesystem::create_directory(folderPath);
+    }
+
     auto sink_color_console =
         std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     sink_color_console->set_level(spdlog::level::info);
@@ -80,19 +85,19 @@ void LoggerFactory::init_default_components(
 
     auto sink_rotate_out =
         std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-            log_config_path + ".log", 1024 * 1024 * 10 * 10, 10);
+            log_path + ".log", 1024 * 1024 * 10 * 10, 10);
     sink_rotate_out->set_level(spdlog::level::debug);
     default_sinks.insert(sink_rotate_out);
 
     auto sink_rotate_err =
         std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-            log_config_path + ".err", 1024 * 1024 * 10, 10);
+            log_path + ".err", 1024 * 1024 * 10, 10);
     sink_rotate_err->set_level(spdlog::level::err);
     default_sinks.insert(sink_rotate_err);
 
     // Initialize memory logger
     auto memory_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        log_config_path + "_memory.csv", 1024 * 1024 * 10 * 10, 10);
+        log_path + "_memory.csv", 1024 * 1024 * 10 * 10, 10);
     memory_sink->set_level(spdlog::level::info);
     memory_logger = std::make_shared<spdlog::logger>("memory", memory_sink);
     spdlog::register_logger(memory_logger);
@@ -103,7 +108,7 @@ void LoggerFactory::init_default_components(
 
     // Initialize trace logger
     auto trace_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        log_config_path + "_trace.csv", 1024 * 1024 * 10 * 100, 10);
+        log_path + "_trace.csv", 1024 * 1024 * 10 * 100, 10);
     trace_sink->set_level(spdlog::level::info);
     trace_logger = std::make_shared<spdlog::logger>("trace", trace_sink);
     spdlog::register_logger(trace_logger);
@@ -114,7 +119,7 @@ void LoggerFactory::init_default_components(
 
     // Initialize roofeline logger
     auto roofline_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        log_config_path + "_roofline.csv", 1024 * 1024 * 10 * 100, 10);
+        log_path + "_roofline.csv", 1024 * 1024 * 10 * 100, 10);
     roofline_sink->set_level(spdlog::level::info);
     roofline_logger =
         std::make_shared<spdlog::logger>("roofline", roofline_sink);
@@ -126,7 +131,7 @@ void LoggerFactory::init_default_components(
 
     // Initialize network logger
     auto network_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        log_config_path + "_network.csv", 1024 * 1024 * 10 * 100, 10);
+        log_path + "_network.csv", 1024 * 1024 * 10 * 100, 10);
     network_sink->set_level(spdlog::level::info);
     network_logger = std::make_shared<spdlog::logger>("network", network_sink);
     spdlog::register_logger(network_logger);

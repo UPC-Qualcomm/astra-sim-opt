@@ -13,7 +13,6 @@
 #include "astra-sim/common/Logging.hh"
 #include "astra-sim/system/Callable.hh"
 #include "astra-sim/system/Common.hh"
-#include "extern/graph_frontend/chakra/src/feeder/et_feeder.h"
 #include "extern/graph_frontend/chakra/src/feeder_v3/et_feeder.h"
 
 namespace AstraSim {

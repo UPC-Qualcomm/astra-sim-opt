@@ -9,7 +9,7 @@ LICENSE file in the root directory of this source tree.
 #include <chrono>
 
 #include "astra-sim/common/AstraNetworkAPI.hh"
-#include "astra-sim/system/AstraRemoteMemoryAPI.hh"
+#include "astra-sim/common/AstraRemoteMemoryAPI.hh"
 #include "astra-sim/system/Callable.hh"
 #include "astra-sim/system/CollectivePhase.hh"
 #include "astra-sim/system/CommunicatorGroup.hh"
@@ -17,7 +17,7 @@ LICENSE file in the root directory of this source tree.
 #include "astra-sim/system/Memory.hh"
 #include "astra-sim/system/Roofline.hh"
 #include "astra-sim/system/UsageTracker.hh"
-#include "astra-sim/system/topology/RingTopology.hh"
+#include "astra-sim/system/astraccl/native_collectives/logical_topology/RingTopology.hh"
 #include "astra-sim/workload/Workload.hh"
 
 namespace AstraSim {
@@ -82,7 +82,7 @@ class Sys : public Callable {
     bool initialize_sys(std::string name);
     CollectiveImpl* generate_collective_impl_from_input(
         std::string collective_impl_str);
-    CollectiveImpl* generate_collective_impl_from_chakra(
+    CollectiveImpl* generate_custom_collective_impl(
         std::string collective_impl_str);
     //---------------------------------------------------------------------------
 
@@ -266,6 +266,8 @@ class Sys : public Callable {
     Roofline* roofline;
 
     // memory
+    bool track_local_mem;
+    std::string local_mem_trace_filename;
     double local_mem_bw;
     AstraRemoteMemoryAPI* remote_mem;
 

@@ -22,14 +22,14 @@ LICENSE file in the root directory of this source tree.
 #include "astra-sim/system/SimSendCaller.hh"
 #include "astra-sim/system/StreamBaseline.hh"
 #include "astra-sim/system/WorkloadLayerHandlerData.hh"
-#include "astra-sim/system/collective/AllToAll.hh"
-#include "astra-sim/system/collective/ChakraImpl.hh"
-#include "astra-sim/system/collective/DoubleBinaryTreeAllReduce.hh"
-#include "astra-sim/system/collective/HalvingDoubling.hh"
-#include "astra-sim/system/collective/Ring.hh"
+#include "astra-sim/system/astraccl/custom_collectives/CustomAlgorithm.hh"
+#include "astra-sim/system/astraccl/native_collectives/collective_algorithm/AllToAll.hh"
+#include "astra-sim/system/astraccl/native_collectives/collective_algorithm/DoubleBinaryTreeAllReduce.hh"
+#include "astra-sim/system/astraccl/native_collectives/collective_algorithm/HalvingDoubling.hh"
+#include "astra-sim/system/astraccl/native_collectives/collective_algorithm/Ring.hh"
 #include "astra-sim/system/scheduling/OfflineGreedy.hh"
-#include "astra-sim/system/topology/BasicLogicalTopology.hh"
-#include "astra-sim/system/topology/GeneralComplexTopology.hh"
+#include "astra-sim/system/astraccl/native_collectives/logical_topology/BasicLogicalTopology.hh"
+#include "astra-sim/system/astraccl/native_collectives/logical_topology/GeneralComplexTopology.hh"
 #include <json/json.hpp>
 
 using namespace std;
@@ -382,9 +382,9 @@ bool Sys::initialize_sys(string name) {
             all_to_all_implementation_per_dimension.push_back(ci);
         }
     }
-    if (j.contains("all-to-all-implementation-chakra")) {
+    if (j.contains("all-to-all-implementation-custom")) {
         vector<string> chakra_filepath_str_vec =
-            j["all-to-all-implementation-chakra"];
+            j["all-to-all-implementation-custom"];
         all_to_all_implementation_per_dimension.clear();
         if (chakra_filepath_str_vec.size() != 1) {
             throw logic_error(
@@ -392,12 +392,12 @@ bool Sys::initialize_sys(string name) {
                 "that 1 ET file covers all dimensions");
         }
         CollectiveImpl* ci =
-            generate_collective_impl_from_chakra(chakra_filepath_str_vec[0]);
+            generate_custom_collective_impl(chakra_filepath_str_vec[0]);
         all_to_all_implementation_per_dimension.push_back(ci);
     }
-    if (j.contains("all-gather-implementation-chakra")) {
+    if (j.contains("all-gather-implementation-custom")) {
         vector<string> chakra_filepath_str_vec =
-            j["all-gather-implementation-chakra"];
+            j["all-gather-implementation-custom"];
         all_gather_implementation_per_dimension.clear();
         if (chakra_filepath_str_vec.size() != 1) {
             throw logic_error(
@@ -405,12 +405,12 @@ bool Sys::initialize_sys(string name) {
                 "that 1 ET file covers all dimensions");
         }
         CollectiveImpl* ci =
-            generate_collective_impl_from_chakra(chakra_filepath_str_vec[0]);
+            generate_custom_collective_impl(chakra_filepath_str_vec[0]);
         all_gather_implementation_per_dimension.push_back(ci);
     }
-    if (j.contains("all-reduce-implementation-chakra")) {
+    if (j.contains("all-reduce-implementation-custom")) {
         vector<string> chakra_filepath_str_vec =
-            j["all-reduce-implementation-chakra"];
+            j["all-reduce-implementation-custom"];
         all_reduce_implementation_per_dimension.clear();
         if (chakra_filepath_str_vec.size() != 1) {
             throw logic_error(
@@ -418,7 +418,7 @@ bool Sys::initialize_sys(string name) {
                 "that 1 ET file covers all dimensions");
         }
         CollectiveImpl* ci =
-            generate_collective_impl_from_chakra(chakra_filepath_str_vec[0]);
+            generate_custom_collective_impl(chakra_filepath_str_vec[0]);
         all_reduce_implementation_per_dimension.push_back(ci);
     }
     if (j.contains("collective-optimization")) {
@@ -526,6 +526,20 @@ bool Sys::initialize_sys(string name) {
             this->replay_only = false;
         }
     }
+    this->track_local_mem = false;
+    if (j.contains("track-local-mem")) {
+        if (j["track-local-mem"] != 0) {
+        this->track_local_mem = true;
+        } else {
+        this->track_local_mem = false;
+        }
+    }
+
+    this->local_mem_trace_filename = "local_mem_trace";
+    if (j.contains("local-mem-trace-filename")) {
+        this->local_mem_trace_filename = j["local-mem-trace-filename"];
+    }
+
     if (j.contains("enable_network_logger")) {
         auto enable_network_logger =
             (j["enable_network_logger"].get<int>() != 0);
@@ -568,10 +582,10 @@ CollectiveImpl* Sys::generate_collective_impl_from_input(
     }
 }
 
-CollectiveImpl* Sys::generate_collective_impl_from_chakra(
+CollectiveImpl* Sys::generate_custom_collective_impl(
     string chakra_filepath) {
     string filename = chakra_filepath + "." + to_string(id) + ".et";
-    return new ChakraCollectiveImpl(CollectiveImplType::ChakraImpl, filename);
+    return new CustomCollectiveImpl(CollectiveImplType::CustomCollectiveImpl, filename);
 }
 
 Tick Sys::boostedTick() {
@@ -690,8 +704,8 @@ void Sys::handleEvent(void* arg) {
         if (rcehd->owner) {
             rcehd->owner->consume(rcehd);
         }
-        if (rcehd->chakra) {
-            rcehd->chakra->call(event, rcehd->wlhd);
+        if (rcehd->custom_algorithm) {
+            rcehd->custom_algorithm->call(event, rcehd->wlhd);
         }
         delete rcehd;
     } else if (event == EventType::PacketSent) {
@@ -825,6 +839,10 @@ DataSet* Sys::generate_collective(
     int explicit_priority,
     CommunicatorGroup* communicator_group,
     uint64_t node_id) {
+    // TODO(jinsun): For custom collective, we do not need the chunk_size here (since the chunk size is already determined)
+    // Therefore, we also do not need the 'preferred-dataset-splits' value from the system JSON input. 
+    // However, this variable is intertwined deeply in this function so that we cannot remove it for now.
+    // Therefore, we have to keep that value in the JSON input. TODO: Refactor and remove. 
     uint64_t chunk_size = determine_chunk_size(size, collective_type);
     uint64_t recommended_chunk_size = chunk_size;
     int streams = ceil(((double)size) / chunk_size);
@@ -1120,9 +1138,9 @@ CollectivePhase Sys::generate_collective_phase(
                                                (RingTopology*)topology,
                                                data_size));
         return vn;
-    } else if (collective_impl->type == CollectiveImplType::ChakraImpl) {
-        string filename = ((ChakraCollectiveImpl*)collective_impl)->filename;
-        CollectivePhase vn(this, queue_id, new ChakraImpl(filename, id));
+    } else if (collective_impl->type == CollectiveImplType::CustomCollectiveImpl) {
+        string filename = ((CustomCollectiveImpl*)collective_impl)->filename;
+        CollectivePhase vn(this, queue_id, new CustomAlgorithm(filename, id));
         return vn;
     } else {
         LoggerFactory::get_logger("system")->critical(

@@ -5,7 +5,10 @@ import multiprocessing
 import argparse
 import pandas as pd
 from intervaltree import IntervalTree
-import getpass
+import time
+from functools import partial
+import re
+
 
 def get_timings_df(csv_trace_file, output_file_name):
     df = pd.read_csv(csv_trace_file)
@@ -150,7 +153,20 @@ def get_exposed(df, sys_id, node_op_type="comm"):
         )
 
 def run_command(command, cwd=None):
+    
+    # Find the specific number pattern in the command string
+    match = re.search(r'(\d+_\d+_\d+_\d+_\d+)', command)
+    identifier = ""
+    if match:
+        identifier = f" for {match.group(1)}"
+
+    print(command)
+    start_time = time.time()
     result = subprocess.run(command, shell=True, cwd=cwd)
+    
+    end_time = time.time()
+    print(f"Total time{identifier}: {end_time - start_time:.2f} seconds")
+        
     return result.returncode == 0
 
 
@@ -207,10 +223,9 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
         f"--network-configuration={network} "
         f"--remote-memory-configuration={memory} "
         f"--comm-group-configuration={workload_path}.json "
-        f"--logging-configuration={log} "
+        f"--logging-folder={log} "
         f"--network-log={network_log} "
     )
-    print(cmd)
     success = run_command(cmd)
     if success:
         if os.path.getsize(f'{log}.err') == 0:
@@ -219,8 +234,6 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
         return cmd
     return ""
 
-
-from functools import partial
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

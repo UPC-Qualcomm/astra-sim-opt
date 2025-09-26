@@ -105,7 +105,7 @@ class Model(Enum):
         elif model == Model.GPT_30B:
             return [50257, 6144, 6144, 24576, [2048], 2048, 32, 48]
         elif model == Model.GPT_40B:
-            return [50257, 8192, 8192, 32768, [2048], 2048, 32, 32]
+            return [50257, 8192, 8192, 32768, 2048, 2048, 32, 32]
         elif model == Model.LLaMA_3_70B:
             return [30522, 30522, 8192, 32768, [2048], 2048, 64, 80]
         elif model == Model.Model_100B:
@@ -147,13 +147,13 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
         f"python main.py "
         f"--output_dir {root} "
         f"--output_name {dp}_{mp}_{ssp}_{pp}_{1 if sharded else 0}.%d.et "
-        f"--comm_group {dp}_{mp}_{ssp}_{pp}_{1 if sharded else 0}.json "
+        #f"--comm_group {dp}_{mp}_{ssp}_{pp}_{1 if sharded else 0}.json "
         f"--dp {dp} "
         f"--tp {mp} "
         f"--sp {ssp} "
         f"--pp {pp} "
-        f"--din {din} "
-        f"--dout {dout} "
+        f"--dvocal {din} "
+        #f"--dout {dout} "
         f"--dmodel {dmodel} "
         f"--dff {dff} "
         f"--batch '{batch}' "

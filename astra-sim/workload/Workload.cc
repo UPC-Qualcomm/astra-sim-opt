@@ -44,43 +44,38 @@ Workload::Workload(Sys* sys, string et_filename, string comm_group_filename) {
         exit(EXIT_FAILURE);
     }
     this->et_feeder = new ETFeeder(workload_filename);
+    this->comm_groups.clear();
     // TODO: parametrize the number of available hardware resources
-    this->hw_resource = new HardwareResource(1);
+    this->hw_resource = new HardwareResource(1, sys->id);
+    this->local_mem_usage_tracker =
+        std::make_unique<LocalMemUsageTracker>(sys->id);
     this->sys = sys;
-    initialize_comm_group(comm_group_filename);
+    initialize_comm_groups(comm_group_filename);
+    this->stats = new Statistics(this);
     this->is_finished = false;
 }
 
 Workload::~Workload() {
-    for (const auto& comm_group : this->comm_group) {
+    for (auto comm_group : comm_groups) {
         delete comm_group.second;
     }
-    comm_group.clear();
-    for (const auto& it : this->collective_comm_node_id_map) {
-        delete this->collective_comm_wrapper_map[it.first];
-    }
-    collective_comm_node_id_map.clear();
-    collective_comm_wrapper_map.clear();
+    comm_groups.clear();
+
     if (this->et_feeder != nullptr) {
         delete this->et_feeder;
     }
     if (this->hw_resource != nullptr) {
         delete this->hw_resource;
     }
+    if (this->stats != nullptr) {
+        delete this->stats;
+    }
 }
 
-void Workload::initialize_comm_group(string comm_group_filename) {
-    // create default communicator group
-    std::vector<int> involved_NPUs;
-    for (int i = 0; i < this->sys->total_nodes; i++) {
-        involved_NPUs.push_back(i);
-    }
-    CommunicatorGroup* default_comm_group =
-        new CommunicatorGroup(1, involved_NPUs, this->sys);
-    this->comm_group[""] = default_comm_group;
-
+void Workload::initialize_comm_groups(string comm_group_filename) {
     // communicator group input file is not given
     if (comm_group_filename.find("empty") != std::string::npos) {
+        comm_groups.clear();
         return;
     }
 
@@ -90,25 +85,16 @@ void Workload::initialize_comm_group(string comm_group_filename) {
     inFile >> j;
 
     for (json::iterator it = j.begin(); it != j.end(); ++it) {
-        bool in_comm_group = false;
+        std::string comm_group_name = it.key();
+        int comm_group_id = std::stoi(comm_group_name);
 
+        std::vector<int> involved_NPUs;
         for (auto id : it.value()) {
-            if (id == sys->id) {
-                in_comm_group = true;
-            }
+            involved_NPUs.push_back(id);
         }
 
-        if (in_comm_group) {
-            std::vector<int> involved_NPUs;
-            for (auto id : it.value()) {
-                involved_NPUs.push_back(id);
-            }
-            CommunicatorGroup* this_comm_group =
-                new CommunicatorGroup(1, involved_NPUs, this->sys);
-            this->comm_group[it.key()] = this_comm_group;
-            // Note: All NPUs should create comm group with identical ids if
-            // they want to communicate with each other
-        }
+        comm_groups[comm_group_id] =
+            new CommunicatorGroup(comm_group_id, involved_NPUs, sys);
     }
 }
 
@@ -135,10 +121,11 @@ void Workload::issue_pytorch_pg_metadata(
                 }
             }
 
+            int32_t pgNameInt = std::stoi(pgName);
             // To ensure pgName > 0
-            CommunicatorGroup* cg = new CommunicatorGroup(std::stoi(pgName) + 1,
-                                                          involved_NPUs, sys);
-            this->comm_group[pgName] = cg;
+            CommunicatorGroup* cg =
+                new CommunicatorGroup(pgNameInt + 1, involved_NPUs, sys);
+            this->comm_groups[pgNameInt] = cg;
         }
     } catch (const std::exception& e) {
         std::cerr << "Error parsing or processing JSON: " << e.what()
@@ -150,7 +137,11 @@ void Workload::issue_dep_free_nodes() {
     auto& dependancy_resolver = this->et_feeder->getDependancyResolver();
     auto dependancy_free_nodes =
         dependancy_resolver.get_dependancy_free_nodes();
+    std::set<uint64_t> dependancy_free_nodes_set;
     for (const auto node_id : dependancy_free_nodes) {
+        dependancy_free_nodes_set.insert(node_id);
+    }
+    for (const auto node_id : dependancy_free_nodes_set) {
         std::shared_ptr<ETFeederNode> node = et_feeder->lookupNode(node_id);
         if (hw_resource->is_available(node)) {
             issue(node);
@@ -160,14 +151,20 @@ void Workload::issue_dep_free_nodes() {
 
 void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     auto logger = LoggerFactory::get_logger("workload");
-    /*sys->memory->update_consumed_memory(node,
-                                        this->et_feeder->getDependancyResolver()
-                                            .get_data_dependancy()
-                                            .get_children(node->id()),
-                                        sys->id);*/
+    if (sys->trace_enabled) {
+        logger->debug("issue,sys->id={}, tick={}, node->id={}, "
+                      "node->name={}, node->type={}",
+                      sys->id, Sys::boostedTick(), node->id(), node->name(),
+                      static_cast<uint64_t>(node->type()));
+    }
+
     this->et_feeder->getDependancyResolver().take_node(node->id());
     this->hw_resource->occupy(node);
-
+    // stats->record_end will be called in Workload::call
+    stats->record_start(node, Sys::boostedTick());
+    if (this->sys->track_local_mem) {
+        this->local_mem_usage_tracker->recordStart(node, Sys::boostedTick());
+    }
     if (sys->replay_only) {
         issue_replay(node);
     } else {
@@ -190,6 +187,14 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                     // with replay.
                     issue_replay(node);
                 } else {
+                    // TODO: This log comes from AstraSim
+                    //if (sys->trace_enabled) {
+                    //    logger->debug("issue,sys->id={}, tick={}, node->id={}, "
+                    //                "node->name={}, node->type={}",
+                    //                sys->id, Sys::boostedTick(), node->id(),
+                    //                node->name(),
+                    //                static_cast<uint64_t>(node->type()));
+                    //}
                     // comp node on gpu
                     issue_comp(node);
                 }
@@ -197,22 +202,22 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         } else if (node->type() == ChakraNodeType::COMM_COLL_NODE ||
                    node->type() == ChakraNodeType::COMM_SEND_NODE ||
                    node->type() == ChakraNodeType::COMM_RECV_NODE) {
-            if (sys->trace_enabled) {
-                if (node->type() == ChakraNodeType::COMM_COLL_NODE) {
-                    LoggerFactory::get_trace_logger()->info(
-                        ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id,
-                        node->id(), node->name(),
-                        static_cast<uint64_t>(node->comm_type()),
-                        static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
-                        Sys::boostedTick());
-                } else {
-                    LoggerFactory::get_trace_logger()->info(
-                        ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id,
-                        node->id(), node->name(), -1,
-                        static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
-                        Sys::boostedTick());
-                }
-            }
+                    if (sys->trace_enabled) {
+                        if (node->type() == ChakraNodeType::COMM_COLL_NODE) {
+                            LoggerFactory::get_trace_logger()->info(
+                                ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id,
+                                node->id(), node->name(),
+                                static_cast<uint64_t>(node->comm_type()),
+                                static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                                Sys::boostedTick());
+                        } else {
+                            LoggerFactory::get_trace_logger()->info(
+                                ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id,
+                                node->id(), node->name(), -1,
+                                static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                                Sys::boostedTick());
+                        }
+                    }
             issue_comm(node);
         } else if (node->type() == ChakraNodeType::INVALID_NODE) {
             skip_invalid(node);
@@ -266,11 +271,23 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         throw std::runtime_error(
             "Roofline model is not enabled for non-replay comp");
     }
+
+    if (node->is_cpu_op()) {
+        throw std::runtime_error("Roofline is only available for GPU nodes");
+        return;
+    }
+
     WorkloadLayerHandlerData* wlhd = new WorkloadLayerHandlerData;
     wlhd->node_id = node->id();
 
     double num_ops = static_cast<double>(node->num_ops<uint64_t>());
     double tensor_size = static_cast<double>(node->tensor_size<uint64_t>());
+
+    // if tensor_size is 0 during roofline mode, this is an invalid node
+    if (tensor_size == 0) {
+        skip_invalid(node);
+        return;
+    }
 
     double operational_intensity = num_ops / tensor_size;
     double perf = sys->roofline->get_perf(operational_intensity);
@@ -289,6 +306,20 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
             Sys::boostedTick());
     }
     sys->register_event(this, EventType::General, wlhd, runtime);
+
+    auto& op_stat = this->stats->get_operator_statistics(node->id());
+    op_stat.operation_intensity = operational_intensity;
+    op_stat.compute_utilization = perf / sys->peak_perf;
+    op_stat.memory_utilization =
+        (perf / operational_intensity) / sys->local_mem_bw;
+    op_stat.is_memory_bound = perf < sys->peak_perf;
+    LoggerFactory::get_logger("workload")
+        ->debug("operation_intensity={}, perf={}, elapsed_time={} "
+                "compute_utilization={} memory_utilization={} tensor_size={} "
+                "num_ops={}",
+                operational_intensity, perf, elapsed_time,
+                op_stat.compute_utilization.value(),
+                op_stat.memory_utilization.value(), tensor_size, num_ops);
 }
 
 void Workload::issue_comm(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
@@ -311,49 +342,66 @@ void Workload::issue_coll_comm(
     shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     const bool has_involve_dims = node->has_attr("involve_dims");
     std::vector<bool> involved_dims;
-    CommunicatorGroup* comm_group;
-    if (has_involve_dims) {
-        const auto involved_dims_proto = node->get_attr_msg("involve_dims");
-        if (involved_dims_proto.value_case() != ChakraAttr::kBoolList) {
-            throw std::runtime_error("involve_dims should be a list of bools");
+    if (node->has_attr("involved_dim")) {
+        const ChakraProtoMsg::AttributeProto& attr =
+            node->get_attr_msg("involved_dim");
+
+        // Ensure the attribute is of type bool_list before accessing
+        if (attr.has_bool_list()) {
+            const ChakraProtoMsg::BoolList& bool_list = attr.bool_list();
+
+            // Traverse bool_list and add values to involved_dim
+            for (int i = 0; i < bool_list.values_size(); ++i) {
+                involved_dims.push_back(bool_list.values(i));
+            }
+        } else {
+            cerr << "Expected bool_list in involved_dim but found another type."
+                 << endl;
+            exit(EXIT_FAILURE);
         }
-        for (const auto& val : involved_dims_proto.bool_list().values()) {
-            involved_dims.push_back(val);
-        }
-        comm_group = nullptr;  // ignore comm_group
     } else {
-        const auto& pg_name = node->pg_name<std::string>(std::string(""));
-        comm_group = this->comm_group.at(pg_name);
+        // involved_dims does not exist in ETFeeder.
+        // Assume involved_dims = [1,1,1,1,1] which we could simulate
+        // 5-Dimension. Could use Process Group to build involved_dims later.
+        // Once process group is implemented, you should get
+        // that with node->pg_name()
+
+        for (int i = 0; i < 4; i++) {
+            involved_dims.push_back(true);
+        }
     }
 
+    CommunicatorGroup* comm_group = extract_comm_group(node);
     const auto comm_type =
         static_cast<ChakraCollectiveCommType>(node->comm_type<uint64_t>());
     const auto comm_size = node->comm_size<uint64_t>();
+    // Record communication size for bandwidth calculation
+    stats->get_operator_statistics(node->id()).comm_size = comm_size;
     // TODO: comm_tag? which is used to distinguish two different collective in
     // same pg
     const auto comm_priority = node->comm_priority<uint32_t>();  // default 0u
 
     if (comm_type == ChakraCollectiveCommType::ALL_REDUCE) {
-        DataSet* fp = sys->generate_all_reduce(
-            comm_size, involved_dims, comm_group, comm_priority, node->id());
+        DataSet* fp = sys->generate_all_reduce(comm_size, involved_dims,
+                                               comm_group, comm_priority);
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::ALL_TO_ALL) {
-        DataSet* fp = sys->generate_all_to_all(
-            comm_size, involved_dims, comm_group, comm_priority, node->id());
+        DataSet* fp = sys->generate_all_to_all(comm_size, involved_dims,
+                                               comm_group, comm_priority);
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::ALL_GATHER) {
-        DataSet* fp = sys->generate_all_gather(
-            comm_size, involved_dims, comm_group, comm_priority, node->id());
+        DataSet* fp = sys->generate_all_gather(comm_size, involved_dims,
+                                               comm_group, comm_priority);
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::REDUCE_SCATTER) {
-        DataSet* fp = sys->generate_reduce_scatter(
-            comm_size, involved_dims, comm_group, comm_priority, node->id());
+        DataSet* fp = sys->generate_reduce_scatter(comm_size, involved_dims,
+                                                   comm_group, comm_priority);
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
@@ -387,6 +435,8 @@ void Workload::issue_send_comm(
     }
     const auto dst = node->comm_dst<uint32_t>();
     const auto size = node->comm_size<uint64_t>();
+    // Record communication size for bandwidth calculation
+    stats->get_operator_statistics(node->id()).comm_size = size;
     const auto tag = node->comm_tag<uint32_t>();
 
     sim_request snd_req;
@@ -398,9 +448,9 @@ void Workload::issue_send_comm(
     sehd->wlhd = new WorkloadLayerHandlerData;
     sehd->wlhd->node_id = node->id();
     sehd->event = EventType::PacketSent;
-    sys->front_end_sim_send(
-        0, Sys::dummy_data, size, UINT8, dst, tag, node->id(), &snd_req,
-        Sys::FrontEndSendRecvType::NATIVE, &Sys::handleEvent, sehd);
+    sys->front_end_sim_send(0, Sys::dummy_data, size, UINT8, dst, tag, node->id(),
+                            &snd_req, Sys::FrontEndSendRecvType::NATIVE,
+                            &Sys::handleEvent, sehd);
 }
 
 void Workload::issue_recv_comm(
@@ -411,6 +461,8 @@ void Workload::issue_recv_comm(
         throw std::runtime_error("Recv node should be issued by the receiver");
     }
     const auto size = node->comm_size<uint64_t>();
+    // Record communication size for bandwidth calculation
+    stats->get_operator_statistics(node->id()).comm_size = size;
     const auto tag = node->comm_tag<uint32_t>();
 
     sim_request rcv_req;
@@ -434,6 +486,10 @@ void Workload::skip_invalid(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                   sys->id, Sys::boostedTick(), node->id(), node->name(),
                   static_cast<uint64_t>(node->type()));
     hw_resource->release(node);
+    stats->record_end(node, Sys::boostedTick());
+    if (this->sys->track_local_mem) {
+        this->local_mem_usage_tracker->recordEnd(node, Sys::boostedTick());
+    }
 }
 
 void Workload::call(EventType event, CallData* data) {
@@ -443,8 +499,10 @@ void Workload::call(EventType event, CallData* data) {
 
     if (event == EventType::CollectiveCommunicationFinished) {
         IntData* int_data = (IntData*)data;
+        uint64_t coll_comm_id = int_data->data;
+
         hw_resource->tics_gpu_comms += int_data->execution_time;
-        uint64_t node_id = collective_comm_node_id_map[int_data->data];
+        uint64_t node_id = collective_comm_node_id_map[coll_comm_id];
         shared_ptr<Chakra::FeederV3::ETFeederNode> node =
             et_feeder->lookupNode(node_id);
 
@@ -456,6 +514,20 @@ void Workload::call(EventType event, CallData* data) {
                 Sys::boostedTick());
         }
         hw_resource->release(node);
+        stats->record_end(node, Sys::boostedTick());
+
+        // Calculate network bandwidth
+        auto& op_stat = stats->get_operator_statistics(node_id);
+        Tick execution_time = int_data->execution_time;
+        if (execution_time > 0 && op_stat.comm_size.has_value()) {
+            double bandwidth =
+                static_cast<double>(op_stat.comm_size.value()) / execution_time;
+            op_stat.network_bandwidth = bandwidth;
+        }
+
+        if (this->sys->track_local_mem) {
+            this->local_mem_usage_tracker->recordEnd(node, Sys::boostedTick());
+        }
 
         this->et_feeder->getDependancyResolver().finish_node(node_id);
 
@@ -463,8 +535,8 @@ void Workload::call(EventType event, CallData* data) {
 
         // The Dataset class provides statistics that should be used later to
         // dump more statistics in the workload layer
-        delete collective_comm_wrapper_map[int_data->data];
-        collective_comm_wrapper_map.erase(int_data->data);
+        delete collective_comm_wrapper_map[coll_comm_id];
+        collective_comm_wrapper_map.erase(coll_comm_id);
 
     } else {
         if (data == nullptr) {
@@ -482,6 +554,27 @@ void Workload::call(EventType event, CallData* data) {
                     Sys::boostedTick());
             }
             hw_resource->release(node);
+            stats->record_end(node, Sys::boostedTick());
+
+            // Calculate network bandwidth for point-to-point communications
+            if (event == EventType::PacketSent ||
+                event == EventType::PacketReceived) {
+                auto& op_stat = stats->get_operator_statistics(wlhd->node_id);
+                Tick execution_time =
+                    stats->get_operator_statistics(wlhd->node_id).end_time -
+                    stats->get_operator_statistics(wlhd->node_id).start_time;
+                if (execution_time > 0 && op_stat.comm_size.has_value()) {
+                    double bandwidth =
+                        static_cast<double>(op_stat.comm_size.value()) /
+                        execution_time;
+                    op_stat.network_bandwidth = bandwidth;
+                }
+            }
+
+            if (this->sys->track_local_mem) {
+                this->local_mem_usage_tracker->recordEnd(node,
+                                                         Sys::boostedTick());
+            }
 
             this->et_feeder->getDependancyResolver().finish_node(wlhd->node_id);
 
@@ -524,19 +617,37 @@ void Workload::report() {
         ->info("[SUMMARY] sys[{}] finished, {} cycles, exposed communication "
                "{} cycles, ",
                sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops);
-    // sys->memory->get_max_consumed_memory(),
-    // sys->memory->get_max_activation_memory(),
-    // sys->memory->get_max_gradient_memory(),
-    // sys->memory->get_max_parameter_memory(),
-    // sys->memory->get_max_optimizer_memory(),
-    // sys->memory->get_is_oom());
-    /*std::cout << "sys[" << sys->id << "] finished, " << curr_tick
-              << " cycles, exposed communication "
-              << (curr_tick - hw_resource->tics_gpu_ops) << " cycles, "
-              << "memory " << sys->memory->get_consumed_memory() << ", "
-              << "activation " << sys->memory->get_activation_memory() << ", "
-              << "gradient " << sys->memory->get_gradient_memory() << ", "
-              << "parameter " << sys->memory->get_parameter_memory() << ", "
-              << "optimizer " << sys->memory->get_optimizer_memory() << "."
-              << std::endl;*/
+    stats->post_processing();
+    stats->report();
+    if (this->sys->track_local_mem) {
+        this->local_mem_usage_tracker->buildMemoryTrace();
+        this->local_mem_usage_tracker->buildMemoryTimeline();
+        this->local_mem_usage_tracker->dumpMemoryTrace(
+            this->sys->local_mem_trace_filename);
+        auto [peak_mem_usage, unit] =
+            this->local_mem_usage_tracker->getPeakMemUsageFormatted();
+        auto logger = LoggerFactory::get_logger("workload");
+        logger->info("sys[{}] peak memory usage: {:.2f} {}", sys->id,
+                     peak_mem_usage, unit);
+        this->local_mem_usage_tracker.reset();
+    }
+}
+
+CommunicatorGroup* Workload::extract_comm_group(
+    std::shared_ptr<Chakra::ETFeederNode> node) {
+    std::string comm_group_name = node->pg_name<std::string>("");
+    if (comm_group_name == "") {
+        // No communicator group is specified for this communication ET node.
+        return nullptr;
+    }
+
+    int comm_group_id = std::stoi(comm_group_name);
+    if (comm_groups.find(comm_group_id) == comm_groups.end()) {
+        LoggerFactory::get_logger("workload")
+            ->critical(
+                "For rank {} ET node {}, communicator group {} not found",
+                sys->id, node->id(), comm_group_id);
+        exit(EXIT_FAILURE);
+    }
+    return comm_groups[comm_group_id];
 }
