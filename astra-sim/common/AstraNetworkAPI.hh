@@ -22,6 +22,7 @@ class AstraNetworkAPI {
                          int type,
                          int dst,
                          int tag,
+                         uint64_t workload_node_id,
                          sim_request* request,
                          void (*msg_handler)(void* fun_arg),
                          void* fun_arg) = 0;
@@ -65,15 +66,27 @@ class AstraNetworkAPI {
         return -1;
     };
 
-    // Notifies that the workload for this rank has finished. 
-    // Note that we have one network handler per rank. 
-    // Therefore, when implementing this function, the network handler must 
+    // Notifies that the workload for this rank has finished.
+    // Note that we have one network handler per rank.
+    // Therefore, when implementing this function, the network handler must
     // find a way to concur that all ranks have finished their workloads.
-    virtual void sim_notify_finished(){
+    virtual void sim_notify_finished() {
         return;
     }
 
+    virtual void log_network(std::string str) {
+        return;
+    }
+
+    virtual void init_logger(std::string str, bool enable_network_logger) {
+        return;
+    }
+    static bool get_network_enabled_log() {
+        return network_enabled_log;
+    }
     int rank;
+    bool enable_network_logger;
+    static bool network_enabled_log;
 };
 
 }  // namespace AstraSim

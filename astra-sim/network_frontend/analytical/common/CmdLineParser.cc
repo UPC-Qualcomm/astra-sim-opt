@@ -40,7 +40,9 @@ void CmdLineParser::define_options() noexcept {
         "injection-scale", "Injection scale",
         cxxopts::value<double>()->default_value("1"))(
         "rendezvous-protocol", "Whether to enable rendezvous protocol",
-        cxxopts::value<bool>()->default_value("false"));
+        cxxopts::value<bool>()->default_value("false"))(
+        "network-log", "Log the network statistics",
+        cxxopts::value<std::string>()->default_value("network_log"));
 }
 
 void CmdLineParser::parse(int argc, char* argv[]) noexcept {

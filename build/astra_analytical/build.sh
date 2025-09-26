@@ -3,7 +3,6 @@ set -e
 
 # set paths
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
-BUILD_DIR="${SCRIPT_DIR:?}"/build
 CHAKRA_ET_DIR="${SCRIPT_DIR:?}"/../../extern/graph_frontend/chakra/schema/protobuf
 
 # set functions
@@ -118,6 +117,13 @@ while getopts "t:ld" OPT; do
     ;;
   esac
 done
+
+# set build directory
+if [[ ${build_as_debug:?} == true ]]; then
+  BUILD_DIR="${SCRIPT_DIR:?}"/build_debug
+else
+  BUILD_DIR="${SCRIPT_DIR:?}"/build
+fi
 
 # check the validity of build target
 if [[ ${build_target:?} != "all" &&

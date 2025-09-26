@@ -14,6 +14,7 @@ SimSendCaller::SimSendCaller(Sys* sys,
                              int type,
                              int dst,
                              int tag,
+                             uint64_t workload_node_id,
                              sim_request request,
                              void (*msg_handler)(void* fun_arg),
                              void* fun_arg,
@@ -24,6 +25,7 @@ SimSendCaller::SimSendCaller(Sys* sys,
     this->type = type;
     this->dst = dst;
     this->tag = tag;
+    this->workload_node_id = workload_node_id;
     this->request = request;
     this->msg_handler = msg_handler;
     this->fun_arg = fun_arg;
@@ -32,8 +34,8 @@ SimSendCaller::SimSendCaller(Sys* sys,
 
 void SimSendCaller::call(EventType type, CallData* data) {
     sys->comm_NI->sim_send(this->buffer, this->count, this->type, this->dst,
-                           this->tag, &this->request, this->msg_handler,
-                           this->fun_arg);
+                           this->tag, this->workload_node_id, &this->request,
+                           this->msg_handler, this->fun_arg);
     if (should_cleanup) {
         delete this;
     }

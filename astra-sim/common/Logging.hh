@@ -16,6 +16,12 @@ class LoggerFactory {
     LoggerFactory() = delete;
     static std::shared_ptr<spdlog::logger> get_logger(
         const std::string& logger_name);
+    static std::shared_ptr<spdlog::logger> get_memory_logger();
+    static std::shared_ptr<spdlog::logger> get_trace_logger();
+    static std::shared_ptr<spdlog::logger> get_roofline_logger();
+    static std::shared_ptr<spdlog::logger> get_network_logger();
+    // static std::shared_ptr<spdlog::logger> get_system_logger();
+    // static std::shared_ptr<spdlog::logger> get_workload_logger();
     static void init(const std::string& log_conf_path = "empty",
                      const std::string& log_path = "log");
     static void shutdown(void);
@@ -23,6 +29,12 @@ class LoggerFactory {
   private:
     static void init_default_components(const std::string& log_path);
     static std::unordered_set<spdlog::sink_ptr> default_sinks;
+    static std::shared_ptr<spdlog::logger> memory_logger;
+    static std::shared_ptr<spdlog::logger> trace_logger;
+    static std::shared_ptr<spdlog::logger> roofline_logger;
+    static std::shared_ptr<spdlog::logger> network_logger;
+    // static std::shared_ptr<spdlog::logger> system_logger;
+    // static std::shared_ptr<spdlog::logger> workload_logger;
 };
 
 }  // namespace AstraSim

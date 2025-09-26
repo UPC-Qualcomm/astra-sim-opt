@@ -1,0 +1,447 @@
+{
+  "attr": [
+    {
+      "name": "schema",
+      "stringVal": "1.0.2-chakra.0.0.4"
+    },
+    {
+      "name": "input_file",
+      "stringVal": "HYBRID_DATA_MODEL\t\t\t\t\t\t\t\t\t\t\t\n6\t\t\t\t\t\t\t\t\t\t\t\nlayer_64_2_mlp0\t-1\t32291\tALLGATHER\t37632\t32291\tALLREDUCE\t37632\t32291\tALLREDUCE\t37632\t3229\nlayer_64_2_mlp1\t-1\t7488\tALLGATHER\t65536\t7488\tALLREDUCE\t65536\t7488\tALLREDUCE\t65536\t749\nlayer_64_2_mlp2\t-1\t7488\tALLGATHER\t65536\t7488\tALLREDUCE\t65536\t7488\tALLREDUCE\t65536\t749\nlayer_64_2_mlp3\t-1\t14144\tALLGATHER\t147456\t14144\tALLREDUCE\t147456\t14144\tALLREDUCE\t147456\t1414\nlayer_64_2_mlp4\t-1\t7488\tALLGATHER\t65536\t7488\tALLREDUCE\t65536\t7488\tALLREDUCE\t65536\t749\nlayer_64_2_mlp5\t-1\t9984\tALLGATHER\t65536\t9984\tALLREDUCE\t65536\t9984\tALLREDUCE\t65536\t998"
+    }
+  ]
+}{
+  "id": "35",
+  "name": "COMP_NODE_layer_64_2_mlp0_FWD",
+  "type": "COMP_NODE",
+  "durationMicros": "32291"
+}{
+  "id": "36",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp0_ALLGATHER",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "35"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "2"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "37632"
+    }
+  ]
+}{
+  "id": "37",
+  "name": "COMP_NODE_layer_64_2_mlp1_FWD",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "36"
+  ],
+  "durationMicros": "7488"
+}{
+  "id": "38",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp1_ALLGATHER",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "37"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "2"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "39",
+  "name": "COMP_NODE_layer_64_2_mlp2_FWD",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "38"
+  ],
+  "durationMicros": "7488"
+}{
+  "id": "40",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp2_ALLGATHER",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "39"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "2"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "41",
+  "name": "COMP_NODE_layer_64_2_mlp3_FWD",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "40"
+  ],
+  "durationMicros": "14144"
+}{
+  "id": "42",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp3_ALLGATHER",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "41"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "2"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "147456"
+    }
+  ]
+}{
+  "id": "43",
+  "name": "COMP_NODE_layer_64_2_mlp4_FWD",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "42"
+  ],
+  "durationMicros": "7488"
+}{
+  "id": "44",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp4_ALLGATHER",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "43"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "2"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "45",
+  "name": "COMP_NODE_layer_64_2_mlp5_FWD",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "44"
+  ],
+  "durationMicros": "9984"
+}{
+  "id": "46",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp5_ALLGATHER",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "45"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "2"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "47",
+  "name": "COMP_NODE_layer_64_2_mlp5_BWD_IG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "46"
+  ],
+  "durationMicros": "9984"
+}{
+  "id": "48",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp5_IG_COMM__ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "47"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "49",
+  "name": "COMP_NODE_layer_64_2_mlp5_BWD_WG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "47"
+  ],
+  "durationMicros": "9984"
+}{
+  "id": "50",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp5_ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "49"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "51",
+  "name": "COMP_NODE_layer_64_2_mlp4_BWD_IG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "49",
+    "48"
+  ],
+  "durationMicros": "7488"
+}{
+  "id": "52",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp4_IG_COMM__ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "51"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "53",
+  "name": "COMP_NODE_layer_64_2_mlp4_BWD_WG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "51"
+  ],
+  "durationMicros": "7488"
+}{
+  "id": "54",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp4_ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "53"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "55",
+  "name": "COMP_NODE_layer_64_2_mlp3_BWD_IG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "53",
+    "52"
+  ],
+  "durationMicros": "14144"
+}{
+  "id": "56",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp3_IG_COMM__ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "55"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "147456"
+    }
+  ]
+}{
+  "id": "57",
+  "name": "COMP_NODE_layer_64_2_mlp3_BWD_WG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "55"
+  ],
+  "durationMicros": "14144"
+}{
+  "id": "58",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp3_ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "57"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "147456"
+    }
+  ]
+}{
+  "id": "59",
+  "name": "COMP_NODE_layer_64_2_mlp2_BWD_IG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "57",
+    "56"
+  ],
+  "durationMicros": "7488"
+}{
+  "id": "60",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp2_IG_COMM__ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "59"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "61",
+  "name": "COMP_NODE_layer_64_2_mlp2_BWD_WG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "59"
+  ],
+  "durationMicros": "7488"
+}{
+  "id": "62",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp2_ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "61"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "63",
+  "name": "COMP_NODE_layer_64_2_mlp1_BWD_IG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "61",
+    "60"
+  ],
+  "durationMicros": "7488"
+}{
+  "id": "64",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp1_IG_COMM__ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "63"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "65",
+  "name": "COMP_NODE_layer_64_2_mlp1_BWD_WG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "63"
+  ],
+  "durationMicros": "7488"
+}{
+  "id": "66",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp1_ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "65"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "65536"
+    }
+  ]
+}{
+  "id": "67",
+  "name": "COMP_NODE_layer_64_2_mlp0_BWD_IG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "65",
+    "64"
+  ],
+  "durationMicros": "32291"
+}{
+  "id": "68",
+  "name": "COMP_NODE_layer_64_2_mlp0_BWD_WG",
+  "type": "COMP_NODE",
+  "dataDeps": [
+    "67"
+  ],
+  "durationMicros": "32291"
+}{
+  "id": "69",
+  "name": "COMM_COLL_NODE_layer_64_2_mlp0_ALLREDUCE",
+  "type": "COMM_COLL_NODE",
+  "dataDeps": [
+    "68"
+  ],
+  "attr": [
+    {
+      "name": "comm_type",
+      "int64Val": "0"
+    },
+    {
+      "name": "comm_size",
+      "int64Val": "37632"
+    }
+  ]
+}

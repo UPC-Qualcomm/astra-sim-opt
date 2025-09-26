@@ -170,6 +170,12 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     } else {
         if ((node->type() == ChakraNodeType::MEM_LOAD_NODE) ||
             (node->type() == ChakraNodeType::MEM_STORE_NODE)) {
+            if (sys->trace_enabled) {
+                LoggerFactory::get_trace_logger()->info(
+                    ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+                    node->name(), -1, static_cast<uint64_t>(node->type()), 0, 0,
+                    0, 0, Sys::boostedTick());
+            }
             issue_remote_mem(node);
         } else if (node->type() == ChakraNodeType::COMP_NODE) {
             if (!this->sys->roofline_enabled) {
@@ -181,6 +187,14 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
                     // with replay.
                     issue_replay(node);
                 } else {
+                    // TODO: This log comes from AstraSim
+                    //if (sys->trace_enabled) {
+                    //    logger->debug("issue,sys->id={}, tick={}, node->id={}, "
+                    //                "node->name={}, node->type={}",
+                    //                sys->id, Sys::boostedTick(), node->id(),
+                    //                node->name(),
+                    //                static_cast<uint64_t>(node->type()));
+                    //}
                     // comp node on gpu
                     issue_comp(node);
                 }
@@ -188,6 +202,22 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         } else if (node->type() == ChakraNodeType::COMM_COLL_NODE ||
                    node->type() == ChakraNodeType::COMM_SEND_NODE ||
                    node->type() == ChakraNodeType::COMM_RECV_NODE) {
+                    if (sys->trace_enabled) {
+                        if (node->type() == ChakraNodeType::COMM_COLL_NODE) {
+                            LoggerFactory::get_trace_logger()->info(
+                                ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id,
+                                node->id(), node->name(),
+                                static_cast<uint64_t>(node->comm_type()),
+                                static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                                Sys::boostedTick());
+                        } else {
+                            LoggerFactory::get_trace_logger()->info(
+                                ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id,
+                                node->id(), node->name(), -1,
+                                static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                                Sys::boostedTick());
+                        }
+                    }
             issue_comm(node);
         } else if (node->type() == ChakraNodeType::INVALID_NODE) {
             skip_invalid(node);
@@ -267,6 +297,13 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         hw_resource->tics_cpu_ops += runtime;
     } else {
         hw_resource->tics_gpu_ops += runtime;
+    }
+    if (sys->trace_enabled) {
+        LoggerFactory::get_trace_logger()->info(
+            ",issue,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+            node->name(), -1, static_cast<uint64_t>(node->type()),
+            node->num_ops(), node->tensor_size(), perf, operational_intensity,
+            Sys::boostedTick());
     }
     sys->register_event(this, EventType::General, wlhd, runtime);
 
@@ -411,8 +448,8 @@ void Workload::issue_send_comm(
     sehd->wlhd = new WorkloadLayerHandlerData;
     sehd->wlhd->node_id = node->id();
     sehd->event = EventType::PacketSent;
-    sys->front_end_sim_send(0, Sys::dummy_data, size, UINT8, dst, tag, &snd_req,
-                            Sys::FrontEndSendRecvType::NATIVE,
+    sys->front_end_sim_send(0, Sys::dummy_data, size, UINT8, dst, tag, node->id(),
+                            &snd_req, Sys::FrontEndSendRecvType::NATIVE,
                             &Sys::handleEvent, sehd);
 }
 
@@ -470,13 +507,12 @@ void Workload::call(EventType event, CallData* data) {
             et_feeder->lookupNode(node_id);
 
         if (sys->trace_enabled) {
-            LoggerFactory::get_logger("workload")
-                ->debug("callback,sys->id={}, tick={}, node->id={}, "
-                        "node->name={}, node->type={}",
-                        sys->id, Sys::boostedTick(), node->id(), node->name(),
-                        static_cast<uint64_t>(node->type()));
+            LoggerFactory::get_trace_logger()->info(
+                ",callback,{},{},{},{},{},{},{},{},{},{}", sys->id, node->id(),
+                node->name(), static_cast<uint64_t>(node->comm_type()),
+                static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                Sys::boostedTick());
         }
-
         hw_resource->release(node);
         stats->record_end(node, Sys::boostedTick());
 
@@ -511,13 +547,12 @@ void Workload::call(EventType event, CallData* data) {
                 et_feeder->lookupNode(wlhd->node_id);
 
             if (sys->trace_enabled) {
-                LoggerFactory::get_logger("workload")
-                    ->debug("callback,sys->id={}, tick={}, node->id={}, "
-                            "node->name={}, node->type={}",
-                            sys->id, Sys::boostedTick(), node->id(),
-                            node->name(), static_cast<uint64_t>(node->type()));
+                LoggerFactory::get_trace_logger()->info(
+                    ",callback,{},{},{},{},{},{},{},{},{},{}", sys->id,
+                    node->id(), node->name(), -1,
+                    static_cast<uint64_t>(node->type()), 0, 0, 0, 0,
+                    Sys::boostedTick());
             }
-
             hw_resource->release(node);
             stats->record_end(node, Sys::boostedTick());
 
@@ -563,12 +598,24 @@ void Workload::call(EventType event, CallData* data) {
 
 void Workload::fire() {
     call(EventType::General, NULL);
+    // Add to the local memory object to the Sys.
+    // Call update memory method passing the node.
+    // The update memory method will check if the node is fwd or bwd and
+    // increase the memory. The method would throw and excpetion when the memory
+    // size is exceeded. The method will divide the total memory into,
+    // activation, parameter, gradients and optimizer. The activations are freed
+    // after the forward pass. The gradient are freed at the end of bwd pass.
+    // The optimizer state meory is estimated based on Adam.
+    // The class records the max memory used for each type of memory.
+    // Communication nodes need to be considered to make sure we can store the
+    // recieved information. The local memory class should have max size class.
 }
 
 void Workload::report() {
     Tick curr_tick = Sys::boostedTick();
     LoggerFactory::get_logger("workload")
-        ->info("sys[{}] finished, {} cycles, exposed communication {} cycles.",
+        ->info("[SUMMARY] sys[{}] finished, {} cycles, exposed communication "
+               "{} cycles, ",
                sys->id, curr_tick, curr_tick - hw_resource->tics_gpu_ops);
     stats->post_processing();
     stats->report();
