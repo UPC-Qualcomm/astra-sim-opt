@@ -72,6 +72,7 @@ int HTSimNetworkApi::sim_send(void* const buffer,
                               const int type,
                               const int dst,
                               const int tag,
+                              uint64_t workload_node_id,
                               sim_request* const request,
                               void (*msg_handler)(void*),
                               void* const fun_arg) {
