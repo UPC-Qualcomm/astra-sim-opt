@@ -56,6 +56,7 @@ class HTSimNetworkApi final : public CommonNetworkApi {
                  int type,
                  int dst,
                  int tag,
+                 uint64_t workload_node_id,
                  sim_request* request,
                  void (*msg_handler)(void* fun_arg),
                  void* fun_arg) override;
@@ -74,6 +75,13 @@ class HTSimNetworkApi final : public CommonNetworkApi {
     void sim_schedule(timespec_t delta, void (*fun_ptr)(void* fun_arg), void* fun_arg) override;
 
     void sim_notify_finished() override;
+    void log_network(std::string str) {
+        return;
+    }
+
+    void init_logger(std::string str, bool enable_network_logger) {
+        return;
+    }
 
   private:
     /// topology

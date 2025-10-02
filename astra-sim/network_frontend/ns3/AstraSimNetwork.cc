@@ -124,6 +124,7 @@ class ASTRASimNetwork : public AstraSim::AstraNetworkAPI {
                          int type,
                          int dst_id,
                          int tag,
+                         uint64_t workload_node_id,
                          AstraSim::sim_request* request,
                          void (*msg_handler)(void* fun_arg),
                          void* fun_arg) {
@@ -190,6 +191,14 @@ class ASTRASimNetwork : public AstraSim::AstraNetworkAPI {
         return 0;
     }
 
+    void log_network(std::string str) {
+        return;
+    }
+
+    void init_logger(std::string str, bool enable_network_logger) {
+        return;
+    }
+
   private:
     NS3BackendCompletionTracker* completion_tracker_;
 };
@@ -202,6 +211,7 @@ string memory_configuration;
 string comm_group_configuration = "empty";
 string logical_topology_configuration;
 string logging_configuration = "empty";
+string logging_folder = "empty";
 int num_queues_per_dim = 1;
 double comm_scale = 1;
 double injection_scale = 1;
@@ -260,6 +270,8 @@ void parse_args(int argc, char* argv[]) {
                  logical_topology_configuration);
     cmd.AddValue("logging-configuration", "Logging configuration file",
                  logging_configuration);
+    cmd.AddValue("logging-folder", "Logging folder",
+                 logging_folder);
 
     cmd.AddValue("num-queues-per-dim", "Number of queues per each dimension",
                  num_queues_per_dim);
@@ -279,7 +291,7 @@ int main(int argc, char* argv[]) {
 
     // Read network config and find logical dims.
     parse_args(argc, argv);
-    AstraSim::LoggerFactory::init(logging_configuration);
+    AstraSim::LoggerFactory::init(logging_configuration, logging_folder);
     read_logical_topo_config(logical_topology_configuration, logical_dims);
 
     // Setup network & System layer.
