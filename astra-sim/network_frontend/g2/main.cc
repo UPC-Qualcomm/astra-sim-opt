@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) {
     G2NetworkApi::set_event_queue(event_queue);
 
     Network net(npus_count_per_dim, bandwidth_per_dim,
-                topologies_per_dim);
+                topologies_per_dim, workload_configuration);
     G2NetworkApi::set_network(&net);
 
     // Create ASTRA-sim related resources
