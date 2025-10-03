@@ -51,13 +51,12 @@ def main():
 
     # Example: overlapping groups for real congestion
     groups = {
-        "1": [0, 1, 4, 5],
-        "2": [2, 3, 6, 7],
+        "1": [0, 1, 2, 3, 4, 5, 6, 7],
     }
 
     base_dir = os.path.join(os.path.dirname(__file__), "..", "workload")
     for coll_name, coll_type in collectives:
-        output_dir = os.path.join(base_dir, f"toy_{coll_name}_real_congestion")
+        output_dir = os.path.join(base_dir, f"toy_{coll_name}_one_collective")
         os.makedirs(output_dir, exist_ok=True)
         json_path = os.path.join(output_dir, f"{coll_name}.json")
         generate_comm_group_json(json_path, groups)

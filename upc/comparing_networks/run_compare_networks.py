@@ -7,7 +7,7 @@ file_dir = os.path.dirname(os.path.abspath(__file__))
 ASTRASIM_BINARIES = [
     ("G2", os.path.join(file_dir, "../../build/astra_g2/build/bin/AstraSim_G2_congestion")),
     ("Unaware", os.path.join(file_dir, "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware")),
-    ("", os.path.join(file_dir, "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware")),
+    ("Aware", os.path.join(file_dir, "../../build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware")),
 ]
 
 TRACES_DIR = os.path.join(file_dir, "workload")
@@ -63,7 +63,6 @@ def main():
                 )
                 os.makedirs(out_dir, exist_ok=True)
                 # Save all output files inside out_dir
-                log_file = os.path.join(out_dir, "astrasim.log")
                 network_log_file = os.path.join(out_dir, "network.csv")
                 # ...other output files can be added here if needed...
 
@@ -86,7 +85,7 @@ def main():
                 if comm_group_json:
                     cmd += f"--comm-group-configuration={comm_group_json} "
                 cmd += (
-                    f"--logging-configuration={log_file} "
+                    f"--logging-folder={out_dir} "
                     f"--network-log={network_log_file} "
                 )
                 ret = subprocess.run(cmd, shell=True, cwd=None)
