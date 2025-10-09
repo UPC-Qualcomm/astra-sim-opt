@@ -13,6 +13,13 @@ endif ()
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -Wall -Wextra -Wuninitialized -Wunused-function -Wno-unused-parameter -Wno-empty-body -g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
+# Safer: only in debug mode
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_options(-Wno-reorder)
+  add_compile_options(-Wno-type-limits)
+  add_compile_options(-Wno-sign-compare)
+endif()
+
 # TODO: Remove this once binary_function deprecation is resolved.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
 
