@@ -2,3 +2,5 @@ topology: [ Switch ]
 npus_count: [ 64 ]
 bandwidth: [ 900.0 ]  # GB/s
 latency: [ 500.0 ]  # ns
+packet_size: 1500  # in bytes
+header_size: 48   # in bytes
