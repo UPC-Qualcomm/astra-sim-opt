@@ -18,6 +18,7 @@ build/astra_analytical/result/
 build/astra_garnet/build/
 build/astra_garnet/result/
 build/astra_htsim/build/
+extern/network_backend/ns-3/
 
 # Generated Chakra ET files
 *.eg
@@ -37,6 +38,7 @@ runs
 astraenv/
 astraenv39/
 
+upc/comparison_run/
 upc_xavi/
 upc/output/
 upc/workload/
