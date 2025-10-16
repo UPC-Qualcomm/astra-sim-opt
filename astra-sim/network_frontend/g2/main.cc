@@ -60,6 +60,8 @@ int main(int argc, char* argv[]) {
     const auto topology_file = network_parser.get_topology_file();
     const auto packet_size = network_parser.get_packet_size(); // in bytes
     const auto header_size = network_parser.get_header_size(); // in bytes
+    const auto bandwidth_unit = network_parser.get_bandwidth_unit(); // bandwidth unit string
+
     // Get total number of NPUs
     auto npus_count = 1;
     for (const auto& count : npus_count_per_dim) {
@@ -69,7 +71,7 @@ int main(int argc, char* argv[]) {
     // Set up Network API
     G2NetworkApi::set_event_queue(event_queue);
 
-    Network net(topology_file, workload_configuration, packet_size, header_size);
+    Network net(topology_file, workload_configuration, packet_size, header_size, bandwidth_unit);
     G2NetworkApi::set_network(&net);
 
     // Create ASTRA-sim related resources
