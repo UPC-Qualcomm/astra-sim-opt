@@ -17,6 +17,9 @@ try:
         GlobalMetadata,
         AttributeProto as ChakraAttr,
         COMM_COLL_NODE,
+        GATHER,
+        REDUCE,
+        BROADCAST,
         ALL_REDUCE,
         ALL_GATHER,
         ALL_TO_ALL,
@@ -30,6 +33,9 @@ except ImportError:
 
 # Mapeo de nombres de colectivos a tipos de Chakra
 COLLECTIVE_MAP = {
+    "gather": GATHER,
+    "reduce": REDUCE,
+    "broadcast": BROADCAST,
     "all_gather": ALL_GATHER,
     "all_reduce": ALL_REDUCE,
     "all_to_all": ALL_TO_ALL,
@@ -194,9 +200,10 @@ def main(args):
         
         # Crear directorio de salida único para esta ejecución
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        network_name = os.path.splitext(os.path.basename(args.network_config))[0]
+        network_name = os.path.splitext(os.path.basename(args.network_config))[0].split('_')[0]
+        system_name = os.path.splitext(os.path.basename(args.system_config))[0].replace('_sys', '')
         run_folder_name = f"run_{timestamp}"
-        base_run_dir = os.path.join("comparison_run", network_name, coll_name, run_folder_name)
+        base_run_dir = os.path.join("comparison_run", network_name, system_name, coll_name, run_folder_name)
         
         configs_dir = os.path.join(base_run_dir, "configs")
         os.makedirs(configs_dir, exist_ok=True)
@@ -242,21 +249,21 @@ def main(args):
 
         # NS3 Config
         sim_types = ["analytical_unaware", "analytical_aware", "g2", "ns3"]
-        sim_types = ["g2", "ns3"]
+        sim_types = ["analytical_unaware"] 
         ns3_conf_src = args.ns3_config
         ns3_conf_dest = os.path.join(configs_dir, os.path.basename(args.ns3_config))
         
-        # Para NS3, preparamos los overrides de las rutas de salida
-        ns3_overrides = {}
+        # Para NS3, preparamos los overrides de las rutas de salida y el seed
+        ns3_overrides = {"ECMP_SEED": args.seed}
         if "ns3" in sim_types:
             ns3_output_dir = os.path.join(base_run_dir, "ns3")
             os.makedirs(ns3_output_dir, exist_ok=True)
-            ns3_overrides = {
+            ns3_overrides.update({
                 "TRACE_OUTPUT_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_trace.tr"),
                 "FCT_OUTPUT_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_fct.txt"),
                 "PFC_OUTPUT_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_pfc.txt"),
                 "QLEN_MON_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_qlen.txt"),
-            }
+            })
         modify_config_file(ns3_conf_src, ns3_conf_dest, ns3_overrides)
 
         # Memory Config (solo copiar)
@@ -313,6 +320,7 @@ if __name__ == "__main__":
     
     # Otros
     parser.add_argument("--python-exec", type=str, default="../../astraenv39/bin/python3.9", help="Ruta al ejecutable de Python.")
+    parser.add_argument("--seed", type=int, default=1, help="Seed for the simulation, particularly for ECMP in NS3.")
 
     parsed_args = parser.parse_args()
     main(parsed_args)
