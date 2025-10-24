@@ -11,6 +11,7 @@ import re
 
 
 def get_timings_df(csv_trace_file, output_file_name):
+    """Process timing data from simulation trace files"""
     df = pd.read_csv(csv_trace_file)
     # Filter issues and rename 'tick' to 'issue_tick'
     df_issues = df.query("action == 'issue'").drop(columns="action")
@@ -31,15 +32,9 @@ def get_timings_df(csv_trace_file, output_file_name):
     )
 
     # Add elapsed_time column
-
-    #merged_df["issue_tick"] = merged_df["issue_tick"].astype(int)
-    #merged_df["callback_tick"] = merged_df["callback_tick"].astype(int)
     merged_df["elapsed_time"] = merged_df["callback_tick"] - merged_df["issue_tick"]
     merged_df.fillna(0, inplace=True)
 
-    #merged_df.to_csv(output_file_name)
-    # TODO: To optimize performance Add the exposed and overlaped amount of cycles to each node 
-    # Use best_combinatoin.py
     num_sys = merged_df["sys_id"].max()
 
     extended_data = []
@@ -56,9 +51,7 @@ def get_timings_df(csv_trace_file, output_file_name):
         extended_data.append(results_merged)
 
     extended_data = pd.concat(extended_data, ignore_index=True)
-
     extended_data.to_csv(output_file_name)
-
     
     os.remove(csv_trace_file)
 
@@ -66,7 +59,7 @@ def build_compute_interval_tree(nodes):
     tree = IntervalTree()
     for row in nodes.itertuples(index=False):
         tree.addi(row.issue_tick, row.callback_tick, row.node_id)
-    tree.merge_overlaps()  # OPTIMIZED: merge once here
+    tree.merge_overlaps()
     return tree
 
 def compute_overlap(tree, node_id, start, end):
@@ -153,8 +146,7 @@ def get_exposed(df, sys_id, node_op_type="comm"):
         )
 
 def run_command(command, cwd=None):
-    
-    # Find the specific number pattern in the command string
+    """Execute a shell command with timing information"""
     match = re.search(r'(\d+_\d+_\d+_\d+_\d+)', command)
     identifier = ""
     if match:
@@ -171,6 +163,7 @@ def run_command(command, cwd=None):
 
 
 def list_workloads(root):
+    """List all workload files in the given directory"""
     files = os.listdir(root)
     filtered = list()
     for file in files:
@@ -179,126 +172,153 @@ def list_workloads(root):
     return filtered
 
 
-def run_astrasim(workload_path, system, network, memory, output_dir, network_log, sim_type, suffix=None):
-    #astrasim_root = os.environ.get("ASTRA_SIM")
-    #if astrasim_root is None:
-    #    raise RuntimeError("ASTRA_SIM is not set.")
-
-    if sim_type == "analytical_unaware":
-        astrasim_bin = os.environ.get("ASTRA_SIM_BIN_UNAWARE")
-    elif sim_type == "analytical_aware":
-        astrasim_bin = os.environ.get("ASTRA_SIM_BIN_AWARE")
-    elif sim_type == "g2":
-        astrasim_bin = os.environ.get("G2_SIM_BIN")
-    else:
-        raise ValueError(f"Unknown sim_type: {sim_type}")
-
-    if astrasim_bin is None:
-        if sim_type == "analytical_unaware":
-            raise RuntimeError("ASTRA_SIM_BIN_UNAWARE is not set.")
-        elif sim_type == "analytical_aware":
-            raise RuntimeError("ASTRA_SIM_BIN_AWARE is not set.")
-        elif sim_type == "g2":
-            raise RuntimeError("G2_SIM_BIN is not set.")
-
+def run_astrasim_ns3(workload_path, system, network_config, logical_topology, memory, output_dir, network_log, suffix=None):
+    """Run AstraSim with NS3 network backend"""
+    
+    # Get the NS3 executable path
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    astra_sim_dir = os.path.dirname(script_dir)
+    ns3_dir = os.path.join(astra_sim_dir, "extern", "network_backend", "ns-3")
+    ns3_executable = os.path.join(ns3_dir, "build", "scratch", "ns3.42-AstraSimNetwork-default")
+    
+    if not os.path.exists(ns3_executable):
+        raise RuntimeError(f"NS3 executable not found at: {ns3_executable}")
+    
+    # Convert relative paths to absolute paths
     file_dir = os.path.split(os.path.abspath(__file__))[0]
-
-    system = os.path.join(file_dir, system)
-    network = os.path.join(file_dir, network)
-    memory = os.path.join(file_dir, memory)
+    
+    # Make workload path absolute
+    if not os.path.isabs(workload_path):
+        workload_path = os.path.join(file_dir, workload_path)
+    workload_path = os.path.abspath(workload_path)
+    
+    system = os.path.join(file_dir, system) if not os.path.isabs(system) else system
+    network_config = os.path.join(file_dir, network_config) if not os.path.isabs(network_config) else network_config
+    logical_topology = os.path.join(file_dir, logical_topology) if not os.path.isabs(logical_topology) else logical_topology
+    memory = os.path.join(file_dir, memory) if not os.path.isabs(memory) else memory
+    
+    # Make all paths absolute
+    system = os.path.abspath(system)
+    network_config = os.path.abspath(network_config)
+    logical_topology = os.path.abspath(logical_topology)
+    memory = os.path.abspath(memory)
+    
+    # Create output directories
     os.makedirs(os.path.join(file_dir, output_dir), exist_ok=True)
     os.makedirs(os.path.join(file_dir, network_log), exist_ok=True)
-    log = os.path.join(file_dir, output_dir, os.path.split(workload_path)[1])
-    if suffix is  not None:
-        log = log + suffix
-    # with open(log, 'w') as outfile:
-    #    pass
-    network_log = os.path.join(
-        file_dir, network_log, os.path.split(workload_path)[1] + ".csv"
-    )
     
-    # Base command
+    # Set up log file
+    log = os.path.join(file_dir, output_dir, os.path.split(workload_path)[1])
+    if suffix is not None:
+        log = log + suffix
+    
+    # Build the NS3 command with absolute paths
+    comm_group_config = f"{workload_path}.json"
+    
+    # Create absolute logging folder path to fix the filesystem error
+    log_abs_path = os.path.abspath(log)
+    
     cmd = (
-        f"{astrasim_bin} "
-        f"--system-configuration={system} "
+        f"cd {ns3_dir}/build/scratch && "
+        f"{ns3_executable} "
         f"--workload-configuration={workload_path} "
-        f"--network-configuration={network} "
+        f"--system-configuration={system} "
+        f"--network-configuration={network_config} "
+        f"--logical-topology-configuration={logical_topology} "
         f"--remote-memory-configuration={memory} "
-    )
+        )
 
     # Conditionally add comm-group-configuration if the file exists
     comm_group_config_path = f"{workload_path}.json"
     if os.path.exists(comm_group_config_path):
         cmd += f"--comm-group-configuration={comm_group_config_path} "
-
     # Add logging arguments
     cmd += (
-        f"--logging-folder={log} "
-        f"--network-log={network_log} "
+        f"--logging-configuration=empty "
+        f"--logging-folder={log_abs_path} "
     )
     
-    success = run_command(cmd)
+    print("Running NS3 simulation with command:")
+    print(cmd)
+    
+    success = run_command(cmd, cwd=os.path.join(ns3_dir, "build", "scratch"))
+    
     if success:
-        err_file = f'{log}.err'
-        if os.path.exists(err_file) and os.path.getsize(err_file) == 0:
-            get_timings_df(f"{log}_trace.csv", f"{log}_trace_matched_timing.csv")
+        # Process results if simulation was successful
+        trace_file = f"{log}_trace.csv"
+        if os.path.exists(trace_file):
+            get_timings_df(trace_file, f"{log}_trace_matched_timing.csv")
+    
     if not success:
         return cmd
     return ""
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Run AstraSim with NS3 network backend")
     parser.add_argument(
         "--workload_dir",
         type=str,
-        help="The folder containing the workload",
+        help="The folder containing the workload files",
         required=True,
     )
     parser.add_argument(
-        "--system", type=str, help="The folder containing the workload", required=True
+        "--system", 
+        type=str, 
+        help="The system configuration file", 
+        required=True
     )
     parser.add_argument(
-        "--network", type=str, help="The folder containing the workload", required=True
+        "--network_config", 
+        type=str, 
+        help="The NS3 network configuration file", 
+        required=True
     )
     parser.add_argument(
-        "--memory", type=str, help="The folder containing the workload", required=True
+        "--logical_topology", 
+        type=str, 
+        help="The logical topology configuration file", 
+        required=True
+    )
+    parser.add_argument(
+        "--memory", 
+        type=str, 
+        help="The memory configuration file", 
+        required=True
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        help="The folder containing the workload",
+        help="The output directory for simulation results",
         required=True,
     )
     parser.add_argument(
         "--network_log",
         type=str,
-        help="The folder containing the network logs",
+        help="The directory for network logs",
         required=True,
     )
-    parser.add_argument(
-        "--sim_type",
-        type=str,
-        default="analytical_unaware",
-        choices=["analytical_unaware", "analytical_aware", "g2"],
-        help="The type of simulator to run.",
-    )
+    
     args = parser.parse_args()
 
+    # Get list of workloads to simulate
     design_space = list_workloads(str(args.workload_dir))
+    
+    # Create partial function with fixed arguments
     func = partial(
-        run_astrasim,
+        run_astrasim_ns3,
         system=args.system,
-        network=args.network,
+        network_config=args.network_config,
+        logical_topology=args.logical_topology,
         memory=args.memory,
         output_dir=args.output_dir,
         network_log=args.network_log,
-        sim_type=args.sim_type,
     )
 
+    # Run simulations in parallel
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.70)) as pool:
         failed_cmds = pool.map(func, design_space)
-        print("\n\nrunfails:")
+        print("\n\nFailed commands:")
         for cmd in failed_cmds:
-            if not cmd == "":
+            if cmd != "":
                 print(cmd)
