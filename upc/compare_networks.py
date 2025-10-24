@@ -187,23 +187,34 @@ def run_simulation(sim_type, python_exec, workload_dir, system_config, network_c
 def main(args):
     """Función principal que orquesta la generación y ejecución."""
     
-    # --- 1. Generar Workloads ---
-    print("=== Fase 1: Generando Workloads ===")
-    base_workload_dir = "./comparing_networks/workload"
-    workload_paths = generate_workloads(
-        args.npus_count, args.comm_size, args.collectives, args.groups, base_workload_dir
-    )
+    workload_paths = {}
+    if args.workload_dir:
+        # --- Fase 1 (Opción A): Usar workload existente ---
+        print(f"=== Fase 1: Usando workload pre-existente de '{args.workload_dir}' ===")
+        if not os.path.isdir(args.workload_dir):
+            print(f"Error: El directorio de workload '{args.workload_dir}' no existe.")
+            sys.exit(1)
+        
+        base_name = os.path.basename(args.workload_dir)
+        workload_paths[base_name] = args.workload_dir
+
+    else:
+        # --- Fase 1 (Opción B): Generar Workloads ---
+        print("=== Fase 1: Generando Workloads ===")
+        base_workload_dir = "./comparing_networks/workload"
+        workload_paths = generate_workloads(
+            args.npus_count, args.comm_size, args.collectives, args.groups, base_workload_dir
+        )
 
     # --- 2. Preparar y Ejecutar Simulaciones para cada colectivo ---
     for coll_name, workload_dir in workload_paths.items():
-        print(f"\n=== Fase 2: Ejecutando simulaciones para el colectivo '{coll_name}' ===")
+        print(f"\n=== Fase 2: Ejecutando para el Colectivo='{coll_name}' ===")
         
         # Crear directorio de salida único para esta ejecución
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        network_name = os.path.splitext(os.path.basename(args.network_config))[0].split('_')[0]
-        system_name = os.path.splitext(os.path.basename(args.system_config))[0].replace('_sys', '')
+        network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
         run_folder_name = f"run_{timestamp}"
-        base_run_dir = os.path.join("comparison_run", network_name, system_name, coll_name, run_folder_name)
+        base_run_dir = os.path.join("comparison_run", network_name, coll_name, run_folder_name)
         
         configs_dir = os.path.join(base_run_dir, "configs")
         os.makedirs(configs_dir, exist_ok=True)
@@ -224,47 +235,71 @@ def main(args):
             f.write(f"Communication Groups: {json.dumps(args.groups)}\n")
             f.write("\n")
             f.write("### Simulation Configuration ###\n")
-            f.write(f"System Config Template: {args.system_config}\n")
-            f.write(f"Network Config Template: {args.network_config}\n")
-            f.write(f"NS3 Config Template: {args.ns3_config}\n")
-            f.write(f"NS3 Logical Topology Template: {args.logical_topology_config}\n")
+            f.write(f"G2 System Config: {args.g2_system_config}\n")
+            f.write(f"Analytical System Config: {args.analytical_system_config}\n")
+            f.write(f"NS3 System Config: {args.ns3_system_config}\n")
+            f.write(f"G2 Network Config: {args.g2_network_config}\n")
+            f.write(f"Analytical Network Config: {args.analytical_network_config}\n")
+            f.write(f"NS3 Network Config: {args.ns3_network_config}\n")
+            f.write(f"NS3 Logical Topology: {args.logical_topology_config}\n")
             f.write(f"Python Executable: {args.python_exec}\n")
         print(f"Guardada la configuración de la ejecución en: {config_summary_path}")
 
 
-        # --- 3. Modificar y guardar configuraciones para esta ejecución ---
-        # Esto asegura la reproducibilidad
+        # --- 3. Copiar y preparar configuraciones para esta ejecución ---
+        sim_types = []
         
-        # System Config
-        sys_conf_src = args.system_config
-        sys_conf_dest = os.path.join(configs_dir, os.path.basename(args.system_config))
-        sys_overrides = {"general.num_npus": args.npus_count} if args.npus_count else {}
-        modify_config_file(sys_conf_src, sys_conf_dest, sys_overrides)
+        # Preparar configs de G2 si se han proporcionado
+        g2_sys_conf_dest, g2_net_conf_dest = None, None
+        if args.g2_system_config and args.g2_network_config:
+            sim_types.append("g2")
+            g2_sys_conf_dest = os.path.join(configs_dir, f"g2_{os.path.basename(args.g2_system_config)}")
+            shutil.copy(args.g2_system_config, g2_sys_conf_dest)
+            g2_net_conf_dest = os.path.join(configs_dir, f"g2_{os.path.basename(args.g2_network_config)}")
+            shutil.copy(args.g2_network_config, g2_net_conf_dest)
 
-        # Network Config (para g2/analytical)
-        net_conf_src = args.network_config
-        net_conf_dest = os.path.join(configs_dir, os.path.basename(args.network_config))
-        # Aquí puedes añadir overrides para el YML si es necesario, ej: {"topology.0.npus_count.0": 16}
-        modify_config_file(net_conf_src, net_conf_dest, {}) 
+            # Leer el fichero de config de red de G2 para encontrar el fichero de topología
+            try:
+                with open(args.g2_network_config, 'r') as f:
+                    g2_net_data = yaml.safe_load(f)
+                
+                g2_topology_file_src = g2_net_data.get("topology_file")
+                if g2_topology_file_src and os.path.exists(g2_topology_file_src):
+                    g2_topology_dest = os.path.join(configs_dir, f"g2_{os.path.basename(g2_topology_file_src)}")
+                    shutil.copy(g2_topology_file_src, g2_topology_dest)
+                    print(f"Copiado fichero de topología G2: {g2_topology_file_src}")
+                elif g2_topology_file_src:
+                    print(f"Aviso: El 'topology_file' '{g2_topology_file_src}' especificado en la config de red G2 no existe.")
 
-        # NS3 Config
-        sim_types = ["analytical_unaware", "analytical_aware", "g2", "ns3"]
-        sim_types = ["analytical_unaware"] 
-        ns3_conf_src = args.ns3_config
-        ns3_conf_dest = os.path.join(configs_dir, os.path.basename(args.ns3_config))
-        
-        # Para NS3, preparamos los overrides de las rutas de salida y el seed
-        ns3_overrides = {"ECMP_SEED": args.seed}
-        if "ns3" in sim_types:
+            except (yaml.YAMLError, FileNotFoundError) as e:
+                print(f"Aviso: No se pudo leer el fichero de configuración de red G2 para buscar la topología: {e}")
+
+
+        # Preparar configs analíticas si se han proporcionado
+        analytical_sys_conf_dest, analytical_net_conf_dest = None, None
+        if args.analytical_system_config and args.analytical_network_config:
+            sim_types.extend(["analytical_unaware", "analytical_aware"])
+            analytical_sys_conf_dest = os.path.join(configs_dir, f"analytical_{os.path.basename(args.analytical_system_config)}")
+            shutil.copy(args.analytical_system_config, analytical_sys_conf_dest)
+            analytical_net_conf_dest = os.path.join(configs_dir, f"analytical_{os.path.basename(args.analytical_network_config)}")
+            shutil.copy(args.analytical_network_config, analytical_net_conf_dest)
+
+        # Preparar configs de NS3 si se han proporcionado
+        ns3_sys_conf_dest, ns3_conf_dest = None, None
+        if args.ns3_system_config and args.ns3_network_config:
+            sim_types.append("ns3")
+            ns3_sys_conf_dest = os.path.join(configs_dir, f"ns3_{os.path.basename(args.ns3_system_config)}")
+            shutil.copy(args.ns3_system_config, ns3_sys_conf_dest)
+            
+            ns3_conf_dest = os.path.join(configs_dir, os.path.basename(args.ns3_network_config))
             ns3_output_dir = os.path.join(base_run_dir, "ns3")
             os.makedirs(ns3_output_dir, exist_ok=True)
-            ns3_overrides.update({
+            ns3_overrides = {
+                "ECMP_SEED": args.seed,
                 "TRACE_OUTPUT_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_trace.tr"),
                 "FCT_OUTPUT_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_fct.txt"),
-                "PFC_OUTPUT_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_pfc.txt"),
-                "QLEN_MON_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_qlen.txt"),
-            })
-        modify_config_file(ns3_conf_src, ns3_conf_dest, ns3_overrides)
+            }
+            modify_config_file(args.ns3_network_config, ns3_conf_dest, ns3_overrides)
 
         # Memory Config (solo copiar)
         mem_conf_src = "./configuration/RemoteMemory.json"
@@ -272,9 +307,10 @@ def main(args):
         shutil.copy(mem_conf_src, mem_conf_dest)
 
         # NS3 Logical Topology (solo copiar)
-        lt_conf_src = args.logical_topology_config
-        lt_conf_dest = os.path.join(configs_dir, os.path.basename(args.logical_topology_config))
-        shutil.copy(lt_conf_src, lt_conf_dest)
+        lt_conf_dest = None
+        if args.logical_topology_config:
+            lt_conf_dest = os.path.join(configs_dir, os.path.basename(args.logical_topology_config))
+            shutil.copy(args.logical_topology_config, lt_conf_dest)
 
         # --- 4. Ejecutar las simulaciones ---
         
@@ -285,12 +321,27 @@ def main(args):
 
         for sim_type in sim_types:
             output_dir = os.path.join(base_run_dir, sim_type)
+            
+            current_sys_config, current_net_config = None, None
+            if sim_type == "g2":
+                current_sys_config = g2_sys_conf_dest
+                current_net_config = g2_net_conf_dest
+            elif "analytical" in sim_type:
+                current_sys_config = analytical_sys_conf_dest
+                current_net_config = analytical_net_conf_dest
+            elif sim_type == "ns3":
+                current_sys_config = ns3_sys_conf_dest
+
+            if not current_sys_config:
+                print(f"Aviso: Omitiendo {sim_type} por falta de configuración de sistema.")
+                continue
+
             run_simulation(
                 sim_type=sim_type,
                 python_exec=args.python_exec,
                 workload_dir=workload_dir,
-                system_config=sys_conf_dest,
-                network_config=net_conf_dest,
+                system_config=current_sys_config,
+                network_config=current_net_config,
                 ns3_config=ns3_conf_dest,
                 memory_config=mem_conf_dest,
                 logical_topology_config=lt_conf_dest,
@@ -307,16 +358,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Script de comparación de redes para Astra-Sim.")
 
     # Argumentos para la generación de workloads
+    parser.add_argument("--workload-dir", type=str, default=None, help="Ruta a un directorio de workload pre-generado. Si se especifica, se omite la generación.")
     parser.add_argument("--npus-count", type=int, default=8, help="Número total de NPUs en el sistema.")
     parser.add_argument("--comm-size", type=int, default=128*1024*1024, help="Tamaño en bytes de la comunicación colectiva.")
-    parser.add_argument("--collectives", nargs='+', default=["all_gather", "all_reduce"], help="Lista de colectivos a generar y probar.")
+    parser.add_argument("--collectives", nargs='+', default=["all_gather"], help="Lista de colectivos a generar y probar.")
     parser.add_argument("--groups", type=json.loads, default='{"1": [0, 1, 4, 5], "2": [2, 3, 6, 7]}', help='Grupos de NPUs para los colectivos en formato JSON string.')
 
     # Argumentos para la configuración de la simulación
-    parser.add_argument("--system-config", type=str, default="./configuration/Ring_sys.json", help="Ruta al fichero de configuración del sistema.")
-    parser.add_argument("--network-config", type=str, default="./configuration/Ring.yml", help="Ruta al fichero de configuración de red (YML).")
-    parser.add_argument("--ns3-config", type=str, default="./configuration/ns3/config_8_ring.txt", help="Ruta al fichero de configuración de NS3.")
-    parser.add_argument("--logical-topology-config", type=str, default="./configuration/ns3/8_nodes_logical.json", help="Ruta al fichero de topología lógica para NS3.")
+    parser.add_argument("--g2-system-config", type=str, default=None, help="Ruta al fichero de sistema para G2.")
+    parser.add_argument("--analytical-system-config", type=str, default=None, help="Ruta al fichero de sistema para modelos analíticos.")
+    parser.add_argument("--ns3-system-config", type=str, default=None, help="Ruta al fichero de sistema para NS3.")
+    
+    parser.add_argument("--g2-network-config", type=str, default=None, help="Ruta al fichero de configuración de red (YML) para G2.")
+    parser.add_argument("--analytical-network-config", type=str, default=None, help="Ruta al fichero de configuración de red (YML) para modelos analíticos.")
+    parser.add_argument("--ns3-network-config", type=str, default=None, help="Ruta al fichero de configuración de red para NS3.")
+    
+    parser.add_argument("--logical-topology-config", type=str, default=None, help="Ruta al fichero de topología lógica para NS3.")
     
     # Otros
     parser.add_argument("--python-exec", type=str, default="../../astraenv39/bin/python3.9", help="Ruta al ejecutable de Python.")
