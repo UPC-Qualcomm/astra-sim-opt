@@ -214,7 +214,7 @@ def main(args):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
         run_folder_name = f"run_{timestamp}"
-        base_run_dir = os.path.join("comparison_run", network_name, coll_name, run_folder_name)
+        base_run_dir = os.path.join("output/comparison_run", network_name, coll_name, run_folder_name)
         
         configs_dir = os.path.join(base_run_dir, "configs")
         os.makedirs(configs_dir, exist_ok=True)
