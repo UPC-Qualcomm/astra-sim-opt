@@ -61,8 +61,6 @@ class NS3BackendCompletionTracker {
                 "All ranks have finished. Exiting simulation.");
             // cout << "All ranks have finished. Exiting simulation.\n";
             Simulator::Stop();
-            Simulator::Destroy();
-            exit(0);
         }
     }
 
@@ -311,10 +309,14 @@ int main(int argc, char* argv[]) {
     }
 
     // Initialize ns3 simulation.
-    if (auto ok = setup_ns3_simulation(network_configuration); ok == -1) {
+    Ptr<FlowMonitor> monitor = setup_ns3_simulation(network_configuration);
+    if (monitor == nullptr) {
         std::cerr << "Fail to setup ns3 simulation." << std::endl;
         return -1;
     }
+
+    // Manually start the monitor before firing workload events.
+    monitor->Start(Seconds(0.0));
 
     // Tell workload layer to schedule first events.
     for (int i = 0; i < num_npus; i++) {
@@ -323,5 +325,9 @@ int main(int argc, char* argv[]) {
 
     // Run the simulation by triggering the ns3 event queue.
     Simulator::Run();
+
+    //monitor->SerializeToXmlFile("flowmon-results.xml", true, true);
+
+    Simulator::Destroy();
     return 0;
 }
