@@ -18,7 +18,6 @@ build/astra_analytical/result/
 build/astra_garnet/build/
 build/astra_garnet/result/
 build/astra_htsim/build/
-extern/network_backend/ns-3/
 
 # Generated Chakra ET files
 *.eg
