@@ -11,7 +11,7 @@ This module:
 import os
 import sys
 import shutil
-from typing import Tuple, Optional
+from typing import Dict, Optional
 
 # Add UPC to path
 sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc')
@@ -19,8 +19,7 @@ from run_astrasim import run_astrasim
 
 # Import helper modules
 sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
-from helper import workload_generator, output_parser
-from helper.network_config import NetworkConfig
+from ..helper import workload_generator, output_parser, NetworkConfig
 
 
 class SimulationRunner:
@@ -143,17 +142,22 @@ class SimulationRunner:
                     print(f"Removing: {dir_path}")
                 shutil.rmtree(dir_path)
     
-    def run_simulation(self, config: Tuple) -> Optional[float]:
+    def run_simulation(self, config: Dict) -> Optional[float]:
         """
         Run simulation for a configuration.
         
         Args:
-            config: Configuration tuple (dp, mp, sp, pp, sharded)
+            config: Configuration dictionary with dp, mp, sp, pp, sharded
         
         Returns:
             Execution time in seconds, or None if failed
         """
-        dp, mp, sp, pp, sharded = config
+        # Extract values from config dictionary
+        dp = config['dp']
+        mp = config['mp']
+        sp = config['sp']
+        pp = config['pp']
+        sharded = config['sharded']
         
         if self.verbose:
             print(f"  Running: dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")

@@ -9,7 +9,7 @@ This module provides different sampling strategies:
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple
+from typing import List, Dict
 import random
 import numpy as np
 
@@ -24,12 +24,12 @@ class BaseSampler(ABC):
     """
     
     @abstractmethod
-    def sample(self, design_space: List[Tuple], n_samples: int) -> List[Tuple]:
+    def sample(self, design_space: List[Dict], n_samples: int) -> List[Dict]:
         """
         Sample configurations from design space.
         
         Args:
-            design_space: List of all valid configurations
+            design_space: List of all valid configuration dictionaries
             n_samples: Number of samples to generate
         
         Returns:
@@ -69,7 +69,7 @@ class RandomSampler(BaseSampler):
             random.seed(seed)
             np.random.seed(seed)
     
-    def sample(self, design_space: List[Tuple], n_samples: int) -> List[Tuple]:
+    def sample(self, design_space: List[Dict], n_samples: int) -> List[Dict]:
         """Sample random configurations without replacement."""
         if n_samples >= len(design_space):
             return design_space.copy()
@@ -111,20 +111,21 @@ class LatinHypercubeSampler(BaseSampler):
             random.seed(seed)
             np.random.seed(seed)
     
-    def sample(self, design_space: List[Tuple], n_samples: int) -> List[Tuple]:
+    def sample(self, design_space: List[Dict], n_samples: int) -> List[Dict]:
         """
         Sample using Latin Hypercube approach.
         
         For discrete design space, we:
-        1. Sort design space by a parameter (dp)
+        1. Sort design space by first parameter (alphabetically)
         2. Divide into n_samples regions
         3. Sample one point from each region
         """
         if n_samples >= len(design_space):
             return design_space.copy()
         
-        # Sort design space by first parameter (dp) for stratification
-        sorted_space = sorted(design_space, key=lambda x: x[0])
+        # Sort by first parameter (alphabetically by key name)
+        first_key = sorted(design_space[0].keys())[0]
+        sorted_space = sorted(design_space, key=lambda x: x[first_key])
         
         # Divide into n_samples strata
         samples = []
@@ -180,7 +181,7 @@ class SobolSampler(BaseSampler):
             self.available = False
             print("Warning: scipy not available, falling back to random sampling")
     
-    def sample(self, design_space: List[Tuple], n_samples: int) -> List[Tuple]:
+    def sample(self, design_space: List[Dict], n_samples: int) -> List[Dict]:
         """
         Sample using Sobol sequence.
         
@@ -245,7 +246,7 @@ class GridSampler(BaseSampler):
         if seed is not None:
             random.seed(seed)
     
-    def sample(self, design_space: List[Tuple], n_samples: int) -> List[Tuple]:
+    def sample(self, design_space: List[Dict], n_samples: int) -> List[Dict]:
         """
         Sample uniformly from design space.
         
@@ -293,7 +294,7 @@ class StratifiedSampler(BaseSampler):
         if seed is not None:
             random.seed(seed)
     
-    def sample(self, design_space: List[Tuple], n_samples: int) -> List[Tuple]:
+    def sample(self, design_space: List[Dict], n_samples: int) -> List[Dict]:
         """
         Sample with stratification.
         
@@ -303,10 +304,17 @@ class StratifiedSampler(BaseSampler):
         if n_samples >= len(design_space):
             return design_space.copy()
         
+        # Use the stratify_param-th key (sorted alphabetically)
+        param_keys = sorted(design_space[0].keys())
+        if self.stratify_param < len(param_keys):
+            strat_key = param_keys[self.stratify_param]
+        else:
+            strat_key = param_keys[0]  # Fallback to first param
+        
         # Group by stratify parameter
         strata = {}
         for config in design_space:
-            key = config[self.stratify_param]
+            key = config[strat_key]
             if key not in strata:
                 strata[key] = []
             strata[key].append(config)

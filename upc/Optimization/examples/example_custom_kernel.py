@@ -8,15 +8,19 @@ Demonstrates how to create custom kernels and acquisition functions.
 import sys
 import os
 
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add grandparent directory to path to find Optimization package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from core.search_space import SearchSpace
-from core.sampler import SobolSampler
-from core.simulation_runner import SimulationRunner
-from core.kernels import RBFKernel, CustomKernel
-from core.acquisition import UpperConfidenceBound, get_acquisition
-from optimizers.bayesian_optimizer import BayesianOptimizer
+from Optimization import (
+    create_search_space,
+    SobolSampler,
+    SimulationRunner,
+    RBFKernel,
+    CustomKernel,
+    UpperConfidenceBound,
+    get_acquisition,
+    BayesianOptimizer
+)
 
 
 def main():
@@ -46,7 +50,11 @@ def main():
         "search_space", 
         "parallelism_strategy_params.json"  # Note: Using actual filename with typo
     )
-    search_space = SearchSpace(search_space_path, num_npus=NUM_NPUS)
+    # Note: num_npus is read from the JSON file (npu_count field)
+    search_space = create_search_space(
+        search_space_path,
+        include_categories=['parallelism_strategy']
+    )
     print(f"   Design space size: {search_space.get_design_space_size()}")
     
     # 2. Choose sampler - use Sobol for better coverage

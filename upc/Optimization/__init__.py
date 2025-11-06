@@ -4,32 +4,32 @@ AstraSim Optimization Framework
 A modular, scalable optimization framework for tuning AstraSim configurations.
 
 Quick Start:
-    >>> from Optimization import SearchSpace, BayesianOptimizer, SimulationRunner
-    >>> from Optimization import LatinHypercubeSampler, MaternKernel, ExpectedImprovement
+    >>> from core.search_space_builder import create_search_space
+    >>> from optimizers.random_optimizer import RandomOptimizer
+    >>> from optimizers.bayesian_optimizer import BayesianOptimizer
+    >>> from core.sampler import RandomSampler
+    >>> from core.simulation_runner import SimulationRunner
     
     >>> # Setup
-    >>> search_space = SearchSpace("search_space/parallelism_strategy_params.json", 64)
-    >>> sampler = LatinHypercubeSampler()
-    >>> sim_runner = SimulationRunner(40, "GPT_40B", 64, "FoldedClos")
-    >>> kernel = MaternKernel(nu=2.5)
-    >>> acquisition = ExpectedImprovement(xi=0.01)
+    >>> search_space = create_search_space("search_space/parallelism_strategy_params.json")
+    >>> sampler = RandomSampler(seed=42)
+    >>> sim_runner = SimulationRunner(40, "GPT_40B", 128, "FoldedClos", "my_exp")
     
     >>> # Run
-    >>> optimizer = BayesianOptimizer(
-    ...     search_space, sampler, sim_runner, kernel, acquisition, budget=30
-    ... )
+    >>> optimizer = RandomOptimizer(search_space, sampler, sim_runner, budget=20)
     >>> best_config, history = optimizer.run()
 
-See README.md for full documentation.
+See examples/ directory for full documentation.
 """
 
 # Core modules
-from core.search_space import SearchSpace
-from core.simulation_runner import SimulationRunner
-from core.base_optimizer import BaseOptimizer
+from .core.search_space_builder import SearchSpaceBuilder, create_search_space
+from .core.simulation_runner import SimulationRunner
+from .core.base_optimizer import BaseOptimizer
+from .helper import config_to_tuple, tuple_to_config
 
 # Samplers
-from core.sampler import (
+from .core.sampler import (
     BaseSampler,
     RandomSampler,
     LatinHypercubeSampler,
@@ -40,11 +40,11 @@ from core.sampler import (
 )
 
 # Optimizers
-from optimizers.random_optimizer import RandomOptimizer
+from .optimizers import RandomOptimizer
 
 # Try to import Bayesian optimization components
 try:
-    from core.kernels import (
+    from .core.kernels import (
         BaseKernel,
         MaternKernel,
         RBFKernel,
@@ -52,7 +52,7 @@ try:
         CompositeKernel,
         get_kernel
     )
-    from core.acquisition import (
+    from .core.acquisition import (
         BaseAcquisitionFunction,
         ExpectedImprovement,
         UpperConfidenceBound,
@@ -60,15 +60,19 @@ try:
         ThompsonSampling,
         get_acquisition
     )
-    from optimizers.bayesian_optimizer import BayesianOptimizer
+    from .optimizers import BayesianOptimizer
     
     BO_AVAILABLE = True
     
     __all__ = [
         # Core
-        'SearchSpace',
+        'SearchSpaceBuilder',
+        'create_search_space',
         'SimulationRunner',
         'BaseOptimizer',
+        # Helpers
+        'config_to_tuple',
+        'tuple_to_config',
         # Samplers
         'BaseSampler',
         'RandomSampler',
@@ -101,9 +105,13 @@ except ImportError:
     
     __all__ = [
         # Core
-        'SearchSpace',
+        'SearchSpaceBuilder',
+        'create_search_space',
         'SimulationRunner',
         'BaseOptimizer',
+        # Helpers
+        'config_to_tuple',
+        'tuple_to_config',
         # Samplers
         'BaseSampler',
         'RandomSampler',

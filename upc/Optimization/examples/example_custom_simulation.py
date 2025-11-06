@@ -12,13 +12,15 @@ Demonstrates how to customize simulation parameters including:
 import sys
 import os
 
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add grandparent directory to path to find Optimization package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from core.search_space import SearchSpace
-from core.sampler import LatinHypercubeSampler
-from core.simulation_runner import SimulationRunner
-from optimizers.random_optimizer import RandomOptimizer
+from Optimization import (
+    create_search_space,
+    LatinHypercubeSampler,
+    SimulationRunner,
+    RandomOptimizer
+)
 
 
 def example_custom_paths():
@@ -45,7 +47,11 @@ def example_custom_paths():
         "search_space", 
         "parallelism_startegy_params.json"
     )
-    search_space = SearchSpace(search_space_path, num_npus=NUM_NPUS)
+    # Note: num_npus is read from the JSON file (npu_count field)
+    search_space = create_search_space(
+        search_space_path,
+        include_categories=['parallelism_strategy']
+    )
     
     # Setup sampler
     sampler = LatinHypercubeSampler(seed=42)
@@ -107,7 +113,11 @@ def example_custom_configs():
         "search_space", 
         "parallelism_startegy_params.json"
     )
-    search_space = SearchSpace(search_space_path, num_npus=NUM_NPUS)
+    # Note: num_npus is read from the JSON file (npu_count field)
+    search_space = create_search_space(
+        search_space_path,
+        include_categories=['parallelism_strategy']
+    )
     
     # Setup sampler
     sampler = LatinHypercubeSampler(seed=123)
@@ -167,7 +177,11 @@ def example_g2_backend():
         "search_space", 
         "parallelism_startegy_params.json"
     )
-    search_space = SearchSpace(search_space_path, num_npus=NUM_NPUS)
+    # Note: num_npus is read from the JSON file (npu_count field)
+    search_space = create_search_space(
+        search_space_path,
+        include_categories=['parallelism_strategy']
+    )
     
     # Setup sampler
     sampler = LatinHypercubeSampler(seed=456)
@@ -232,7 +246,11 @@ def example_full_customization():
         "search_space", 
         "parallelism_startegy_params.json"
     )
-    search_space = SearchSpace(search_space_path, num_npus=NUM_NPUS)
+    # Note: num_npus is read from the JSON file (npu_count field)
+    search_space = create_search_space(
+        search_space_path,
+        include_categories=['parallelism_strategy']
+    )
     
     # Setup sampler
     sampler = LatinHypercubeSampler(seed=999)

@@ -1,15 +1,32 @@
 import os
 import sys
 import subprocess
+from typing import Dict
 
 sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc')
 from generate_workloads import Model
 
 
-def generate_workload_with_env(design_point, model, folder_name):
-    """Generate workload using the correct Python environment"""
+def generate_workload_with_env(design_point: Dict, model, folder_name):
+    """
+    Generate workload using the correct Python environment.
+    
+    Args:
+        design_point: Configuration dictionary with dp, mp, sp, pp, sharded
+        model: Model enum
+        folder_name: Output folder name
+    
+    Returns:
+        True if successful, False otherwise
+    """
     root = os.path.join("/media/mohammad/extension/experiments/astra-sim/upc", "workload", folder_name)
-    dp, mp, ssp, pp, sharded = design_point
+    
+    # Extract values from design_point dictionary
+    dp = design_point['dp']
+    mp = design_point['mp']
+    ssp = design_point['sp']
+    pp = design_point['pp']
+    sharded = design_point['sharded']
 
     din, dout, dmodel, dff, batch, seq, head, num_stacks = Model.get_model_params(model)
 

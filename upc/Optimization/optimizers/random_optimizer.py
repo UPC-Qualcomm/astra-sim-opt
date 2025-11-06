@@ -6,13 +6,14 @@ Good baseline to compare against more sophisticated methods.
 """
 
 import sys
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 import pandas as pd
 import time
 
 # Add parent directory to path for imports
 sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
-from core.base_optimizer import BaseOptimizer
+from ..core import BaseOptimizer, SearchSpaceBuilder
+from ..helper import config_to_tuple, tuple_to_config
 
 
 class RandomOptimizer(BaseOptimizer):
@@ -26,11 +27,15 @@ class RandomOptimizer(BaseOptimizer):
     - Establishing baseline performance
     
     Example:
-        from core.search_space import SearchSpace
+        from core.search_space_builder import create_search_space
         from core.sampler import RandomSampler
         from core.simulation_runner import SimulationRunner
         
-        search_space = SearchSpace("search_space/parallelism_strategy_params.json", num_npus=64)
+        search_space = create_search_space(
+            "search_space/parallelism_strategy_params.json",
+            num_npus=64,
+            include_categories=['parallelism_strategy']
+        )
         sampler = RandomSampler(seed=42)
         sim_runner = SimulationRunner(40, "GPT_40B", 64, "FoldedClos")
         
@@ -98,9 +103,9 @@ class RandomOptimizer(BaseOptimizer):
         
         return True
     
-    def optimize_step(self) -> Tuple[Optional[Tuple], Optional[float]]:
+    def optimize_step(self) -> Tuple[Optional[Dict], Optional[float]]:
         """
-        Execute one optimization iteration (evaluate one random config).
+        Execute one random search step.
         
         Returns:
             (config, score) tuple if successful, (None, None) otherwise
@@ -110,8 +115,10 @@ class RandomOptimizer(BaseOptimizer):
         design_space = self.search_space.get_design_space()
         
         # Filter out already evaluated configs
-        evaluated_set = set(self.configs)
-        unevaluated = [c for c in design_space if c not in evaluated_set]
+        # Convert configs to tuples for set operations (dicts are unhashable)
+        evaluated_set = set(config_to_tuple(c) for c in self.configs)
+        unevaluated = [c for c in design_space 
+                       if config_to_tuple(c) not in evaluated_set]
         
         if not unevaluated:
             return None, None
@@ -124,7 +131,7 @@ class RandomOptimizer(BaseOptimizer):
         
         return config, score
     
-    def run(self) -> Tuple[Optional[Tuple], pd.DataFrame]:
+    def run(self) -> Tuple[Optional[Dict], pd.DataFrame]:
         """
         Run full random search optimization.
         
@@ -156,11 +163,10 @@ class RandomOptimizer(BaseOptimizer):
             for i, config in enumerate(sampled_configs):
                 self.current_iteration = i
                 
-                dp, mp, sp, pp, sharded = config
-                
                 if self.verbose:
-                    print(f"[{i+1}/{len(sampled_configs)}] Testing: "
-                          f"dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")
+                    # Print configuration parameters
+                    config_str = ", ".join([f"{k}={v}" for k, v in config.items()])
+                    print(f"[{i+1}/{len(sampled_configs)}] Testing: {config_str}")
                 
                 # Evaluate
                 iter_start = time.time()

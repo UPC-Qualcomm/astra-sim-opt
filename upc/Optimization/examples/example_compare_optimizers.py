@@ -10,16 +10,21 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add grandparent directory to path to find Optimization package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from core.search_space import SearchSpace
-from core.sampler import RandomSampler, LatinHypercubeSampler
-from core.simulation_runner import SimulationRunner
-from core.kernels import MaternKernel, RBFKernel
-from core.acquisition import ExpectedImprovement, UpperConfidenceBound
-from optimizers.random_optimizer import RandomOptimizer
-from optimizers.bayesian_optimizer import BayesianOptimizer
+from Optimization import (
+    create_search_space,
+    RandomSampler,
+    LatinHypercubeSampler,
+    SimulationRunner,
+    MaternKernel,
+    RBFKernel,
+    ExpectedImprovement,
+    UpperConfidenceBound,
+    RandomOptimizer,
+    BayesianOptimizer
+)
 
 
 def run_optimizer(name, optimizer):
@@ -59,8 +64,11 @@ def compare_results(results):
             name = result['name']
             score = result['best_score']
             config = result['best_config']
-            dp, mp, sp, pp, sharded = config
-            config_str = f"({dp},{mp},{sp},{pp},{int(sharded)})"
+            
+            # Format configuration dynamically
+            config_str = ", ".join([f"{v}" for v in config.values()])
+            config_str = f"({config_str})"
+            
             print("{:<25} {:<15.2f} {:<20}".format(name, score, config_str))
     
     # Find best overall
@@ -125,7 +133,11 @@ def main():
         "search_space", 
         "parallelism_strategy_params.json"  # Note: Using actual filename with typo
     )
-    search_space = SearchSpace(search_space_path, num_npus=NUM_NPUS)
+    # Note: num_npus is read from the JSON file (npu_count field)
+    search_space = create_search_space(
+        search_space_path,
+        include_categories=['parallelism_strategy']
+    )
     
     # Define optimizers to compare
     optimizers = []

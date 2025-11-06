@@ -7,14 +7,15 @@ search space by balancing exploration and exploitation.
 """
 
 import sys
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 import pandas as pd
 import numpy as np
 import time
 
 # Add parent directory to path for imports
 sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
-from core.base_optimizer import BaseOptimizer
+from ..core import BaseOptimizer, SearchSpaceBuilder
+from ..helper import config_to_tuple, tuple_to_config
 
 # Check for sklearn availability
 try:
@@ -42,13 +43,17 @@ class BayesianOptimizer(BaseOptimizer):
     - Detailed logging and visualization
     
     Example:
-        from core.search_space import SearchSpace
+        from core.search_space_builder import create_search_space
         from core.sampler import LatinHypercubeSampler
         from core.simulation_runner import SimulationRunner
         from core.kernels import MaternKernel
         from core.acquisition import ExpectedImprovement
         
-        search_space = SearchSpace("search_space/parallelism_strategy_params.json", num_npus=64)
+        search_space = create_search_space(
+            "search_space/parallelism_strategy_params.json",
+            num_npus=64,
+            include_categories=['parallelism_strategy']
+        )
         sampler = LatinHypercubeSampler(seed=42)
         sim_runner = SimulationRunner(40, "GPT_40B", 64, "FoldedClos")
         kernel = MaternKernel(nu=2.5)
@@ -166,11 +171,12 @@ class BayesianOptimizer(BaseOptimizer):
         # Evaluate initial configurations
         for i, config in enumerate(init_configs):
             self.current_iteration = i
-            dp, mp, sp, pp, sharded = config
+            
+            # Format configuration for display
+            config_str = ", ".join([f"{k}={v}" for k, v in config.items()])
             
             if self.verbose:
-                print(f"  [{i+1}/{self.init_samples}] Config: "
-                      f"dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")
+                print(f"  [{i+1}/{self.init_samples}] Config: {config_str}")
             
             exec_time = self.evaluate_config(config, verbose=True)
             
@@ -194,7 +200,7 @@ class BayesianOptimizer(BaseOptimizer):
         
         return True
     
-    def optimize_step(self) -> Tuple[Optional[Tuple], Optional[float]]:
+    def optimize_step(self) -> Tuple[Optional[Dict], Optional[float]]:
         """
         Execute one Bayesian Optimization iteration.
         
@@ -218,7 +224,7 @@ class BayesianOptimizer(BaseOptimizer):
         
         return next_config, score
     
-    def run(self) -> Tuple[Optional[Tuple], pd.DataFrame]:
+    def run(self) -> Tuple[Optional[Dict], pd.DataFrame]:
         """
         Run full Bayesian Optimization.
         
@@ -271,9 +277,10 @@ class BayesianOptimizer(BaseOptimizer):
                     print("STAGE 4: EVALUATION")
                     print("-" * 70)
                 
-                dp, mp, sp, pp, sharded = next_config
+                # Format configuration for display
+                config_str = ", ".join([f"{k}={v}" for k, v in next_config.items()])
                 if self.verbose:
-                    print(f"Evaluating: dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")
+                    print(f"Evaluating: {config_str}")
                 
                 exec_time = self.evaluate_config(next_config, verbose=True)
                 
@@ -315,7 +322,9 @@ class BayesianOptimizer(BaseOptimizer):
         
         if self.verbose:
             print(f"Training data: {len(X_train)} observations, {X_train.shape[1]} dimensions")
-            print("Features: [dp, mp, sp, pp, sharded]")
+            if self.configs:
+                param_names = sorted(self.configs[0].keys())
+                print(f"Features: {param_names}")
         
         # Get sklearn kernel
         sklearn_kernel = self.kernel.get_sklearn_kernel()
@@ -360,7 +369,7 @@ class BayesianOptimizer(BaseOptimizer):
             self._log(f"GP fitting error: {e}", "error")
             return None
     
-    def _optimize_acquisition(self, gp: GaussianProcessRegressor) -> Optional[Tuple]:
+    def _optimize_acquisition(self, gp: GaussianProcessRegressor) -> Optional[Dict]:
         """
         Find next configuration by optimizing acquisition function.
         
@@ -374,8 +383,10 @@ class BayesianOptimizer(BaseOptimizer):
         design_space = self.search_space.get_design_space()
         
         # Filter out already evaluated configs
-        evaluated_set = set(self.configs)
-        unevaluated_candidates = [c for c in design_space if c not in evaluated_set]
+        # Convert configs to tuples for set operations (dicts are unhashable)
+        evaluated_set = set(config_to_tuple(c) for c in self.configs)
+        unevaluated_candidates = [c for c in design_space 
+                                   if config_to_tuple(c) not in evaluated_set]
         
         if not unevaluated_candidates:
             self._log("All configurations evaluated!", "warning")
@@ -405,8 +416,8 @@ class BayesianOptimizer(BaseOptimizer):
     def _acquisition_exhaustive(
         self,
         gp: GaussianProcessRegressor,
-        candidates: List[Tuple]
-    ) -> Tuple[Tuple, float]:
+        candidates: List[Dict]
+    ) -> Tuple[Dict, float]:
         """
         Exhaustive acquisition optimization.
         
@@ -447,8 +458,8 @@ class BayesianOptimizer(BaseOptimizer):
             print(f"    Top-5: {[f'{x:.6f}' for x in top_5]}")
             
             print("  Selected config:")
-            dp, mp, sp, pp, sharded = next_config
-            print(f"    dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")
+            config_str = ", ".join([f"{k}={v}" for k, v in next_config.items()])
+            print(f"    {config_str}")
             print(f"    Predicted: {mu[best_idx]:.2f}s ± {sigma[best_idx]:.2f}s")
             print("\n  ⏱️  Now running simulation for this config...\n")
         
@@ -457,10 +468,10 @@ class BayesianOptimizer(BaseOptimizer):
     def _acquisition_sampling(
         self,
         gp: GaussianProcessRegressor,
-        candidates: List[Tuple],
+        candidates: List[Dict],
         n_samples: int = 10000,
         n_top: int = 20
-    ) -> Tuple[Tuple, float]:
+    ) -> Tuple[Dict, float]:
         """
         Smart sampling acquisition optimization for large spaces.
         
@@ -524,28 +535,40 @@ class BayesianOptimizer(BaseOptimizer):
             print(f"    Mean (all samples): {np.mean(all_ei):.6f}")
             
             print("  Selected config:")
-            dp, mp, sp, pp, sharded = next_config
-            print(f"    dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")
+            config_str = ", ".join([f"{k}={v}" for k, v in next_config.items()])
+            print(f"    {config_str}")
             print(f"    Predicted: {mu[best_idx]:.2f}s ± {sigma[best_idx]:.2f}s")
             print(f"    UCB score: {ucb_scores[best_idx]:.2f}")
             print("\n  ⏱️  Now running simulation for this config...\n")
         
         return next_config, next_acquisition
     
-    def _configs_to_features(self, configs: List[Tuple]) -> List[List[float]]:
+    def _configs_to_features(self, configs: List[Dict]) -> List[List[float]]:
         """
-        Convert configurations to feature vectors for GP.
+        Convert configuration dictionaries to feature vectors for GP.
         
         Args:
-            configs: List of (dp, mp, sp, pp, sharded) tuples
+            configs: List of configuration dictionaries
         
         Returns:
             List of feature vectors
         """
+        if not configs:
+            return []
+        
+        # Get sorted parameter names for consistent ordering
+        param_names = sorted(configs[0].keys())
+        
         features = []
         for config in configs:
-            dp, mp, sp, pp, sharded = config
-            feature = [float(dp), float(mp), float(sp), float(pp), float(sharded)]
+            feature = []
+            for param in param_names:
+                value = config[param]
+                # Convert boolean to float
+                if isinstance(value, bool):
+                    feature.append(float(value))
+                else:
+                    feature.append(float(value))
             features.append(feature)
         return features
     

@@ -8,13 +8,15 @@ Demonstrates how to use the random search optimizer.
 import sys
 import os
 
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add grandparent directory to path to find Optimization package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from core.search_space import SearchSpace
-from core.sampler import RandomSampler
-from core.simulation_runner import SimulationRunner
-from optimizers.random_optimizer import RandomOptimizer
+from Optimization import (
+    create_search_space,
+    RandomSampler,
+    SimulationRunner,
+    RandomOptimizer
+)
 
 
 def main():
@@ -43,7 +45,11 @@ def main():
         "search_space", 
         "parallelism_strategy_params.json"  # Note: Using actual filename with typo
     )
-    search_space = SearchSpace(search_space_path, num_npus=NUM_NPUS)
+    # Note: num_npus is read from the JSON file (npu_count field)
+    search_space = create_search_space(
+        search_space_path,
+        include_categories=['parallelism_strategy']
+    )
     print(f"   Design space size: {search_space.get_design_space_size()}")
     
     # 2. Choose sampler
@@ -86,9 +92,12 @@ def main():
         print("\n" + "="*70)
         print("OPTIMIZATION COMPLETE")
         print("="*70)
-        dp, mp, sp, pp, sharded = best_config
+        
+        # Format configuration dynamically
+        config_str = ", ".join([f"{k}={v}" for k, v in best_config.items()])
+        
         print(f"\n🏆 BEST CONFIGURATION:")
-        print(f"   dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")
+        print(f"   {config_str}")
         print(f"   Execution time: {optimizer.best_score:.2f}s")
         print(f"\n📊 History saved with {len(history)} evaluations")
     else:

@@ -2,7 +2,7 @@
 Core modules for the optimization framework.
 """
 
-from .search_space import SearchSpace
+from .search_space_builder import SearchSpaceBuilder, create_search_space
 from .sampler import (
     BaseSampler,
     RandomSampler,
@@ -32,7 +32,8 @@ except ImportError:
     GP_AVAILABLE = False
 
 __all__ = [
-    'SearchSpace',
+    'SearchSpaceBuilder',
+    'create_search_space',
     'BaseSampler',
     'RandomSampler', 
     'LatinHypercubeSampler',

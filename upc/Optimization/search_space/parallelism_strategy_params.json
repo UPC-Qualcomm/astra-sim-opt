@@ -1,10 +1,13 @@
 {   
-    "npu_count": [256],
+    "npu_count": [128],
     "parallelism_strategy": {
         "dp": [1, 2, 4, 8, 16],
-        "mp": [1, 2, 4, 8, 16],
-        "sp": [1, 2, 4, 8, 16],
-        "pp": [1, 2, 4, 8, 16],
+        "mp": [1, 2, 4, 8, 16, 32, 64, 128],
+        "sp": [1, 2, 4, 8, 16, 32, 64, 128],
+        "pp": [1, 2, 4, 8, 16, 32],
         "FSDP": [0, 1]
+    },
+    "constraints": {
+        "npu_constraint": "dp * mp * sp * pp = npu_count"
     }
 }

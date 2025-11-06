@@ -60,13 +60,13 @@ class BaseOptimizer(ABC):
         self.save_dir = save_dir
         
         # Result tracking
-        self.configs: List[Tuple] = []  # Evaluated configurations
+        self.configs: List[Dict] = []  # Evaluated configurations (now dicts)
         self.scores: List[float] = []   # Execution times (lower is better)
         self.iteration_times: List[float] = []  # Time per iteration
         self.history: List[Dict] = []  # Detailed history
         
         # Best tracking
-        self.best_config: Optional[Tuple] = None
+        self.best_config: Optional[Dict] = None
         self.best_score: float = float('inf')
         self.best_iteration: int = -1
         
@@ -90,7 +90,7 @@ class BaseOptimizer(ABC):
         pass
     
     @abstractmethod
-    def optimize_step(self) -> Tuple[Optional[Tuple], Optional[float]]:
+    def optimize_step(self) -> Tuple[Optional[Dict], Optional[float]]:
         """
         Execute one optimization iteration.
         
@@ -100,7 +100,7 @@ class BaseOptimizer(ABC):
         pass
     
     @abstractmethod
-    def run(self) -> Tuple[Optional[Tuple], pd.DataFrame]:
+    def run(self) -> Tuple[Optional[Dict], pd.DataFrame]:
         """
         Run full optimization loop.
         
@@ -109,12 +109,12 @@ class BaseOptimizer(ABC):
         """
         pass
     
-    def evaluate_config(self, config: Tuple, verbose: bool = False) -> Optional[float]:
+    def evaluate_config(self, config: Dict, verbose: bool = False) -> Optional[float]:
         """
         Evaluate a single configuration.
         
         Args:
-            config: Configuration tuple (dp, mp, sp, pp, sharded)
+            config: Configuration dictionary (e.g., {'dp': 2, 'mp': 4, ...})
             verbose: Whether to print evaluation details
         
         Returns:
@@ -148,7 +148,7 @@ class BaseOptimizer(ABC):
                 print(f"    ⚠️  Error: {e}")
             return None
     
-    def get_best_config(self) -> Tuple[Optional[Tuple], float]:
+    def get_best_config(self) -> Tuple[Optional[Dict], float]:
         """
         Get the best configuration found so far.
         
@@ -162,24 +162,21 @@ class BaseOptimizer(ABC):
         Get optimization history as DataFrame.
         
         Returns:
-            DataFrame with columns: iteration, dp, mp, sp, pp, sharded, exec_time
+            DataFrame with columns: iteration, config parameters, exec_time
         """
         if not self.configs:
             return pd.DataFrame()
         
         history = []
         for i, (config, score) in enumerate(zip(self.configs, self.scores)):
-            dp, mp, sp, pp, sharded = config
-            history.append({
-                'iteration': i + 1,
-                'dp': dp,
-                'mp': mp,
-                'sp': sp,
-                'pp': pp,
-                'sharded': sharded,
+            # Create record with iteration, all config params, and score
+            record = {'iteration': i + 1}
+            record.update(config)  # Add all configuration parameters
+            record.update({
                 'exec_time_seconds': score,
                 'best_so_far': min(self.scores[:i+1])
             })
+            history.append(record)
         
         return pd.DataFrame(history)
     
@@ -239,20 +236,28 @@ class BaseOptimizer(ABC):
         
         # Best configuration
         if self.best_config:
-            dp, mp, sp, pp, sharded = self.best_config
             print(f"\n🏆 BEST CONFIGURATION:")
-            print(f"   dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")
+            # Print all parameters in the config
+            config_str = ", ".join([f"{k}={v}" for k, v in self.best_config.items()])
+            print(f"   {config_str}")
             print(f"   Execution time: {self.best_score:.2f}s")
             print(f"   Found at iteration: {self.best_iteration + 1}")
             
-            # Configuration profile
-            total_npus = dp * mp * sp * pp
-            print(f"\n📋 CONFIGURATION PROFILE:")
-            print(f"   Total NPUs: {total_npus}/{self.simulation_runner.num_npus}")
-            print(f"   DP/MP ratio: {dp/mp:.2f}")
-            print(f"   SP enabled: {'Yes' if sp > 1 else 'No'}")
-            print(f"   PP enabled: {'Yes' if pp > 1 else 'No'}")
-            print(f"   FSDP enabled: {'Yes' if sharded else 'No'}")
+            # Configuration profile (only if parallelism params exist)
+            if all(k in self.best_config for k in ['dp', 'mp', 'sp', 'pp']):
+                dp = self.best_config['dp']
+                mp = self.best_config['mp']
+                sp = self.best_config['sp']
+                pp = self.best_config['pp']
+                sharded = self.best_config.get('sharded', False)
+                
+                total_npus = dp * mp * sp * pp
+                print(f"\n📋 CONFIGURATION PROFILE:")
+                print(f"   Total NPUs: {total_npus}/{self.simulation_runner.num_npus}")
+                print(f"   DP/MP ratio: {dp/mp:.2f}")
+                print(f"   SP enabled: {'Yes' if sp > 1 else 'No'}")
+                print(f"   PP enabled: {'Yes' if pp > 1 else 'No'}")
+                print(f"   FSDP enabled: {'Yes' if sharded else 'No'}")
         
         # Timing
         if self.start_time:
