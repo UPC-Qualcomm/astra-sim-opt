@@ -1,0 +1,21 @@
+
+def extract_execution_time(log_file):
+    """Extract wall time (in cycles) from AstraSim log file."""
+    try:
+        with open(log_file, 'r') as f:
+            content = f.read()
+        
+        # Look for wall time in cycles from any system (use sys[0] as reference)
+        import re
+        match = re.search(r'\[statistics\] \[info\] sys\[0\], Wall time: (\d+)', content)
+        if match:
+            cycles = int(match.group(1))
+            # Convert cycles to seconds assuming 1GHz frequency
+            # (you can adjust this frequency based on your simulation setup)
+            time_seconds = cycles / 1e9
+            return time_seconds
+        
+        return None
+    except Exception as e:
+        print(f"Error extracting execution time: {e}")
+        return None

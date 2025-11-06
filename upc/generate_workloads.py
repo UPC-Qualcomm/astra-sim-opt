@@ -29,7 +29,7 @@ def get_design_space(
             for ssharded in sharded:
                 for ppp in pp:
                     ssp = num_npus // (ddp * mmp * ppp)
-                    if ssp < 1 or ssp > max_ssp:
+                    if ssp < 1 or ssp > max_ssp or (num_npus != (ddp * mmp * ssp * ppp)):
                         continue
                     design_space.append((ddp, mmp, ssp, ppp, ssharded))
     return design_space
@@ -105,7 +105,7 @@ class Model(Enum):
         elif model == Model.GPT_30B:
             return [50257, 6144, 6144, 24576, [2048], 2048, 32, 48]
         elif model == Model.GPT_40B:
-            return [50257, 8192, 8192, 32768, 2048, 2048, 32, 32]
+            return [50257, 8192, 8192, 32768, [2048], 2048, 32, 32]
         elif model == Model.LLaMA_3_70B:
             return [30522, 30522, 8192, 32768, [2048], 2048, 64, 80]
         elif model == Model.Model_100B:
