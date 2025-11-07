@@ -7,8 +7,8 @@ PACKET_PAYLOAD_SIZE 1500
 
 # 16-node ring topology
 TOPOLOGY_FILE /home/xavid/feina/astra-sim/upc/configuration/ns3/FoldedClos_16_topology.txt
-FLOW_FILE /home/xavid/feina/astra-sim/upc/configuration/ns3/output/flow.txt
-TRACE_FILE /home/xavid/feina/astra-sim/upc/configuration/ns3/output/trace16.txt
+FLOW_FILE /home/xavid/feina/astra-sim/upc/configuration/ns3/flow.txt
+TRACE_FILE /home/xavid/feina/astra-sim/upc/configuration/ns3/trace16.txt
 TRACE_OUTPUT_FILE /home/xavid/feina/astra-sim/upc/configuration/ns3/output/astrasim_16nodes_ring.tr
 FCT_OUTPUT_FILE /home/xavid/feina/astra-sim/upc/configuration/ns3/output/astrasim_16nodes_ring_fct.txt
 PFC_OUTPUT_FILE /home/xavid/feina/astra-sim/upc/configuration/ns3/output/astrasim_16nodes_ring_pfc.txt
