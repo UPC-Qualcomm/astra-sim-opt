@@ -65,7 +65,8 @@ def main():
         num_npus=NUM_NPUS,
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_RS",
-        verbose=False
+        verbose=False,
+        keep_top_k=5
     )
     print(f"   Using: {sim_runner}")
     

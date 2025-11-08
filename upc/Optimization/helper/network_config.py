@@ -37,7 +37,6 @@ class NetworkConfig:
         "2D_Torus",
         "3D_Torus",
         "Dragonfly",
-        "DGX1"
     ]
     
     def __init__(self, network_name: str = "FoldedClos", config_dir: str = "./configuration"):

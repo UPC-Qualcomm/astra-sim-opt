@@ -89,7 +89,8 @@ def main():
         acquisition=acquisition,
         budget=BUDGET,
         init_samples=INIT_SAMPLES,
-        verbose=True
+        verbose=True,
+        keep_top_k=5
     )
     print(f"   Using: {optimizer}")
     

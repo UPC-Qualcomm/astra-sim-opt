@@ -56,7 +56,8 @@ class RandomOptimizer(BaseOptimizer):
         simulation_runner,
         budget: int = 30,
         verbose: bool = True,
-        save_dir: str = "."
+        save_dir: str = ".",
+        keep_top_k: int = -1
     ):
         """
         Initialize Random Search optimizer.
@@ -68,6 +69,7 @@ class RandomOptimizer(BaseOptimizer):
             budget: Total number of evaluations
             verbose: Whether to print progress
             save_dir: Directory to save results
+            keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
         """
         # Call parent constructor with init_samples = 0
         # (we don't need separate init phase for random search)
@@ -78,7 +80,8 @@ class RandomOptimizer(BaseOptimizer):
             budget=budget,
             init_samples=0,  # No separate initialization for random search
             verbose=verbose,
-            save_dir=save_dir
+            save_dir=save_dir,
+            keep_top_k=keep_top_k
         )
     
     def initialize(self) -> bool:

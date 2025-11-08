@@ -142,15 +142,17 @@ class SimulationRunner:
                     print(f"Removing: {dir_path}")
                 shutil.rmtree(dir_path)
     
-    def run_simulation(self, config: Dict) -> Optional[float]:
+    def run_simulation(self, config: Dict, return_paths: bool = False):
         """
         Run simulation for a configuration.
         
         Args:
             config: Configuration dictionary with dp, mp, sp, pp, sharded
+            return_paths: If True, return (exec_time, file_paths) tuple
         
         Returns:
-            Execution time in seconds, or None if failed
+            If return_paths=False: Execution time in seconds, or None if failed
+            If return_paths=True: (exec_time, file_paths_dict) tuple, or None if failed
         """
         # Extract values from config dictionary
         dp = config['dp']
@@ -206,7 +208,17 @@ class SimulationRunner:
             if self.verbose:
                 print(f"    ✓ Execution time: {exec_time:.2f}s")
             
-            return exec_time
+            # 5. Return with file paths if requested
+            if return_paths:
+                # Get base filename for output files
+                config_basename = os.path.basename(workload_file)
+                file_paths = {
+                    'workload': workload_file,  # Base path without numbered extension
+                    'output_pattern': os.path.join(self.output_dir, config_basename)  # Base path for output files
+                }
+                return exec_time, file_paths
+            else:
+                return exec_time
             
         except Exception as e:
             if self.verbose:

@@ -37,7 +37,8 @@ class BaseOptimizer(ABC):
         budget: int = 30,
         init_samples: int = 5,
         verbose: bool = True,
-        save_dir: str = "."
+        save_dir: str = ".",
+        keep_top_k: int = -1
     ):
         """
         Initialize base optimizer.
@@ -50,6 +51,7 @@ class BaseOptimizer(ABC):
             init_samples: Number of initial random samples
             verbose: Whether to print progress
             save_dir: Directory to save results
+            keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
         """
         self.search_space = search_space
         self.sampler = sampler
@@ -58,12 +60,14 @@ class BaseOptimizer(ABC):
         self.init_samples = init_samples
         self.verbose = verbose
         self.save_dir = save_dir
+        self.keep_top_k = keep_top_k
         
         # Result tracking
         self.configs: List[Dict] = []  # Evaluated configurations (now dicts)
         self.scores: List[float] = []   # Execution times (lower is better)
         self.iteration_times: List[float] = []  # Time per iteration
         self.history: List[Dict] = []  # Detailed history
+        self.file_paths: List[Dict[str, str]] = []  # Track workload and output files
         
         # Best tracking
         self.best_config: Optional[Dict] = None
@@ -121,12 +125,20 @@ class BaseOptimizer(ABC):
             Execution time in seconds, or None if evaluation failed
         """
         try:
-            exec_time = self.simulation_runner.run_simulation(config)
+            # Run simulation and get execution time + file paths
+            result = self.simulation_runner.run_simulation(config, return_paths=True)
             
-            if exec_time is not None:
+            if result is not None:
+                if isinstance(result, tuple):
+                    exec_time, file_paths = result
+                else:
+                    exec_time = result
+                    file_paths = {}
+                
                 # Record results
                 self.configs.append(config)
                 self.scores.append(exec_time)
+                self.file_paths.append(file_paths)
                 
                 # Update best
                 if exec_time < self.best_score:
@@ -137,13 +149,21 @@ class BaseOptimizer(ABC):
                     if self.verbose and verbose:
                         print(f"    🏆 NEW BEST! Time: {exec_time:.2f}s")
                 
+                # Cleanup if needed
+                if self.keep_top_k >= 0:
+                    self._cleanup_files()
+                
                 return exec_time
             else:
+                # Track empty file paths for failed runs
+                self.file_paths.append({})
                 if verbose:
                     print("    ⚠️  Evaluation failed")
                 return None
                 
         except Exception as e:
+            # Track empty file paths for failed runs
+            self.file_paths.append({})
             if verbose:
                 print(f"    ⚠️  Error: {e}")
             return None
@@ -282,6 +302,78 @@ class BaseOptimizer(ABC):
             }.get(level, '')
             
             print(f"{prefix}{message}")
+    
+    def _cleanup_files(self):
+        """
+        Clean up files, keeping only the top K results.
+        
+        Removes workload and simulation output files for configurations
+        that are not in the top K performers. CSV results are always kept.
+        """
+        import glob
+        
+        if self.keep_top_k < 0:
+            # No cleanup
+            if self.verbose:
+                self._log(f"Cleanup disabled (keep_top_k={self.keep_top_k})", "info")
+            return
+        
+        if len(self.scores) <= self.keep_top_k:
+            # Not enough evaluations yet
+            if self.verbose:
+                self._log(f"Cleanup skipped: only {len(self.scores)} evaluations, need > {self.keep_top_k}", "info")
+            return
+        
+        # Find indices of top K configurations (lowest scores)
+        top_k_indices = sorted(range(len(self.scores)), key=lambda i: self.scores[i])[:self.keep_top_k]
+        top_k_set = set(top_k_indices)
+        
+        if self.verbose:
+            self._log(f"Cleanup: Keeping top {self.keep_top_k} out of {len(self.scores)} evaluations", "info")
+        
+        # Clean up files not in top K
+        files_removed = 0
+        output_files_removed = 0
+        for i, file_paths in enumerate(self.file_paths):
+            if i not in top_k_set and file_paths:
+                # Remove all workload files matching the pattern (for multi-NPU setups)
+                # file_paths['workload'] is the base path without numbered extension
+                # e.g., "/path/to/4_8_2_1_1.seq_2048.batch_2048"
+                # We need to remove 4_8_2_1_1.seq_2048.batch_2048.0.et, .1.et, .2.et, etc.
+                if 'workload' in file_paths:
+                    workload_pattern = file_paths['workload'] + ".*"
+                    matching_files = glob.glob(workload_pattern)
+                    for workload_file in matching_files:
+                        if os.path.exists(workload_file):
+                            try:
+                                os.remove(workload_file)
+                                files_removed += 1
+                            except Exception as e:
+                                if self.verbose:
+                                    self._log(f"Warning: Could not remove {workload_file}: {e}", "warning")
+                    
+                    if self.verbose and matching_files:
+                        self._log(f"  Removed {len(matching_files)} workload files: {os.path.basename(file_paths['workload'])}.*.et", "info")
+                
+                # Remove simulation output files (all files with the config basename)
+                # e.g., 4_8_2_1_1.seq_2048.batch_2048.log, .csv, etc.
+                if 'output_pattern' in file_paths:
+                    output_pattern = file_paths['output_pattern'] + "*"
+                    matching_outputs = glob.glob(output_pattern)
+                    for output_file in matching_outputs:
+                        if os.path.exists(output_file):
+                            try:
+                                os.remove(output_file)
+                                output_files_removed += 1
+                            except Exception as e:
+                                if self.verbose:
+                                    self._log(f"Warning: Could not remove {output_file}: {e}", "warning")
+                    
+                    if self.verbose and matching_outputs:
+                        self._log(f"  Removed {len(matching_outputs)} output files: {os.path.basename(file_paths['output_pattern'])}*", "info")
+        
+        if self.verbose:
+            self._log(f"Cleanup complete: Removed {files_removed} workload files, {output_files_removed} output files", "info")
     
     def __repr__(self) -> str:
         """String representation."""

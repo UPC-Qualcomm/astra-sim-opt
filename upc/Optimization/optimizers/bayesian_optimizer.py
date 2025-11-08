@@ -85,7 +85,8 @@ class BayesianOptimizer(BaseOptimizer):
         gp_alpha: float = 1e-6,
         gp_n_restarts: int = 5,
         verbose: bool = True,
-        save_dir: str = "."
+        save_dir: str = ".",
+        keep_top_k: int = -1
     ):
         """
         Initialize Bayesian Optimizer.
@@ -103,6 +104,7 @@ class BayesianOptimizer(BaseOptimizer):
             gp_n_restarts: Number of GP hyperparameter optimization restarts
             verbose: Whether to print progress
             save_dir: Directory to save results
+            keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
         """
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for Bayesian Optimization. "
@@ -115,7 +117,8 @@ class BayesianOptimizer(BaseOptimizer):
             budget=budget,
             init_samples=init_samples,
             verbose=verbose,
-            save_dir=save_dir
+            save_dir=save_dir,
+            keep_top_k=keep_top_k
         )
         
         self.kernel = kernel
