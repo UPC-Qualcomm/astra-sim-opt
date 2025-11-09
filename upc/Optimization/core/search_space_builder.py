@@ -90,7 +90,7 @@ class SearchSpaceBuilder:
         # Define parameter categories
         categories = {
             'parallelism_strategy': self._parse_parallelism_strategy,
-            'collective': self._parse_collective,
+            'system': self._parse_system,
             'network': self._parse_network,
             'hardware': self._parse_hardware,
             'model': self._parse_model,
@@ -122,7 +122,7 @@ class SearchSpaceBuilder:
         if 'FSDP' in params:
             self.parameters['sharded'] = [bool(x) for x in params['FSDP']]
     
-    def _parse_collective(self, params: Dict) -> None:
+    def _parse_system(self, params: Dict) -> None:
         """Parse collective communication parameters."""
         if 'scheduling_policy' in params:
             self.parameters['scheduling_policy'] = params['scheduling_policy']

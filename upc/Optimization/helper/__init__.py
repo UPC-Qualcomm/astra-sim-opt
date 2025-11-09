@@ -7,6 +7,7 @@ from . import workload_generator
 from . import output_parser
 from .network_config import NetworkConfig
 from . import config_parser
+from . import config_generator
 
 __all__ = [
     'config_to_tuple',
@@ -15,4 +16,5 @@ __all__ = [
     'output_parser',
     'NetworkConfig',
     'config_parser',
+    'config_generator',
 ]
