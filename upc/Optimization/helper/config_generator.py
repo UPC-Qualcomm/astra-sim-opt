@@ -22,7 +22,6 @@ import json
 import yaml
 import os
 from typing import Dict, Any
-from datetime import datetime
 
 
 # Get the Optimization directory (parent of helper directory)
@@ -31,6 +30,19 @@ _OPTIMIZATION_DIR = os.path.dirname(_HELPER_DIR)
 
 # Config output directory (absolute path)
 CONFIG_OUTPUT_DIR = os.path.join(_OPTIMIZATION_DIR, "temp", "config")
+
+# Caches for config paths - reuse configs when parameters don't change
+_SYSTEM_CONFIG_CACHE = {}  # Maps config hash to file path
+_NETWORK_CONFIG_CACHE = {}  # Maps config hash to file path
+_MEMORY_CONFIG_CACHE = {}  # Maps config hash to file path
+
+
+def _hash_config(config_dict: Dict[str, Any]) -> str:
+    """Create a hash of config dict for caching purposes."""
+    import hashlib
+    # Convert dict to sorted JSON string for consistent hashing
+    config_str = json.dumps(config_dict, sort_keys=True)
+    return hashlib.md5(config_str.encode()).hexdigest()[:16]
 
 
 # Default configurations
@@ -74,6 +86,7 @@ def generate_system_config(config: Dict[str, Any]) -> str:
     """
     Generate system configuration JSON file.
     
+    Caches and reuses configs when parameters don't change.
     If config contains sys_* parameters, they override defaults.
     Otherwise, uses DEFAULT_SYSTEM_CONFIG.
     
@@ -81,8 +94,10 @@ def generate_system_config(config: Dict[str, Any]) -> str:
         config: Configuration dictionary (may contain sys_* prefixed parameters)
     
     Returns:
-        Absolute path to generated config file (with unique timestamp)
+        Absolute path to config file (reused if same parameters)
     """
+    global _SYSTEM_CONFIG_CACHE
+    
     # Start with defaults
     system_config = DEFAULT_SYSTEM_CONFIG.copy()
     
@@ -103,16 +118,25 @@ def generate_system_config(config: Dict[str, Any]) -> str:
         if config_key in config:
             system_config[system_key] = config[config_key]
     
+    # Check cache - reuse if same config exists
+    config_hash = _hash_config(system_config)
+    if config_hash in _SYSTEM_CONFIG_CACHE:
+        cached_path = _SYSTEM_CONFIG_CACHE[config_hash]
+        if os.path.exists(cached_path):
+            return cached_path
+    
     # Create directory if needed
     os.makedirs(CONFIG_OUTPUT_DIR, exist_ok=True)
     
-    # Generate unique filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    output_path = os.path.join(CONFIG_OUTPUT_DIR, f"system_{timestamp}.json")
+    # Generate filename with hash (not timestamp)
+    output_path = os.path.join(CONFIG_OUTPUT_DIR, f"system_{config_hash}.json")
     
     # Write JSON file
     with open(output_path, 'w') as f:
         json.dump(system_config, f, indent=4)
+    
+    # Cache the path
+    _SYSTEM_CONFIG_CACHE[config_hash] = output_path
     
     return output_path
 
@@ -121,6 +145,7 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     """
     Generate network configuration YAML file.
     
+    Caches and reuses configs when parameters don't change.
     If config contains net_* parameters, they override defaults.
     Otherwise, uses DEFAULT_NETWORK_CONFIG.
     
@@ -128,8 +153,10 @@ def generate_network_config(config: Dict[str, Any]) -> str:
         config: Configuration dictionary (may contain net_* prefixed parameters)
     
     Returns:
-        Absolute path to generated config file (with unique timestamp)
+        Absolute path to config file (reused if same parameters)
     """
+    global _NETWORK_CONFIG_CACHE
+    
     # Start with defaults
     network_config = DEFAULT_NETWORK_CONFIG.copy()
     
@@ -166,16 +193,25 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     if 'net_header_size' in config:
         network_config['header_size'] = config['net_header_size']
     
+    # Check cache - reuse if same config exists
+    config_hash = _hash_config(network_config)
+    if config_hash in _NETWORK_CONFIG_CACHE:
+        cached_path = _NETWORK_CONFIG_CACHE[config_hash]
+        if os.path.exists(cached_path):
+            return cached_path
+    
     # Create directory if needed
     os.makedirs(CONFIG_OUTPUT_DIR, exist_ok=True)
     
-    # Generate unique filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    output_path = os.path.join(CONFIG_OUTPUT_DIR, f"network_{timestamp}.yml")
+    # Generate filename with hash (not timestamp)
+    output_path = os.path.join(CONFIG_OUTPUT_DIR, f"network_{config_hash}.yml")
     
     # Write YAML file with flow style for lists (matches FoldedClos.yml format)
     with open(output_path, 'w') as f:
         yaml.dump(network_config, f, default_flow_style=None)
+    
+    # Cache the path
+    _NETWORK_CONFIG_CACHE[config_hash] = output_path
     
     return output_path
 
@@ -184,6 +220,7 @@ def generate_memory_config(config: Dict[str, Any]) -> str:
     """
     Generate memory configuration JSON file.
     
+    Caches and reuses configs when parameters don't change.
     If config contains mem_* parameters, they override defaults.
     Otherwise, uses DEFAULT_MEMORY_CONFIG.
     
@@ -191,8 +228,10 @@ def generate_memory_config(config: Dict[str, Any]) -> str:
         config: Configuration dictionary (may contain mem_* prefixed parameters)
     
     Returns:
-        Absolute path to generated config file (with unique timestamp)
+        Absolute path to config file (reused if same parameters)
     """
+    global _MEMORY_CONFIG_CACHE
+    
     # Start with defaults
     memory_config = DEFAULT_MEMORY_CONFIG.copy()
     
@@ -200,16 +239,25 @@ def generate_memory_config(config: Dict[str, Any]) -> str:
     if 'mem_memory-type' in config:
         memory_config['memory-type'] = config['mem_memory-type']
     
+    # Check cache - reuse if same config exists
+    config_hash = _hash_config(memory_config)
+    if config_hash in _MEMORY_CONFIG_CACHE:
+        cached_path = _MEMORY_CONFIG_CACHE[config_hash]
+        if os.path.exists(cached_path):
+            return cached_path
+    
     # Create directory if needed
     os.makedirs(CONFIG_OUTPUT_DIR, exist_ok=True)
     
-    # Generate unique filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    output_path = os.path.join(CONFIG_OUTPUT_DIR, f"memory_{timestamp}.json")
+    # Generate filename with hash (not timestamp)
+    output_path = os.path.join(CONFIG_OUTPUT_DIR, f"memory_{config_hash}.json")
     
     # Write JSON file
     with open(output_path, 'w') as f:
         json.dump(memory_config, f, indent=4)
+    
+    # Cache the path
+    _MEMORY_CONFIG_CACHE[config_hash] = output_path
     
     return output_path
 
