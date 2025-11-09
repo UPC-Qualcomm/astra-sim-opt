@@ -68,6 +68,7 @@ class BaseOptimizer(ABC):
         self.iteration_times: List[float] = []  # Time per iteration
         self.history: List[Dict] = []  # Detailed history
         self.file_paths: List[Dict[str, str]] = []  # Track workload and output files
+        self.metadata: List[Dict] = []  # Track simulation metadata (model, network, hardware params)
         
         # Best tracking
         self.best_config: Optional[Dict] = None
@@ -125,20 +126,26 @@ class BaseOptimizer(ABC):
             Execution time in seconds, or None if evaluation failed
         """
         try:
-            # Run simulation and get execution time + file paths
+            # Run simulation and get execution time + file paths + metadata
             result = self.simulation_runner.run_simulation(config, return_paths=True)
             
             if result is not None:
-                if isinstance(result, tuple):
+                if isinstance(result, tuple) and len(result) == 3:
+                    exec_time, file_paths, metadata = result
+                elif isinstance(result, tuple) and len(result) == 2:
+                    # Backward compatibility
                     exec_time, file_paths = result
+                    metadata = {}
                 else:
                     exec_time = result
                     file_paths = {}
+                    metadata = {}
                 
                 # Record results
                 self.configs.append(config)
                 self.scores.append(exec_time)
                 self.file_paths.append(file_paths)
+                self.metadata.append(metadata)
                 
                 # Update best
                 if exec_time < self.best_score:
@@ -155,15 +162,17 @@ class BaseOptimizer(ABC):
                 
                 return exec_time
             else:
-                # Track empty file paths for failed runs
+                # Track empty file paths and metadata for failed runs
                 self.file_paths.append({})
+                self.metadata.append({})
                 if verbose:
                     print("    ⚠️  Evaluation failed")
                 return None
                 
         except Exception as e:
-            # Track empty file paths for failed runs
+            # Track empty file paths and metadata for failed runs
             self.file_paths.append({})
+            self.metadata.append({})
             if verbose:
                 print(f"    ⚠️  Error: {e}")
             return None
@@ -182,20 +191,26 @@ class BaseOptimizer(ABC):
         Get optimization history as DataFrame.
         
         Returns:
-            DataFrame with columns: iteration, config parameters, exec_time
+            DataFrame with columns: iteration, config parameters, exec_time, metadata
         """
         if not self.configs:
             return pd.DataFrame()
         
         history = []
-        for i, (config, score) in enumerate(zip(self.configs, self.scores)):
-            # Create record with iteration, all config params, and score
+        for i, (config, score, metadata) in enumerate(zip(self.configs, self.scores, self.metadata)):
+            # Create record with iteration
             record = {'iteration': i + 1}
-            record.update(config)  # Add all configuration parameters
-            record.update({
-                'exec_time_seconds': score,
-                'best_so_far': min(self.scores[:i+1])
-            })
+            
+            # Add optimized configuration parameters (parallelism strategy)
+            record.update(config)
+            
+            # Add results immediately after optimization parameters
+            record['exec_time_seconds'] = score
+            record['best_so_far'] = min(self.scores[:i+1])
+            
+            # Add simulation metadata (model, network, hardware parameters)
+            record.update(metadata)
+            
             history.append(record)
         
         return pd.DataFrame(history)

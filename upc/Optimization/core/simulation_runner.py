@@ -19,7 +19,7 @@ from run_astrasim import run_astrasim
 
 # Import helper modules
 sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
-from ..helper import workload_generator, output_parser, NetworkConfig
+from ..helper import workload_generator, output_parser, NetworkConfig, config_parser
 
 
 class SimulationRunner:
@@ -148,11 +148,11 @@ class SimulationRunner:
         
         Args:
             config: Configuration dictionary with dp, mp, sp, pp, sharded
-            return_paths: If True, return (exec_time, file_paths) tuple
+            return_paths: If True, return (exec_time, file_paths, metadata) tuple
         
         Returns:
             If return_paths=False: Execution time in seconds, or None if failed
-            If return_paths=True: (exec_time, file_paths_dict) tuple, or None if failed
+            If return_paths=True: (exec_time, file_paths_dict, metadata_dict) tuple, or None if failed
         """
         # Extract values from config dictionary
         dp = config['dp']
@@ -208,7 +208,7 @@ class SimulationRunner:
             if self.verbose:
                 print(f"    ✓ Execution time: {exec_time:.2f}s")
             
-            # 5. Return with file paths if requested
+            # 5. Return with file paths and metadata if requested
             if return_paths:
                 # Get base filename for output files
                 config_basename = os.path.basename(workload_file)
@@ -216,7 +216,11 @@ class SimulationRunner:
                     'workload': workload_file,  # Base path without numbered extension
                     'output_pattern': os.path.join(self.output_dir, config_basename)  # Base path for output files
                 }
-                return exec_time, file_paths
+                
+                # Collect metadata about the actual simulation configuration
+                metadata = self._get_simulation_metadata()
+                
+                return exec_time, file_paths, metadata
             else:
                 return exec_time
             
@@ -224,6 +228,51 @@ class SimulationRunner:
             if self.verbose:
                 print(f"    ⚠️  Error: {e}")
             return None
+    
+    def _get_simulation_metadata(self) -> Dict:
+        """
+        Get metadata about the simulation configuration.
+        
+        Returns:
+            Dictionary with model, network, hardware, and simulation parameters
+        """
+        # Get model parameters
+        din, dout, dmodel, dff, batch, seq, head, num_stacks = workload_generator.Model.get_model_params(
+            workload_generator.Model(self.model_num)
+        )
+        
+        metadata = {
+            # Model information
+            'model_name': self.model_name,
+            'model_num': self.model_num,
+            'vocab_size_in': din,
+            'vocab_size_out': dout,
+            'hidden_size': dmodel,
+            'ffn_hidden_size': dff,
+            'batch_size': batch[0] if isinstance(batch, list) else batch,
+            'sequence_length': seq,
+            'num_attention_heads': head,
+            'num_layers': num_stacks,
+            
+            # Infrastructure
+            'num_npus': self.num_npus,
+            'sim_type': self.sim_type,
+        }
+        
+        # Parse configuration files and add all parameters
+        # Convert relative paths to absolute paths
+        system_path = self.system_config if os.path.isabs(self.system_config) else os.path.join(self.base_dir, self.system_config)
+        network_path = self.network_config if os.path.isabs(self.network_config) else os.path.join(self.base_dir, self.network_config)
+        memory_path = self.memory_config if os.path.isabs(self.memory_config) else os.path.join(self.base_dir, self.memory_config)
+        
+        config_params = config_parser.parse_all_configs(
+            system_path,
+            network_path,
+            memory_path
+        )
+        metadata.update(config_params)
+        
+        return metadata
     
     def _find_workload_file(self, config_name: str) -> Optional[str]:
         """
