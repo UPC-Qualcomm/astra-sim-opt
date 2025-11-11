@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from Optimization import (
     create_search_space,
-    LatinHypercubeSampler,
+    RandomSampler,
     SimulationRunner,
     MaternKernel,
     ExpectedImprovement,
@@ -25,9 +25,9 @@ def main():
     """Run basic Bayesian Optimization example."""
     
     # Configuration
-    MODEL_NUM = 19  # GPT_40B (Model enum value)
+    MODEL_NUM = 19 # GPT_70B (Model enum value)
     MODEL_NAME = "GPT_40B"
-    NUM_NPUS = 128
+    NUM_NPUS = 256
     NETWORK_NAME = "FoldedClos"
     BUDGET = 30
     INIT_SAMPLES = 5
@@ -57,7 +57,7 @@ def main():
     
     # 2. Choose sampler
     print("\n2. Creating sampler...")
-    sampler = LatinHypercubeSampler(seed=42)
+    sampler = RandomSampler(seed=42)
     print(f"   Using: {sampler}")
     
     # 3. Setup simulation runner
@@ -90,7 +90,10 @@ def main():
         budget=BUDGET,
         init_samples=INIT_SAMPLES,
         verbose=True,
-        keep_top_k=5
+        keep_top_k=5,
+        n_workers = 6,
+        batch_size= 12
+
     )
     print(f"   Using: {optimizer}")
     

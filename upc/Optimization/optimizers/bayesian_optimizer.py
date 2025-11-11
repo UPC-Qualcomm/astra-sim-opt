@@ -4,6 +4,10 @@ BayesianOptimizer: Bayesian Optimization using Gaussian Processes.
 Uses a Gaussian Process to model the objective function and an acquisition
 function to select the next point to evaluate. Efficiently explores the
 search space by balancing exploration and exploitation.
+
+Supports parallel evaluation when n_workers > 1:
+- Initial samples evaluated in parallel
+- BO iterations can use batch acquisition (selecting multiple points at once)
 """
 
 import sys
@@ -11,11 +15,13 @@ from typing import Tuple, Optional, List, Dict
 import pandas as pd
 import numpy as np
 import time
+from multiprocessing import Pool
+from functools import partial
 
 # Add parent directory to path for imports
 sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
-from ..core import BaseOptimizer, SearchSpaceBuilder
-from ..helper import config_to_tuple, tuple_to_config
+from ..core import BaseOptimizer
+from ..helper import config_to_tuple, evaluate_config_worker
 
 # Check for sklearn availability
 try:
@@ -81,6 +87,9 @@ class BayesianOptimizer(BaseOptimizer):
         acquisition,
         budget: int = 30,
         init_samples: int = 5,
+        n_workers: int = 1,
+        batch_size: Optional[int] = None,
+        batch_strategy: str = "greedy",
         exhaustive_threshold: int = 5000,
         gp_alpha: float = 1e-6,
         gp_n_restarts: int = 5,
@@ -99,6 +108,9 @@ class BayesianOptimizer(BaseOptimizer):
             acquisition: AcquisitionFunction instance (e.g., ExpectedImprovement)
             budget: Total number of evaluations
             init_samples: Number of initial random samples
+            n_workers: Number of parallel workers (1 = sequential, >1 = parallel)
+            batch_size: Batch size for parallel BO (default: 1 for sequential, 4 for parallel)
+            batch_strategy: Batch selection strategy ("greedy", "thompson", "penalization")
             exhaustive_threshold: Max design space size for exhaustive acquisition search
             gp_alpha: GP noise parameter (regularization)
             gp_n_restarts: Number of GP hyperparameter optimization restarts
@@ -127,16 +139,35 @@ class BayesianOptimizer(BaseOptimizer):
         self.gp_alpha = gp_alpha
         self.gp_n_restarts = gp_n_restarts
         
+        # Parallelization settings
+        self.n_workers = max(1, n_workers)
+        
+        # Batch settings for BO
+        if batch_size is None:
+            # Default: 1 for single-point BO, 4 for batch BO
+            self.batch_size = self.n_workers*2 if self.n_workers > 1 else 1
+        else:
+            self.batch_size = batch_size
+        
+        self.batch_strategy = batch_strategy
+        
         # GP model storage
         self.gps: List[GaussianProcessRegressor] = []
         self.ei_scores: List[float] = []  # Acquisition scores per iteration
         
         # Number of BO iterations (after initialization)
-        self.n_iterations = budget - init_samples
+        if self.batch_size > 1:
+            # Batch BO: divide remaining budget by batch size
+            self.n_iterations = (budget - init_samples + self.batch_size - 1) // self.batch_size
+        else:
+            # Sequential BO: one config per iteration
+            self.n_iterations = budget - init_samples
     
     def initialize(self) -> bool:
         """
         Initialize with random samples.
+        
+        Uses parallel evaluation if n_workers > 1.
         
         Returns:
             True if initialization successful, False otherwise
@@ -151,6 +182,10 @@ class BayesianOptimizer(BaseOptimizer):
             print(f"Kernel: {self.kernel}")
             print(f"Acquisition: {self.acquisition}")
             print(f"Budget: {self.budget} evaluations ({self.init_samples} init + {self.n_iterations} BO)")
+            print(f"Workers: {self.n_workers}")
+            if self.batch_size > 1:
+                print(f"Batch size: {self.batch_size}")
+                print(f"Batch strategy: {self.batch_strategy}")
             print(f"Design space: {self.search_space.get_design_space_size()} configurations")
             print("="*70)
             
@@ -166,27 +201,14 @@ class BayesianOptimizer(BaseOptimizer):
             return False
         
         if self.verbose:
-            print(f"Sampling {self.init_samples} initial configurations...\n")
+            print(f"Sampling {self.init_samples} initial configurations...")
+            print(f"Evaluating with {self.n_workers} workers...\n")
         
         # Sample initial configurations
         init_configs = self.sampler.sample(design_space, self.init_samples)
         
-        # Evaluate initial configurations
-        for i, config in enumerate(init_configs):
-            self.current_iteration = i
-            
-            # Format configuration for display
-            config_str = ", ".join([f"{k}={v}" for k, v in config.items()])
-            
-            if self.verbose:
-                print(f"  [{i+1}/{self.init_samples}] Config: {config_str}")
-            
-            exec_time = self.evaluate_config(config, verbose=True)
-            
-            if exec_time is None:
-                if self.verbose:
-                    print("    ⚠️  Evaluation failed, skipping...\n")
-                continue
+        # Evaluate initial configurations using multiprocessing
+        self._evaluate_init_batched(init_configs)
         
         if not self.scores:
             self._log("All initial evaluations failed!", "error")
@@ -195,13 +217,38 @@ class BayesianOptimizer(BaseOptimizer):
         # Summary
         if self.verbose:
             best_idx = np.argmin(self.scores)
-            print(f"\nInitialization complete!")
+            print("\nInitialization complete!")
             print(f"  Successful: {len(self.scores)}/{self.init_samples}")
             print(f"  Best init time: {self.scores[best_idx]:.1f}s")
             print(f"  Mean time: {np.mean(self.scores):.1f}s")
             print(f"  Std Dev: {np.std(self.scores):.1f}s\n")
         
         return True
+    
+    
+    def _evaluate_init_batched(self, init_configs):
+        """Evaluate initial configs using multiprocessing."""
+        # Evaluate using multiprocessing Pool
+        with Pool(processes=self.n_workers) as pool:
+            eval_func = partial(evaluate_config_worker, 
+                              simulation_runner=self.simulation_runner)
+            results = pool.map(eval_func, init_configs)
+        
+        # Process results
+        for config, exec_time, file_paths, metadata in results:
+            if exec_time is not None:
+                self.configs.append(config)
+                self.scores.append(exec_time)
+                self.file_paths.append(file_paths)
+                self.metadata.append(metadata)
+                
+                if exec_time < self.best_score:
+                    self.best_score = exec_time
+                    self.best_config = config
+                    self.best_iteration = len(self.configs) - 1
+            else:
+                self.file_paths.append({})
+                self.metadata.append({})
     
     def optimize_step(self) -> Tuple[Optional[Dict], Optional[float]]:
         """
@@ -231,6 +278,8 @@ class BayesianOptimizer(BaseOptimizer):
         """
         Run full Bayesian Optimization.
         
+        Supports both sequential and batch parallel BO based on n_workers and batch_size.
+        
         Returns:
             (best_config, results_dataframe) tuple
         """
@@ -241,58 +290,11 @@ class BayesianOptimizer(BaseOptimizer):
             return None, pd.DataFrame()
         
         try:
-            # Bayesian Optimization loop
-            for iteration in range(self.n_iterations):
-                self.current_iteration = self.init_samples + iteration
-                
-                if self.verbose:
-                    print(f"\n{'='*70}")
-                    print(f"BO ITERATION {iteration + 1}/{self.n_iterations}")
-                    print(f"{'='*70}\n")
-                
-                # Fit GP
-                if self.verbose:
-                    print("-" * 70)
-                    print("STAGE 2: FITTING GAUSSIAN PROCESS")
-                    print("-" * 70)
-                
-                gp = self._fit_gp()
-                
-                if gp is None:
-                    self._log("GP fitting failed, stopping...", "error")
-                    break
-                
-                # Optimize acquisition
-                if self.verbose:
-                    print(f"\n{'-' * 70}")
-                    print("STAGE 3: ACQUISITION (Find Next Config)")
-                    print("-" * 70)
-                
-                next_config = self._optimize_acquisition(gp)
-                
-                if next_config is None:
-                    self._log("Acquisition optimization failed, stopping...", "error")
-                    break
-                
-                # Evaluate
-                if self.verbose:
-                    print(f"\n{'-' * 70}")
-                    print("STAGE 4: EVALUATION")
-                    print("-" * 70)
-                
-                # Format configuration for display
-                config_str = ", ".join([f"{k}={v}" for k, v in next_config.items()])
-                if self.verbose:
-                    print(f"Evaluating: {config_str}")
-                
-                exec_time = self.evaluate_config(next_config, verbose=True)
-                
-                if exec_time is None:
-                    if self.verbose:
-                        print("⚠️  Evaluation failed, continuing...\n")
-                else:
-                    if self.verbose:
-                        print(f"\nBest so far: {self.best_score:.2f}s\n")
+            # Choose BO loop strategy based on batch size
+            if self.batch_size > 1:
+                self._run_batch_bo()
+            else:
+                self._run_sequential_bo()
             
             # Print summary
             if self.verbose:
@@ -311,6 +313,129 @@ class BayesianOptimizer(BaseOptimizer):
             self._log("Saving intermediate results...", "info")
             self.save_results()
             return self.best_config, self.get_history()
+    
+    def _run_sequential_bo(self):
+        """Run sequential Bayesian Optimization (one config at a time)."""
+        for iteration in range(self.n_iterations):
+            self.current_iteration = self.init_samples + iteration
+            
+            if self.verbose:
+                print(f"\n{'='*70}")
+                print(f"BO ITERATION {iteration + 1}/{self.n_iterations}")
+                print(f"{'='*70}\n")
+            
+            # Fit GP
+            if self.verbose:
+                print("-" * 70)
+                print("STAGE 2: FITTING GAUSSIAN PROCESS")
+                print("-" * 70)
+            
+            gp = self._fit_gp()
+            
+            if gp is None:
+                self._log("GP fitting failed, stopping...", "error")
+                break
+            
+            # Optimize acquisition
+            if self.verbose:
+                print(f"\n{'-' * 70}")
+                print("STAGE 3: ACQUISITION (Find Next Config)")
+                print("-" * 70)
+            
+            next_config = self._optimize_acquisition(gp)
+            
+            if next_config is None:
+                self._log("Acquisition optimization failed, stopping...", "error")
+                break
+            
+            # Evaluate
+            if self.verbose:
+                print(f"\n{'-' * 70}")
+                print("STAGE 4: EVALUATION")
+                print("-" * 70)
+            
+            # Format configuration for display
+            config_str = ", ".join([f"{k}={v}" for k, v in next_config.items()])
+            if self.verbose:
+                print(f"Evaluating: {config_str}")
+            
+            exec_time = self.evaluate_config(next_config, verbose=True)
+            
+            if exec_time is None:
+                if self.verbose:
+                    print("⚠️  Evaluation failed, continuing...\n")
+            else:
+                if self.verbose:
+                    print(f"\nBest so far: {self.best_score:.2f}s\n")
+    
+    def _run_batch_bo(self):
+        """Run batch Bayesian Optimization (multiple configs per iteration)."""
+        for iteration in range(self.n_iterations):
+            if self.verbose:
+                print("-"*70)
+                print(f"BO ITERATION {iteration + 1}/{self.n_iterations}")
+                print("-"*70)
+            
+            # Calculate remaining budget for this iteration
+            evaluations_done = len(self.configs)
+            remaining_budget = self.budget - evaluations_done
+            
+            if remaining_budget <= 0:
+                if self.verbose:
+                    print("Budget exhausted, stopping...")
+                break
+            
+            # Determine actual batch size for this iteration
+            # Use minimum of: batch_size, remaining_budget, and available candidates
+            current_batch_size = min(self.batch_size, remaining_budget)
+            
+            # Fit GP
+            gp = self._fit_gp()
+            if gp is None:
+                break
+            
+            # Select batch of configs with the adjusted batch size
+            batch_configs = self._select_batch(gp, batch_size=current_batch_size)
+            if not batch_configs:
+                break
+            
+            if self.verbose:
+                print(f"\nEvaluating batch of {len(batch_configs)} configs in parallel...")
+                print(f"(Remaining budget: {remaining_budget})\n")
+            
+            # Evaluate batch in parallel
+            with Pool(processes=self.n_workers) as pool:
+                eval_func = partial(evaluate_config_worker,
+                                  simulation_runner=self.simulation_runner)
+                results = pool.map(eval_func, batch_configs)
+            
+            # Process results
+            for config, exec_time, file_paths, metadata in results:
+                self.current_iteration = len(self.configs)
+                
+                if exec_time is not None:
+                    self.configs.append(config)
+                    self.scores.append(exec_time)
+                    self.file_paths.append(file_paths)
+                    self.metadata.append(metadata)
+                    
+                    if exec_time < self.best_score:
+                        self.best_score = exec_time
+                        self.best_config = config
+                        self.best_iteration = self.current_iteration
+                        
+                        if self.verbose:
+                            print(f"  🏆 NEW BEST: {exec_time:.2f}s")
+                else:
+                    self.file_paths.append({})
+                    self.metadata.append({})
+            
+            # Cleanup
+            if self.keep_top_k >= 0:
+                self._cleanup_files()
+            
+            if self.verbose:
+                print(f"\nBest so far: {self.best_score:.2f}s\n")
     
     def _fit_gp(self) -> Optional[GaussianProcessRegressor]:
         """
@@ -546,6 +671,136 @@ class BayesianOptimizer(BaseOptimizer):
         
         return next_config, next_acquisition
     
+    def _select_batch(self, gp: GaussianProcessRegressor, batch_size: Optional[int] = None) -> List[Dict]:
+        """
+        Select batch of configs for parallel evaluation.
+        
+        Only used when is_parallel=True and batch_size > 1.
+        
+        Args:
+            gp: Fitted Gaussian Process
+            batch_size: Number of configs to select (uses self.batch_size if None)
+        """
+        if batch_size is None:
+            batch_size = self.batch_size
+            
+        if self.batch_strategy == "greedy":
+            return self._select_batch_greedy(gp, batch_size)
+        elif self.batch_strategy == "thompson":
+            return self._select_batch_thompson(gp, batch_size)
+        elif self.batch_strategy == "penalization":
+            return self._select_batch_penalized(gp, batch_size)
+        else:
+            raise ValueError(f"Unknown batch strategy: {self.batch_strategy}")
+    
+    def _select_batch_greedy(self, gp: GaussianProcessRegressor, batch_size: int) -> List[Dict]:
+        """
+        Greedy batch selection.
+        
+        Select points one at a time by acquisition function, adding each
+        to a "fantasy" model before selecting the next.
+        
+        Args:
+            gp: Fitted Gaussian Process
+            batch_size: Number of configs to select
+        """
+        design_space = self.search_space.get_design_space()
+        evaluated_tuples = set(tuple(sorted(c.items())) for c in self.configs)
+        candidates = [c for c in design_space 
+                     if tuple(sorted(c.items())) not in evaluated_tuples]
+        
+        if not candidates:
+            return []
+        
+        batch = []
+        for i in range(min(batch_size, len(candidates))):
+            # Get best by acquisition
+            X_cand = np.array(self._configs_to_features(candidates))
+            mu, sigma = gp.predict(X_cand, return_std=True)
+            best_y = np.min(self.scores)
+            acq_scores = self.acquisition.compute(mu, sigma, best_y)
+            
+            best_idx = np.argmax(acq_scores)
+            next_config = candidates[best_idx]
+            batch.append(next_config)
+            
+            # Remove from candidates
+            candidates = candidates[:best_idx] + candidates[best_idx+1:]
+        
+        return batch
+    
+    def _select_batch_thompson(self, gp: GaussianProcessRegressor, batch_size: int) -> List[Dict]:
+        """
+        Thompson Sampling batch selection.
+        
+        Sample multiple points from GP posterior - encourages exploration.
+        
+        Args:
+            gp: Fitted Gaussian Process
+            batch_size: Number of configs to select
+        """
+        design_space = self.search_space.get_design_space()
+        evaluated_tuples = set(tuple(sorted(c.items())) for c in self.configs)
+        candidates = [c for c in design_space 
+                     if tuple(sorted(c.items())) not in evaluated_tuples]
+        
+        if not candidates:
+            return []
+        
+        # Sample from GP posterior
+        X_cand = np.array(self._configs_to_features(candidates))
+        y_samples = gp.sample_y(X_cand, n_samples=batch_size, random_state=None)
+        
+        # Select configs with lowest sampled values
+        mean_samples = y_samples.mean(axis=1)
+        indices = np.argsort(mean_samples)[:batch_size]
+        
+        return [candidates[i] for i in indices]
+    
+    def _select_batch_penalized(self, gp: GaussianProcessRegressor, batch_size: int) -> List[Dict]:
+        """
+        Local Penalization batch selection.
+        
+        Select configs one at a time, penalizing nearby regions to encourage diversity.
+        
+        Args:
+            gp: Fitted Gaussian Process
+            batch_size: Number of configs to select
+        """
+        design_space = self.search_space.get_design_space()
+        evaluated_tuples = set(tuple(sorted(c.items())) for c in self.configs)
+        candidates = [c for c in design_space 
+                     if tuple(sorted(c.items())) not in evaluated_tuples]
+        
+        if not candidates:
+            return []
+        
+        X_cand = np.array(self._configs_to_features(candidates))
+        batch = []
+        selected_X = []
+        
+        for i in range(min(batch_size, len(candidates))):
+            # Compute acquisition
+            mu, sigma = gp.predict(X_cand, return_std=True)
+            best_y = np.min(self.scores)
+            acq_scores = self.acquisition.compute(mu, sigma, best_y)
+            
+            # Apply penalty for selected points
+            for x_selected in selected_X:
+                distances = np.linalg.norm(X_cand - x_selected, axis=1)
+                penalty = np.exp(-distances**2 / (2 * 0.5**2))  # Gaussian penalty
+                acq_scores *= (1 - penalty)
+            
+            best_idx = np.argmax(acq_scores)
+            batch.append(candidates[best_idx])
+            selected_X.append(X_cand[best_idx])
+            
+            # Remove from candidates
+            candidates = candidates[:best_idx] + candidates[best_idx+1:]
+            X_cand = np.delete(X_cand, best_idx, axis=0)
+        
+        return batch
+    
     def _configs_to_features(self, configs: List[Dict]) -> List[List[float]]:
         """
         Convert configuration dictionaries to feature vectors for GP.
@@ -577,8 +832,14 @@ class BayesianOptimizer(BaseOptimizer):
     
     def __repr__(self) -> str:
         """String representation."""
-        return (f"BayesianOptimizer(budget={self.budget}, "
-                f"init_samples={self.init_samples}, "
-                f"kernel={self.kernel}, "
-                f"acquisition={self.acquisition}, "
-                f"evaluated={len(self.configs)})")
+        mode = "batch" if self.batch_size > 1 else "sequential"
+        repr_str = (f"BayesianOptimizer(budget={self.budget}, "
+                   f"init_samples={self.init_samples}, "
+                   f"mode={mode}, "
+                   f"n_workers={self.n_workers}")
+        
+        if self.batch_size > 1:
+            repr_str += f", batch_size={self.batch_size}"
+        
+        repr_str += f", evaluated={len(self.configs)})"
+        return repr_str

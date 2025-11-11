@@ -3,28 +3,35 @@ RandomOptimizer: Simple random search baseline.
 
 Randomly samples configurations from the design space and evaluates them.
 Good baseline to compare against more sophisticated methods.
+
+Supports parallel evaluation when n_workers > 1.
 """
 
 import sys
 from typing import Tuple, Optional, Dict
 import pandas as pd
 import time
+from multiprocessing import Pool
+from functools import partial
 
 # Add parent directory to path for imports
 sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
-from ..core import BaseOptimizer, SearchSpaceBuilder
-from ..helper import config_to_tuple, tuple_to_config
+from ..core import BaseOptimizer
+from ..helper import config_to_tuple, evaluate_config_worker
 
 
 class RandomOptimizer(BaseOptimizer):
     """
-    Random Search optimizer.
+    Random Search optimizer with optional parallelization.
     
     Randomly samples configurations without replacement from the design space.
     Simple but effective baseline, especially for:
     - Small design spaces
     - Flat optimization landscapes
     - Establishing baseline performance
+    
+    When n_workers > 1, evaluates multiple configurations in parallel using
+    multiprocessing for significant speedup.
     
     Example:
         from core.search_space_builder import create_search_space
@@ -39,11 +46,21 @@ class RandomOptimizer(BaseOptimizer):
         sampler = RandomSampler(seed=42)
         sim_runner = SimulationRunner(40, "GPT_40B", 64, "FoldedClos")
         
+        # Sequential (default)
         optimizer = RandomOptimizer(
             search_space=search_space,
             sampler=sampler,
             simulation_runner=sim_runner,
             budget=50
+        )
+        
+        # Parallel with 8 workers
+        optimizer = RandomOptimizer(
+            search_space=search_space,
+            sampler=sampler,
+            simulation_runner=sim_runner,
+            budget=50,
+            n_workers=8
         )
         
         best_config, results_df = optimizer.run()
@@ -55,6 +72,8 @@ class RandomOptimizer(BaseOptimizer):
         sampler,
         simulation_runner,
         budget: int = 30,
+        n_workers: int = 1,
+        batch_size: Optional[int] = None,
         verbose: bool = True,
         save_dir: str = ".",
         keep_top_k: int = -1
@@ -67,6 +86,8 @@ class RandomOptimizer(BaseOptimizer):
             sampler: Sampler instance for sampling
             simulation_runner: SimulationRunner instance
             budget: Total number of evaluations
+            n_workers: Number of parallel workers (1 = sequential, >1 = parallel)
+            batch_size: Configs per batch when parallel (default: n_workers * 2)
             verbose: Whether to print progress
             save_dir: Directory to save results
             keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
@@ -83,6 +104,15 @@ class RandomOptimizer(BaseOptimizer):
             save_dir=save_dir,
             keep_top_k=keep_top_k
         )
+        
+        # Parallelization settings
+        self.n_workers = max(1, n_workers)
+        
+        # Default batch size
+        if (self.n_workers == 1):
+            self.batch_size = 1  # Sequential
+        else:
+            self.batch_size = batch_size if batch_size is not None else self.n_workers * 2
     
     def initialize(self) -> bool:
         """
@@ -101,6 +131,8 @@ class RandomOptimizer(BaseOptimizer):
             print(f"NPUs: {self.simulation_runner.num_npus}")
             print(f"Network: {self.simulation_runner.network_name}")
             print(f"Budget: {self.budget} evaluations")
+            print(f"Workers: {self.n_workers}")
+            print(f"Batch size: {self.batch_size}")
             print(f"Design space: {self.search_space.get_design_space_size()} configurations")
             print("="*70 + "\n")
         
@@ -138,6 +170,8 @@ class RandomOptimizer(BaseOptimizer):
         """
         Run full random search optimization.
         
+        Uses parallel evaluation if n_workers > 1, otherwise sequential.
+        
         Returns:
             (best_config, results_dataframe) tuple
         """
@@ -160,33 +194,11 @@ class RandomOptimizer(BaseOptimizer):
             sampled_configs = self.sampler.sample(design_space, sample_size)
             
             if self.verbose:
-                print(f"Sampled {len(sampled_configs)} configurations\n")
+                print(f"Sampled {len(sampled_configs)} configurations")
+                print(f"Evaluating in batches of {self.batch_size}...\n")
             
-            # Evaluate all sampled configurations
-            for i, config in enumerate(sampled_configs):
-                self.current_iteration = i
-                
-                if self.verbose:
-                    # Print configuration parameters
-                    config_str = ", ".join([f"{k}={v}" for k, v in config.items()])
-                    print(f"[{i+1}/{len(sampled_configs)}] Testing: {config_str}")
-                
-                # Evaluate
-                iter_start = time.time()
-                exec_time = self.evaluate_config(config, verbose=True)
-                iter_time = time.time() - iter_start
-                
-                self.iteration_times.append(iter_time)
-                
-                if exec_time is None:
-                    if self.verbose:
-                        print("  ❌ Evaluation failed, skipping...\n")
-                    continue
-                
-                if self.verbose:
-                    print(f"  ✓ Time: {exec_time:.2f}s")
-                    if self.best_config is not None:
-                        print(f"  Best so far: {self.best_score:.2f}s\n")
+            # Run evaluation
+            self._run_batched(sampled_configs)
             
             # Print summary
             if self.verbose:
@@ -203,7 +215,72 @@ class RandomOptimizer(BaseOptimizer):
             self.save_results()
             return self.best_config, self.get_history()
     
+    def _run_batched(self, sampled_configs):
+        """Run evaluation in batches using multiprocessing."""
+        n_batches = (len(sampled_configs) + self.batch_size - 1) // self.batch_size
+        
+        for batch_idx in range(n_batches):
+            batch_start = batch_idx * self.batch_size
+            batch_end = min(batch_start + self.batch_size, len(sampled_configs))
+            batch_configs = sampled_configs[batch_start:batch_end]
+            
+            if self.verbose:
+                print(f"Batch {batch_idx + 1}/{n_batches}: Evaluating {len(batch_configs)} configs in parallel...")
+            
+            batch_start_time = time.time()
+            
+            # Evaluate batch in parallel
+            with Pool(processes=self.n_workers) as pool:
+                # Create partial function with simulation_runner bound
+                eval_func = partial(evaluate_config_worker, 
+                                  simulation_runner=self.simulation_runner)
+                
+                # Map configs to workers
+                results = pool.map(eval_func, batch_configs)
+            
+            batch_time = time.time() - batch_start_time
+            
+            # Process results
+            successful = 0
+            failed = 0
+            for config, exec_time, file_paths, metadata in results:
+                self.current_iteration = len(self.configs)
+                
+                if exec_time is not None:
+                    # Record results
+                    self.configs.append(config)
+                    self.scores.append(exec_time)
+                    self.file_paths.append(file_paths)
+                    self.metadata.append(metadata)
+                    
+                    # Update best
+                    if exec_time < self.best_score:
+                        self.best_score = exec_time
+                        self.best_config = config
+                        self.best_iteration = self.current_iteration
+                    
+                    successful += 1
+                else:
+                    self.file_paths.append({})
+                    self.metadata.append({})
+                    failed += 1
+            
+            # Cleanup if needed
+            if self.keep_top_k >= 0:
+                self._cleanup_files()
+            
+            if self.verbose:
+                print(f"  ✓ Batch completed in {batch_time:.1f}s")
+                print(f"  Successful: {successful}/{len(batch_configs)}")
+                if failed > 0:
+                    print(f"  Failed: {failed}")
+                if self.best_config:
+                    print(f"  Best so far: {self.best_score:.2f}s")
+                print()
+    
     def __repr__(self) -> str:
         """String representation."""
         return (f"RandomOptimizer(budget={self.budget}, "
+                f"n_workers={self.n_workers}, "
+                f"batch_size={self.batch_size}, "
                 f"evaluated={len(self.configs)})")

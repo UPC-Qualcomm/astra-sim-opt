@@ -23,11 +23,11 @@ def main():
     """Run random search example."""
     
     # Configuration
-    MODEL_NUM = 19  # GPT_40B (Model enum value)
+    MODEL_NUM = 19  # GPT_70B (Model enum value)
     MODEL_NAME = "GPT_40B"
-    NUM_NPUS = 128
+    NUM_NPUS = 256
     NETWORK_NAME = "FoldedClos"
-    BUDGET = 20
+    BUDGET = 30
     
     print("="*70)
     print("EXAMPLE: Random Search Optimization")
@@ -65,8 +65,7 @@ def main():
         num_npus=NUM_NPUS,
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_RS",
-        verbose=False,
-        keep_top_k=5
+        verbose=True
     )
     print(f"   Using: {sim_runner}")
     
@@ -77,7 +76,9 @@ def main():
         sampler=sampler,
         simulation_runner=sim_runner,
         budget=BUDGET,
-        verbose=True
+        verbose=True,
+        keep_top_k=5,
+        n_workers=6
     )
     print(f"   Using: {optimizer}")
     
