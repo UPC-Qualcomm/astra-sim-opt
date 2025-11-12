@@ -245,13 +245,16 @@ class BayesianOptimizer(BaseOptimizer):
         # Process results
         for config, exec_time, file_paths, metadata in results:
             if exec_time is not None:
+                # Compute objective score
+                score = self.objective.compute(exec_time, metadata)
+                
                 self.configs.append(config)
-                self.scores.append(exec_time)
+                self.scores.append(score)
                 self.file_paths.append(file_paths)
                 self.metadata.append(metadata)
                 
-                if exec_time < self.best_score:
-                    self.best_score = exec_time
+                if self.objective.is_better(score, self.best_score):
+                    self.best_score = score
                     self.best_config = config
                     self.best_iteration = len(self.configs) - 1
             else:
@@ -437,19 +440,22 @@ class BayesianOptimizer(BaseOptimizer):
                 self.current_iteration = len(self.configs)
                 
                 if exec_time is not None:
+                    # Compute objective score
+                    score = self.objective.compute(exec_time, metadata)
+                    
                     self.configs.append(config)
-                    self.scores.append(exec_time)
+                    self.scores.append(score)
                     self.file_paths.append(file_paths)
                     self.metadata.append(metadata)
                     successful_in_batch += 1
                     
-                    if exec_time < self.best_score:
-                        self.best_score = exec_time
+                    if self.objective.is_better(score, self.best_score):
+                        self.best_score = score
                         self.best_config = config
                         self.best_iteration = self.current_iteration
                         
                         if self.verbose:
-                            print(f"  🏆 NEW BEST: {exec_time:.2f}s")
+                            print(f"  🏆 NEW BEST: {score:.4f} (exec_time: {exec_time:.2f}s)")
                 else:
                     self.file_paths.append({})
                     self.metadata.append({})
@@ -464,7 +470,7 @@ class BayesianOptimizer(BaseOptimizer):
             
             if self.verbose:
                 print(f"\nBatch result: {successful_in_batch}/{len(batch_configs)} successful")
-                print(f"Best so far: {self.best_score:.2f}s\n")
+                print(f"Best so far: {self.best_score:.4f}\n")
     
     def _fit_gp(self) -> Optional[GaussianProcessRegressor]:
         """

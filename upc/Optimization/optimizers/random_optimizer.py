@@ -259,15 +259,18 @@ class RandomOptimizer(BaseOptimizer):
                     self.current_iteration = len(self.configs)
                     
                     if exec_time is not None:
+                        # Compute objective score
+                        score = self.objective.compute(exec_time, metadata)
+                        
                         # Record results
                         self.configs.append(config)
-                        self.scores.append(exec_time)
+                        self.scores.append(score)
                         self.file_paths.append(file_paths)
                         self.metadata.append(metadata)
                         
                         # Update best
-                        if exec_time < self.best_score:
-                            self.best_score = exec_time
+                        if self.objective.is_better(score, self.best_score):
+                            self.best_score = score
                             self.best_config = config
                             self.best_iteration = self.current_iteration
                         
@@ -288,7 +291,7 @@ class RandomOptimizer(BaseOptimizer):
                 if failed > 0:
                     print(f"  Failed: {failed}")
                 if self.best_config:
-                    print(f"  Best so far: {self.best_score:.2f}s")
+                    print(f"  Best so far: {self.best_score:.4f}")
                 print()
     
     def __repr__(self) -> str:

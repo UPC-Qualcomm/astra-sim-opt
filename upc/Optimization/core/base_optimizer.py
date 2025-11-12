@@ -13,6 +13,7 @@ import time
 import os
 
 from .time_statistics import TimeStatistics
+from .objective import ObjectiveFunction, MinimizeExecutionTime
 
 
 class BaseOptimizer(ABC):
@@ -38,6 +39,7 @@ class BaseOptimizer(ABC):
         simulation_runner,
         budget: int = 30,
         init_samples: int = 5,
+        objective: 'ObjectiveFunction' = MinimizeExecutionTime(),
         verbose: bool = True,
         save_dir: str = ".",
         keep_top_k: int = -1,
@@ -52,6 +54,7 @@ class BaseOptimizer(ABC):
             simulation_runner: SimulationRunner instance
             budget: Total number of evaluations
             init_samples: Number of initial random samples
+            objective: ObjectiveFunction to optimize (default: MinimizeExecutionTime)
             verbose: Whether to print progress
             save_dir: Directory to save results
             keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
@@ -62,6 +65,7 @@ class BaseOptimizer(ABC):
         self.simulation_runner = simulation_runner
         self.budget = budget
         self.init_samples = init_samples
+        self.objective = objective 
         self.verbose = verbose
         self.save_dir = save_dir
         self.keep_top_k = keep_top_k
@@ -131,7 +135,7 @@ class BaseOptimizer(ABC):
             verbose: Whether to print evaluation details
         
         Returns:
-            Execution time in seconds, or None if evaluation failed
+            Objective score, or None if evaluation failed
         """
         try:
             # Run simulation and get execution time + file paths + metadata
@@ -149,26 +153,29 @@ class BaseOptimizer(ABC):
                     file_paths = {}
                     metadata = {}
                 
+                # Compute objective score
+                score = self.objective.compute(exec_time, metadata)
+                
                 # Record results
                 self.configs.append(config)
-                self.scores.append(exec_time)
+                self.scores.append(score)
                 self.file_paths.append(file_paths)
                 self.metadata.append(metadata)
                 
                 # Update best
-                if exec_time < self.best_score:
-                    self.best_score = exec_time
+                if self.objective.is_better(score, self.best_score):
+                    self.best_score = score
                     self.best_config = config
                     self.best_iteration = self.current_iteration
                     
                     if self.verbose and verbose:
-                        print(f"    🏆 NEW BEST! Time: {exec_time:.2f}s")
+                        print(f"    🏆 NEW BEST! Score: {score:.4f} (exec_time: {exec_time:.2f}s)")
                 
                 # Cleanup if needed
                 if self.keep_top_k >= 0:
                     self._cleanup_files()
                 
-                return exec_time
+                return score
             else:
                 # Track empty file paths and metadata for failed runs
                 self.file_paths.append({})
@@ -259,31 +266,35 @@ class BaseOptimizer(ABC):
         print(f"OPTIMIZATION SUMMARY - {self.__class__.__name__}")
         print("="*70)
         
+        # Objective information
+        print(f"\n🎯 OBJECTIVE: {self.objective.name}")
+        print(f"   Direction: {'Minimize' if self.objective.minimize else 'Maximize'}")
+        
         # Statistics
         scores_array = np.array(self.scores)
         print("\n📊 STATISTICS:")
         print(f"   Total evaluations: {len(self.scores)}")
-        print(f"   Best time: {scores_array.min():.2f}s")
-        print(f"   Worst time: {scores_array.max():.2f}s")
-        print(f"   Mean time: {scores_array.mean():.2f}s")
-        print(f"   Std Dev: {scores_array.std():.2f}s")
+        print(f"   Best score: {scores_array.min():.4f}")
+        print(f"   Worst score: {scores_array.max():.4f}")
+        print(f"   Mean score: {scores_array.mean():.4f}")
+        print(f"   Std Dev: {scores_array.std():.4f}")
         
         # Improvement
         if len(self.scores) > 1 and self.init_samples > 0:
-            initial_best = min(self.scores[:self.init_samples])
-            improvement = (initial_best - self.best_score) / initial_best * 100
-            print(f"\n📈 IMPROVEMENT:")
-            print(f"   Initial best: {initial_best:.2f}s")
-            print(f"   Final best: {self.best_score:.2f}s")
-            print(f"   Improvement: {improvement:.1f}%")
+            initial_best = self.objective.get_best_score(self.scores[:self.init_samples])
+            improvement_pct = abs((initial_best - self.best_score) / initial_best * 100)
+            print("\n📈 IMPROVEMENT:")
+            print(f"   Initial best: {initial_best:.4f}")
+            print(f"   Final best: {self.best_score:.4f}")
+            print(f"   Improvement: {improvement_pct:.1f}%")
         
         # Best configuration
         if self.best_config:
-            print(f"\n🏆 BEST CONFIGURATION:")
+            print("\n🏆 BEST CONFIGURATION:")
             # Print all parameters in the config
             config_str = ", ".join([f"{k}={v}" for k, v in self.best_config.items()])
             print(f"   {config_str}")
-            print(f"   Execution time: {self.best_score:.2f}s")
+            print(f"   Score: {self.best_score:.4f}")
             print(f"   Found at iteration: {self.best_iteration + 1}")
             
             # Configuration profile (only if parallelism params exist)
@@ -295,7 +306,7 @@ class BaseOptimizer(ABC):
                 sharded = self.best_config.get('sharded', False)
                 
                 total_npus = dp * mp * sp * pp
-                print(f"\n📋 CONFIGURATION PROFILE:")
+                print("\n📋 CONFIGURATION PROFILE:")
                 print(f"   Total NPUs: {total_npus}/{self.simulation_runner.num_npus}")
                 print(f"   DP/MP ratio: {dp/mp:.2f}")
                 print(f"   SP enabled: {'Yes' if sp > 1 else 'No'}")
