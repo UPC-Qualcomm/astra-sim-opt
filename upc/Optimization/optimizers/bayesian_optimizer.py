@@ -95,7 +95,8 @@ class BayesianOptimizer(BaseOptimizer):
         gp_n_restarts: int = 5,
         verbose: bool = True,
         save_dir: str = ".",
-        keep_top_k: int = -1
+        keep_top_k: int = -1,
+        profile_time: bool = False
     ):
         """
         Initialize Bayesian Optimizer.
@@ -117,6 +118,7 @@ class BayesianOptimizer(BaseOptimizer):
             verbose: Whether to print progress
             save_dir: Directory to save results
             keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
+            profile_time: Whether to track and print detailed time statistics
         """
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for Bayesian Optimization. "
@@ -130,7 +132,8 @@ class BayesianOptimizer(BaseOptimizer):
             init_samples=init_samples,
             verbose=verbose,
             save_dir=save_dir,
-            keep_top_k=keep_top_k
+            keep_top_k=keep_top_k,
+            profile_time=profile_time
         )
         
         self.kernel = kernel
@@ -154,6 +157,9 @@ class BayesianOptimizer(BaseOptimizer):
         # GP model storage
         self.gps: List[GaussianProcessRegressor] = []
         self.ei_scores: List[float] = []  # Acquisition scores per iteration
+        
+        # Track evaluation attempts (including failures)
+        self.n_attempts = 0
         
         # Number of BO iterations (after initialization)
         if self.batch_size > 1:
@@ -210,6 +216,9 @@ class BayesianOptimizer(BaseOptimizer):
         # Evaluate initial configurations using multiprocessing
         self._evaluate_init_batched(init_configs)
         
+        # Count attempts (including any that may have failed)
+        self.n_attempts = self.init_samples
+        
         if not self.scores:
             self._log("All initial evaluations failed!", "error")
             return False
@@ -230,8 +239,7 @@ class BayesianOptimizer(BaseOptimizer):
         """Evaluate initial configs using multiprocessing."""
         # Evaluate using multiprocessing Pool
         with Pool(processes=self.n_workers) as pool:
-            eval_func = partial(evaluate_config_worker, 
-                              simulation_runner=self.simulation_runner)
+            eval_func = partial(evaluate_config_worker, simulation_runner=self.simulation_runner)
             results = pool.map(eval_func, init_configs)
         
         # Process results
@@ -284,10 +292,12 @@ class BayesianOptimizer(BaseOptimizer):
             (best_config, results_dataframe) tuple
         """
         self.start_time = time.time()
+        self.time_stats.start_total()
         
         # Initialize
-        if not self.initialize():
-            return None, pd.DataFrame()
+        with self.time_stats.timer("initialization"):
+            if not self.initialize():
+                return None, pd.DataFrame()
         
         try:
             # Choose BO loop strategy based on batch size
@@ -304,14 +314,17 @@ class BayesianOptimizer(BaseOptimizer):
                 self.print_summary()
             
             # Save results
-            self.save_results()
+            with self.time_stats.timer("save_results"):
+                self.save_results()
             
+            self.time_stats.end_total()
             return self.best_config, self.get_history()
             
         except KeyboardInterrupt:
             self._log("\n\nOptimization interrupted by user", "warning")
             self._log("Saving intermediate results...", "info")
             self.save_results()
+            self.time_stats.end_total()
             return self.best_config, self.get_history()
     
     def _run_sequential_bo(self):
@@ -330,7 +343,8 @@ class BayesianOptimizer(BaseOptimizer):
                 print("STAGE 2: FITTING GAUSSIAN PROCESS")
                 print("-" * 70)
             
-            gp = self._fit_gp()
+            with self.time_stats.timer("gp_training"):
+                gp = self._fit_gp()
             
             if gp is None:
                 self._log("GP fitting failed, stopping...", "error")
@@ -342,7 +356,8 @@ class BayesianOptimizer(BaseOptimizer):
                 print("STAGE 3: ACQUISITION (Find Next Config)")
                 print("-" * 70)
             
-            next_config = self._optimize_acquisition(gp)
+            with self.time_stats.timer("acquisition_optimization"):
+                next_config = self._optimize_acquisition(gp)
             
             if next_config is None:
                 self._log("Acquisition optimization failed, stopping...", "error")
@@ -358,8 +373,9 @@ class BayesianOptimizer(BaseOptimizer):
             config_str = ", ".join([f"{k}={v}" for k, v in next_config.items()])
             if self.verbose:
                 print(f"Evaluating: {config_str}")
-            
-            exec_time = self.evaluate_config(next_config, verbose=True)
+
+            with self.time_stats.timer("evaluation"):
+                exec_time = self.evaluate_config(next_config, verbose=True)
             
             if exec_time is None:
                 if self.verbose:
@@ -376,9 +392,8 @@ class BayesianOptimizer(BaseOptimizer):
                 print(f"BO ITERATION {iteration + 1}/{self.n_iterations}")
                 print("-"*70)
             
-            # Calculate remaining budget for this iteration
-            evaluations_done = len(self.configs)
-            remaining_budget = self.budget - evaluations_done
+            # Calculate remaining budget based on attempts, not just successes
+            remaining_budget = self.budget - self.n_attempts
             
             if remaining_budget <= 0:
                 if self.verbose:
@@ -386,30 +401,38 @@ class BayesianOptimizer(BaseOptimizer):
                 break
             
             # Determine actual batch size for this iteration
-            # Use minimum of: batch_size, remaining_budget, and available candidates
+            # Use minimum of: batch_size, remaining_budget
             current_batch_size = min(self.batch_size, remaining_budget)
             
             # Fit GP
-            gp = self._fit_gp()
-            if gp is None:
-                break
+            with self.time_stats.timer("gp_training"):
+                gp = self._fit_gp()
+                if gp is None:
+                    break
             
             # Select batch of configs with the adjusted batch size
-            batch_configs = self._select_batch(gp, batch_size=current_batch_size)
-            if not batch_configs:
-                break
+            with self.time_stats.timer("batch_selection"):
+                batch_configs = self._select_batch(gp, batch_size=current_batch_size)
+                if not batch_configs:
+                    break
+            
+            # Update attempts counter
+            self.n_attempts += len(batch_configs)
             
             if self.verbose:
                 print(f"\nEvaluating batch of {len(batch_configs)} configs in parallel...")
-                print(f"(Remaining budget: {remaining_budget})\n")
+                print(f"(Remaining budget: {self.budget - self.n_attempts})")
+                print(f"(Successful so far: {len(self.configs)})\n")
             
             # Evaluate batch in parallel
-            with Pool(processes=self.n_workers) as pool:
-                eval_func = partial(evaluate_config_worker,
-                                  simulation_runner=self.simulation_runner)
-                results = pool.map(eval_func, batch_configs)
+            with self.time_stats.timer("evaluation"):
+                with Pool(processes=self.n_workers) as pool:
+                    eval_func = partial(evaluate_config_worker,
+                                    simulation_runner=self.simulation_runner)
+                    results = pool.map(eval_func, batch_configs)
             
             # Process results
+            successful_in_batch = 0
             for config, exec_time, file_paths, metadata in results:
                 self.current_iteration = len(self.configs)
                 
@@ -418,6 +441,7 @@ class BayesianOptimizer(BaseOptimizer):
                     self.scores.append(exec_time)
                     self.file_paths.append(file_paths)
                     self.metadata.append(metadata)
+                    successful_in_batch += 1
                     
                     if exec_time < self.best_score:
                         self.best_score = exec_time
@@ -429,13 +453,18 @@ class BayesianOptimizer(BaseOptimizer):
                 else:
                     self.file_paths.append({})
                     self.metadata.append({})
+                    if self.verbose:
+                        config_str = ", ".join([f"{k}={v}" for k, v in config.items()])
+                        print(f"  ⚠️  Failed: {config_str}")
             
             # Cleanup
-            if self.keep_top_k >= 0:
-                self._cleanup_files()
+            with self.time_stats.timer("cleanup"):
+                if self.keep_top_k >= 0:
+                    self._cleanup_files()
             
             if self.verbose:
-                print(f"\nBest so far: {self.best_score:.2f}s\n")
+                print(f"\nBatch result: {successful_in_batch}/{len(batch_configs)} successful")
+                print(f"Best so far: {self.best_score:.2f}s\n")
     
     def _fit_gp(self) -> Optional[GaussianProcessRegressor]:
         """
@@ -713,6 +742,8 @@ class BayesianOptimizer(BaseOptimizer):
             return []
         
         batch = []
+        batch_tuples = set()  # Track configs selected in this batch
+        
         for i in range(min(batch_size, len(candidates))):
             # Get best by acquisition
             X_cand = np.array(self._configs_to_features(candidates))
@@ -722,7 +753,15 @@ class BayesianOptimizer(BaseOptimizer):
             
             best_idx = np.argmax(acq_scores)
             next_config = candidates[best_idx]
+            next_tuple = tuple(sorted(next_config.items()))
+            
+            # Skip if already in batch (shouldn't happen but be safe)
+            if next_tuple in batch_tuples:
+                candidates = candidates[:best_idx] + candidates[best_idx+1:]
+                continue
+            
             batch.append(next_config)
+            batch_tuples.add(next_tuple)
             
             # Remove from candidates
             candidates = candidates[:best_idx] + candidates[best_idx+1:]

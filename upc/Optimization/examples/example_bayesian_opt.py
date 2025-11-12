@@ -92,7 +92,8 @@ def main():
         verbose=True,
         keep_top_k=5,
         n_workers = 6,
-        batch_size= 12
+        batch_size= 6,
+        profile_time=True  # Enable time profiling
 
     )
     print(f"   Using: {optimizer}")

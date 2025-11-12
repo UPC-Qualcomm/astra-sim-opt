@@ -12,6 +12,7 @@ from .sampler import (
 )
 from .base_optimizer import BaseOptimizer
 from .simulation_runner import SimulationRunner
+from .time_statistics import TimeStatistics
 
 # GP-specific modules (optional, only needed for Bayesian optimization)
 try:
@@ -41,6 +42,7 @@ __all__ = [
     'GridSampler',
     'BaseOptimizer',
     'SimulationRunner',
+    'TimeStatistics',
 ]
 
 if GP_AVAILABLE:

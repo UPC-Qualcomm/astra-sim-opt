@@ -76,7 +76,8 @@ class RandomOptimizer(BaseOptimizer):
         batch_size: Optional[int] = None,
         verbose: bool = True,
         save_dir: str = ".",
-        keep_top_k: int = -1
+        keep_top_k: int = -1,
+        profile_time: bool = False
     ):
         """
         Initialize Random Search optimizer.
@@ -91,6 +92,7 @@ class RandomOptimizer(BaseOptimizer):
             verbose: Whether to print progress
             save_dir: Directory to save results
             keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
+            profile_time: Whether to track and print detailed time statistics
         """
         # Call parent constructor with init_samples = 0
         # (we don't need separate init phase for random search)
@@ -102,7 +104,8 @@ class RandomOptimizer(BaseOptimizer):
             init_samples=0,  # No separate initialization for random search
             verbose=verbose,
             save_dir=save_dir,
-            keep_top_k=keep_top_k
+            keep_top_k=keep_top_k,
+            profile_time=profile_time
         )
         
         # Parallelization settings
@@ -176,22 +179,26 @@ class RandomOptimizer(BaseOptimizer):
             (best_config, results_dataframe) tuple
         """
         self.start_time = time.time()
+        self.time_stats.start_total()
         
         # Initialize
-        if not self.initialize():
-            return None, pd.DataFrame()
+        with self.time_stats.timer("initialization"):
+            if not self.initialize():
+                return None, pd.DataFrame()
         
         try:
             # Get design space
-            design_space = self.search_space.get_design_space()
+            with self.time_stats.timer("design_space_generation"):
+                design_space = self.search_space.get_design_space()
             
             if not design_space:
                 self._log("No valid configurations in design space!", "error")
                 return None, pd.DataFrame()
             
             # Sample configurations
-            sample_size = min(self.budget, len(design_space))
-            sampled_configs = self.sampler.sample(design_space, sample_size)
+            with self.time_stats.timer("sampling"):
+                sample_size = min(self.budget, len(design_space))
+                sampled_configs = self.sampler.sample(design_space, sample_size)
             
             if self.verbose:
                 print(f"Sampled {len(sampled_configs)} configurations")
@@ -205,14 +212,17 @@ class RandomOptimizer(BaseOptimizer):
                 self.print_summary()
             
             # Save results
-            self.save_results()
+            with self.time_stats.timer("save_results"):
+                self.save_results()
             
+            self.time_stats.end_total()
             return self.best_config, self.get_history()
             
         except KeyboardInterrupt:
             self._log("\n\nOptimization interrupted by user", "warning")
             self._log("Saving intermediate results...", "info")
             self.save_results()
+            self.time_stats.end_total()
             return self.best_config, self.get_history()
     
     def _run_batched(self, sampled_configs):
@@ -230,44 +240,47 @@ class RandomOptimizer(BaseOptimizer):
             batch_start_time = time.time()
             
             # Evaluate batch in parallel
-            with Pool(processes=self.n_workers) as pool:
-                # Create partial function with simulation_runner bound
-                eval_func = partial(evaluate_config_worker, 
-                                  simulation_runner=self.simulation_runner)
-                
-                # Map configs to workers
-                results = pool.map(eval_func, batch_configs)
+            with self.time_stats.timer("batch_evaluation"):
+                with Pool(processes=self.n_workers) as pool:
+                    # Create partial function with simulation_runner bound
+                    eval_func = partial(evaluate_config_worker, 
+                                      simulation_runner=self.simulation_runner)
+                    
+                    # Map configs to workers
+                    results = pool.map(eval_func, batch_configs)
             
             batch_time = time.time() - batch_start_time
             
             # Process results
-            successful = 0
-            failed = 0
-            for config, exec_time, file_paths, metadata in results:
-                self.current_iteration = len(self.configs)
-                
-                if exec_time is not None:
-                    # Record results
-                    self.configs.append(config)
-                    self.scores.append(exec_time)
-                    self.file_paths.append(file_paths)
-                    self.metadata.append(metadata)
+            with self.time_stats.timer("result_processing"):
+                successful = 0
+                failed = 0
+                for config, exec_time, file_paths, metadata in results:
+                    self.current_iteration = len(self.configs)
                     
-                    # Update best
-                    if exec_time < self.best_score:
-                        self.best_score = exec_time
-                        self.best_config = config
-                        self.best_iteration = self.current_iteration
-                    
-                    successful += 1
-                else:
-                    self.file_paths.append({})
-                    self.metadata.append({})
-                    failed += 1
+                    if exec_time is not None:
+                        # Record results
+                        self.configs.append(config)
+                        self.scores.append(exec_time)
+                        self.file_paths.append(file_paths)
+                        self.metadata.append(metadata)
+                        
+                        # Update best
+                        if exec_time < self.best_score:
+                            self.best_score = exec_time
+                            self.best_config = config
+                            self.best_iteration = self.current_iteration
+                        
+                        successful += 1
+                    else:
+                        self.file_paths.append({})
+                        self.metadata.append({})
+                        failed += 1
             
             # Cleanup if needed
             if self.keep_top_k >= 0:
-                self._cleanup_files()
+                with self.time_stats.timer("file_cleanup"):
+                    self._cleanup_files()
             
             if self.verbose:
                 print(f"  ✓ Batch completed in {batch_time:.1f}s")

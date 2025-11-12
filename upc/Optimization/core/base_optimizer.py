@@ -12,6 +12,8 @@ import numpy as np
 import time
 import os
 
+from .time_statistics import TimeStatistics
+
 
 class BaseOptimizer(ABC):
     """
@@ -38,7 +40,8 @@ class BaseOptimizer(ABC):
         init_samples: int = 5,
         verbose: bool = True,
         save_dir: str = ".",
-        keep_top_k: int = -1
+        keep_top_k: int = -1,
+        profile_time: bool = False
     ):
         """
         Initialize base optimizer.
@@ -52,6 +55,7 @@ class BaseOptimizer(ABC):
             verbose: Whether to print progress
             save_dir: Directory to save results
             keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
+            profile_time: Whether to track and print detailed time statistics
         """
         self.search_space = search_space
         self.sampler = sampler
@@ -61,6 +65,10 @@ class BaseOptimizer(ABC):
         self.verbose = verbose
         self.save_dir = save_dir
         self.keep_top_k = keep_top_k
+        self.profile_time = profile_time
+        
+        # Time profiling
+        self.time_stats = TimeStatistics(enabled=profile_time)
         
         # Result tracking
         self.configs: List[Dict] = []  # Evaluated configurations (now dicts)
@@ -297,9 +305,13 @@ class BaseOptimizer(ABC):
         # Timing
         if self.start_time:
             elapsed = time.time() - self.start_time
-            print(f"\n⏱️  TIMING:")
+            print("\n⏱️  TIMING:")
             print(f"   Total time: {elapsed:.1f}s")
             print(f"   Time per evaluation: {elapsed/len(self.scores):.1f}s")
+        
+        # Time profiling statistics
+        if self.profile_time:
+            self.time_stats.print_summary()
     
     def _log(self, message: str, level: str = "info"):
         """
