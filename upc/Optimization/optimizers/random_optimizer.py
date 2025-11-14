@@ -255,7 +255,7 @@ class RandomOptimizer(BaseOptimizer):
             with self.time_stats.timer("result_processing"):
                 successful = 0
                 failed = 0
-                for config, exec_time, file_paths, metadata in results:
+                for config, exec_time, is_oom, file_paths, metadata in results:
                     self.current_iteration = len(self.configs)
                     
                     if exec_time is not None:
@@ -269,7 +269,7 @@ class RandomOptimizer(BaseOptimizer):
                         self.metadata.append(metadata)
                         
                         # Update best
-                        if self.objective.is_better(score, self.best_score):
+                        if not is_oom and self.objective.is_better(score, self.best_score):
                             self.best_score = score
                             self.best_config = config
                             self.best_iteration = self.current_iteration

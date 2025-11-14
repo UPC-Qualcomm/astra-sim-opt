@@ -50,7 +50,7 @@ DEFAULT_SYSTEM_CONFIG = {
     "scheduling-policy": "LIFO",
     "endpoint-delay": 10,
     "active-chunks-per-dimension": 1,
-    "preferred-dataset-splits": 1,
+    "preferred-dataset-splits": 4,
     "all-reduce-implementation": ["halvingDoubling", "halvingDoubling"],
     "all-gather-implementation": ["halvingDoubling", "halvingDoubling"],
     "reduce-scatter-implementation": ["halvingDoubling", "halvingDoubling"],
@@ -63,13 +63,14 @@ DEFAULT_SYSTEM_CONFIG = {
     "peak-perf": 989,
     "roofline-enabled": 1,
     "trace-enabled": 1,
-    "track-local-mem": 0,
-    "local-mem-trace-filename": "mem_trace.json"
+    "track-local-mem": 1,
+    "local-mem-trace-filename": "mem_trace.json",
+    "dump-local-mem-trace": 0
 }
 
 DEFAULT_NETWORK_CONFIG = {
     "topology": ["Switch", "Switch"],
-    "npus_count": [8, 16],
+    "npus_count": [8, 8],
     "bandwidth": [450.0, 100.0],
     "bandwidth_unit": "GB/s",
     "latency": [0.0, 0.0],

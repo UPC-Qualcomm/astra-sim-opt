@@ -243,7 +243,7 @@ class BayesianOptimizer(BaseOptimizer):
             results = pool.map(eval_func, init_configs)
         
         # Process results
-        for config, exec_time, file_paths, metadata in results:
+        for config, exec_time, is_oom, file_paths, metadata in results:
             if exec_time is not None:
                 # Compute objective score
                 score = self.objective.compute(exec_time, metadata)
@@ -253,7 +253,7 @@ class BayesianOptimizer(BaseOptimizer):
                 self.file_paths.append(file_paths)
                 self.metadata.append(metadata)
                 
-                if self.objective.is_better(score, self.best_score):
+                if not is_oom and self.objective.is_better(score, self.best_score):
                     self.best_score = score
                     self.best_config = config
                     self.best_iteration = len(self.configs) - 1
@@ -436,7 +436,7 @@ class BayesianOptimizer(BaseOptimizer):
             
             # Process results
             successful_in_batch = 0
-            for config, exec_time, file_paths, metadata in results:
+            for config, exec_time, is_oom, file_paths, metadata in results:
                 self.current_iteration = len(self.configs)
                 
                 if exec_time is not None:
@@ -449,7 +449,7 @@ class BayesianOptimizer(BaseOptimizer):
                     self.metadata.append(metadata)
                     successful_in_batch += 1
                     
-                    if self.objective.is_better(score, self.best_score):
+                    if not is_oom and self.objective.is_better(score, self.best_score):
                         self.best_score = score
                         self.best_config = config
                         self.best_iteration = self.current_iteration

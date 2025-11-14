@@ -88,17 +88,19 @@ def evaluate_config_worker(config: Dict, simulation_runner) -> Tuple[Dict, Optio
         result = simulation_runner.run_simulation(config, return_paths=True)
         
         if result is not None:
-            if isinstance(result, tuple) and len(result) == 3:
-                exec_time, file_paths, metadata = result
+            if isinstance(result, tuple) and len(result) == 4:
+                exec_time, is_oom, file_paths, metadata = result
+            elif isinstance(result, tuple) and len(result) == 3:
+                exec_time, is_oom, file_paths, metadata = result
             elif isinstance(result, tuple) and len(result) == 2:
-                exec_time, file_paths = result
+                exec_time, is_oom, file_paths = result
                 metadata = {}
             else:
-                exec_time = result
+                exec_time, is_oom = result
                 file_paths = {}
                 metadata = {}
             
-            return config, exec_time, file_paths, metadata
+            return config, exec_time, is_oom, file_paths, metadata
         else:
             return config, None, {}, {}
             

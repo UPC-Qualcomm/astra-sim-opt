@@ -201,7 +201,7 @@ class SimulationRunner:
                 return None
             
             # 4. Extract execution time
-            exec_time = self._extract_execution_time(workload_file)
+            exec_time, is_oom = self._extract_execution_time(workload_file)
             
             if exec_time is None:
                 if self.verbose:
@@ -223,9 +223,9 @@ class SimulationRunner:
                 # Collect metadata about the actual simulation configuration
                 metadata = self._get_simulation_metadata()
                 
-                return exec_time, file_paths, metadata
+                return exec_time, is_oom, file_paths, metadata
             else:
-                return exec_time
+                return exec_time, is_oom
             
         except Exception as e:
             if self.verbose:
@@ -349,9 +349,9 @@ class SimulationRunner:
             return None
         
         # Extract time using output_parser
-        exec_time = output_parser.extract_execution_time(log_file)
+        exec_time, is_oom = output_parser.extract_execution_time(log_file)
         
-        return exec_time
+        return exec_time, is_oom
     
     def batch_run(self, configs: list) -> list:
         """
@@ -369,8 +369,8 @@ class SimulationRunner:
             if self.verbose:
                 print(f"[{i+1}/{len(configs)}] ", end="")
             
-            exec_time = self.run_simulation(config)
-            results.append(exec_time)
+            exec_time, is_oom = self.run_simulation(config)
+            results.append((exec_time, is_oom))
         
         return results
     

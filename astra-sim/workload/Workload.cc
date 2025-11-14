@@ -634,7 +634,7 @@ void Workload::report() {
                      peak_mem_usage, unit);
         logger->info(
             "sys[{}] is OOM: {}",
-            sys->id, this->sys->memory->memory_size < (peak_mem_usage * 1024 * 1024 * 1024));
+            sys->id, (this->sys->memory->memory_size < (peak_mem_usage * 1024 * 1024 * 1024)) ? 1 : 0);
         this->local_mem_usage_tracker.reset();
     }
 }
