@@ -622,13 +622,19 @@ void Workload::report() {
     if (this->sys->track_local_mem) {
         this->local_mem_usage_tracker->buildMemoryTrace();
         this->local_mem_usage_tracker->buildMemoryTimeline();
-        this->local_mem_usage_tracker->dumpMemoryTrace(
-            this->sys->local_mem_trace_filename);
+        
+        if (this->sys->dump_local_mem_trace) {
+            this->local_mem_usage_tracker->dumpMemoryTrace(
+                this->sys->local_mem_trace_filename);
+        }
         auto [peak_mem_usage, unit] =
             this->local_mem_usage_tracker->getPeakMemUsageFormatted();
         auto logger = LoggerFactory::get_logger("workload");
         logger->info("sys[{}] peak memory usage: {:.2f} {}", sys->id,
                      peak_mem_usage, unit);
+        logger->info(
+            "sys[{}] is OOM: {}",
+            sys->id, this->sys->memory->memory_size < (peak_mem_usage * 1024 * 1024 * 1024));
         this->local_mem_usage_tracker.reset();
     }
 }

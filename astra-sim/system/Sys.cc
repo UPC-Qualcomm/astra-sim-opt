@@ -535,6 +535,15 @@ bool Sys::initialize_sys(string name) {
         }
     }
 
+    this->dump_local_mem_trace = false;
+    if (j.contains("dump-local-mem-trace")) {
+        if (j["dump-local-mem-trace"] != 0) {
+        this->dump_local_mem_trace = true;
+        } else {
+        this->dump_local_mem_trace = false;
+        }
+    }
+
     this->local_mem_trace_filename = "local_mem_trace";
     if (j.contains("local-mem-trace-filename")) {
         this->local_mem_trace_filename = j["local-mem-trace-filename"];
