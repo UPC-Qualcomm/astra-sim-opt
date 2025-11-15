@@ -10,6 +10,7 @@ from chakra.schema.protobuf.et_def_pb2 import (
     COMM_SEND_NODE,
     COMM_RECV_NODE,
     ALL_REDUCE,
+    ALL_TO_ALL,
     BoolList
 )
 
@@ -87,7 +88,7 @@ def generate_concurrent_allreduce(workload_name: str, npus_count: int, allreduce
                 
                 # AllReduce attributes
                 allreduce_node.attr.append(ChakraAttr(name="comm_size", uint64_val=tensor_size))
-                allreduce_node.attr.append(ChakraAttr(name="comm_type", int64_val=ALL_REDUCE))
+                allreduce_node.attr.append(ChakraAttr(name="comm_type", int64_val=ALL_TO_ALL))
                 
                 # Involved dimensions - boolean array indicating which NPUs participate
                 involved_dims = [i in group_npus for i in range(npus_count)]
@@ -136,22 +137,12 @@ def main() -> None:
     
     # Define multiple workloads. Each inner list defines a new workload with its own set of AllReduce groups.
     workloads_allreduce_groups = [
+
         # Workload 1
         [
-            ([0, 7], 15000000),
-            ([1, 5], 15000000),
+            ([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], 15000000),
         ],
-        # Workload 2
-        [
-            ([0, 1, 2, 3], 15000000),
-            ([4, 5, 6, 7], 15000000),
-            ([8, 9, 10, 11], 15000000),
-            ([12, 13, 14, 15], 15000000),
-        ],
-        # Workload 3
-        [
-            ([0, 15], 15000000),
-        ]
+
     ]
     
     # send_pairs are skipped for now as requested

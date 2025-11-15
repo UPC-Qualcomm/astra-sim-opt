@@ -86,9 +86,9 @@ def main() -> None:
     #     (3, 2, 15000000),
     # ]
     message_pairs = [
-        (0, 2, 4000000),
-        (1, 2, 4000000),
-        (2, 1, 4000000),
+        (0, 2, 15000000),
+        (1, 2, 15000000),
+        (2, 1, 15000000),
     ]
     # Number of concurrent sends to issue.
     # This, combined with active-chunks-per-dimension, controls concurrency.
