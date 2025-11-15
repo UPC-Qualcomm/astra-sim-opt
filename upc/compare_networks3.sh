@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export ASTRA_SIM_ROOT=$(git rev-parse --show-toplevel)
+# export ASTRA_SIM_ROOT=$(git rev-parse --show-toplevel)
 
 # Common settings
 NPUS_COUNT=16
@@ -23,37 +23,62 @@ ANALYTICAL_NET_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/Switch.yml"
 # The script will infer the collective name from the directory path.
 echo "--- SCENARIO: Running simulations on a pre-existing workload ---"
 
-# for i in {1..13}
-# do
-#   echo "--- RUNNING NS3 CONFIGURATION $i ---"
-#   NS3_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/ns3/FoldedClos_16_config${i}.txt"
+for i in {1..39}
+do
+  echo "--- RUNNING NS3 CONFIGURATION $i ---"
+  NS3_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/ns3/FoldedClos_16_config${i}.txt"
 
-#   timeout 40m python3 compare_networks.py \
-#         --workload-dir "$ASTRA_SIM_ROOT/upc/comparing_networks/workload/sends_recv_easy" \
-#         --npus-count $NPUS_COUNT \
-#         --comm-size $COMM_SIZE \
-#         --seed $SEED \
-#         --logical-topology-config $LOGICAL_CONFIG \
-#         --g2-system-config $G2_SYS_CONFIG \
-#         --g2-network-config $G2_NET_CONFIG \
-#         --ns3-system-config $NS3_SYS_CONFIG \
-#         --ns3-network-config "$NS3_CONFIG" \
-#         --analytical-system-config $ANALYTICAL_SYS_CONFIG \
-#         --analytical-network-config $ANALYTICAL_NET_CONFIG
-# done
-NS3_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/ns3/FoldedClos_16_config13.txt"
-python3 compare_networks.py \
-      --workload-dir "$ASTRA_SIM_ROOT/upc/comparing_networks/workload/sends_recv_easy" \
-      --npus-count $NPUS_COUNT \
-      --comm-size $COMM_SIZE \
-      --seed $SEED \
-      --logical-topology-config $LOGICAL_CONFIG \
-      --g2-system-config $G2_SYS_CONFIG \
-      --g2-network-config $G2_NET_CONFIG \
-      --ns3-system-config $NS3_SYS_CONFIG \
-      --ns3-network-config $NS3_CONFIG \
-      --analytical-system-config $ANALYTICAL_SYS_CONFIG \
-      --analytical-network-config $ANALYTICAL_NET_CONFIG \
+  timeout 2m python3 compare_networks.py \
+        --workload-dir "$ASTRA_SIM_ROOT/upc/comparing_networks/workload/sends_recv_easy" \
+        --npus-count $NPUS_COUNT \
+        --comm-size $COMM_SIZE \
+        --seed $SEED \
+        --logical-topology-config $LOGICAL_CONFIG \
+        --g2-system-config $G2_SYS_CONFIG \
+        --g2-network-config $G2_NET_CONFIG \
+        --ns3-system-config $NS3_SYS_CONFIG \
+        --ns3-network-config "$NS3_CONFIG" \
+        --analytical-system-config $ANALYTICAL_SYS_CONFIG \
+        --analytical-network-config $ANALYTICAL_NET_CONFIG
+done
 
 
-echo "--- All scenarios completed. ---"
+NS3_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/g2/FullyConnected_sys.json"
+
+for i in {1..39}
+do
+  echo "--- RUNNING NS3 CONFIGURATION $i ---"
+  NS3_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/ns3/FoldedClos_16_config${i}.txt"
+
+  timeout 2m python3 compare_networks.py \
+        --workload-dir "$ASTRA_SIM_ROOT/upc/comparing_networks/workload/toy_all_to_all_one_collective" \
+        --npus-count $NPUS_COUNT \
+        --comm-size $COMM_SIZE \
+        --seed $SEED \
+        --logical-topology-config $LOGICAL_CONFIG \
+        --g2-system-config $G2_SYS_CONFIG \
+        --g2-network-config $G2_NET_CONFIG \
+        --ns3-system-config $NS3_SYS_CONFIG \
+        --ns3-network-config "$NS3_CONFIG" \
+        --analytical-system-config $ANALYTICAL_SYS_CONFIG \
+        --analytical-network-config $ANALYTICAL_NET_CONFIG
+done
+
+for i in {1..39}
+do
+  echo "--- RUNNING NS3 CONFIGURATION $i ---"
+  NS3_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/ns3/FoldedClos_16_config${i}.txt"
+
+  timeout 2m python3 compare_networks.py \
+        --workload-dir "$ASTRA_SIM_ROOT/upc/comparing_networks/workload/toy_all_reduce_one_collective" \
+        --npus-count $NPUS_COUNT \
+        --comm-size $COMM_SIZE \
+        --seed $SEED \
+        --logical-topology-config $LOGICAL_CONFIG \
+        --g2-system-config $G2_SYS_CONFIG \
+        --g2-network-config $G2_NET_CONFIG \
+        --ns3-system-config $NS3_SYS_CONFIG \
+        --ns3-network-config "$NS3_CONFIG" \
+        --analytical-system-config $ANALYTICAL_SYS_CONFIG \
+        --analytical-network-config $ANALYTICAL_NET_CONFIG
+done
