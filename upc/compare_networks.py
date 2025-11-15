@@ -231,6 +231,8 @@ def main(args):
                 "ECMP_SEED": args.seed,
                 "TRACE_OUTPUT_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_trace.tr"),
                 "FCT_OUTPUT_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_fct.txt"),
+                "QLEN_MON_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_qlen.txt"),
+                "PFC_OUTPUT_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_pfc.txt"),
             }
             modify_config_file(args.ns3_network_config, ns3_conf_dest, ns3_overrides)
 
@@ -309,7 +311,7 @@ if __name__ == "__main__":
     parser.add_argument("--logical-topology-config", type=str, default=None, help="Ruta al fichero de topología lógica para NS3.")
     
     # Otros
-    parser.add_argument("--python-exec", type=str, default="../../astraenv39/bin/python3.9", help="Ruta al ejecutable de Python.")
+    parser.add_argument("--python-exec", type=str, default="../../../opt/venv/astra-sim/bin/python", help="Ruta al ejecutable de Python.")
     parser.add_argument("--seed", type=int, default=1, help="Seed for the simulation, particularly for ECMP in NS3.")
 
     parsed_args = parser.parse_args()
