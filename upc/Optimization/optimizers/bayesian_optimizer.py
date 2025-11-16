@@ -26,6 +26,7 @@ from ..helper import config_to_tuple, evaluate_config_worker
 # Check for sklearn availability
 try:
     from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.preprocessing import StandardScaler
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
@@ -86,13 +87,13 @@ class BayesianOptimizer(BaseOptimizer):
         kernel,
         acquisition,
         budget: int = 30,
-        init_samples: int = 5,
+        init_samples: int = 20,
         n_workers: int = 1,
         batch_size: Optional[int] = None,
         batch_strategy: str = "greedy",
         exhaustive_threshold: int = 5000,
         gp_alpha: float = 1e-6,
-        gp_n_restarts: int = 5,
+        gp_n_restarts: int = 20,
         verbose: bool = True,
         save_dir: str = ".",
         keep_top_k: int = -1,
@@ -157,6 +158,10 @@ class BayesianOptimizer(BaseOptimizer):
         # GP model storage
         self.gps: List[GaussianProcessRegressor] = []
         self.ei_scores: List[float] = []  # Acquisition scores per iteration
+        
+        # Feature scaler for normalizing inputs
+        self.scaler = StandardScaler()
+        self.scaler_fitted = False
         
         # Track evaluation attempts (including failures)
         self.n_attempts = 0
@@ -476,6 +481,8 @@ class BayesianOptimizer(BaseOptimizer):
         """
         Fit Gaussian Process to observed data.
         
+        Uses StandardScaler to normalize features for better convergence.
+        
         Returns:
             Fitted GP model, or None if fitting failed
         """
@@ -489,6 +496,17 @@ class BayesianOptimizer(BaseOptimizer):
                 param_names = sorted(self.configs[0].keys())
                 print(f"Features: {param_names}")
         
+        # Scale features for better convergence
+        if not self.scaler_fitted:
+            # First time: fit and transform
+            X_train_scaled = self.scaler.fit_transform(X_train)
+            self.scaler_fitted = True
+            if self.verbose:
+                print("  Fitted StandardScaler to normalize features")
+        else:
+            # Subsequent times: only transform
+            X_train_scaled = self.scaler.transform(X_train)
+        
         # Get sklearn kernel
         sklearn_kernel = self.kernel.get_sklearn_kernel()
         
@@ -497,7 +515,9 @@ class BayesianOptimizer(BaseOptimizer):
             kernel=sklearn_kernel,
             alpha=self.gp_alpha,
             normalize_y=True,
-            n_restarts_optimizer=self.gp_n_restarts
+            n_restarts_optimizer=self.gp_n_restarts,
+            #optimizer='fmin_l_bfgs_b',  # Explicitly set optimizer
+            #random_state=42  # For reproducibility
         )
         
         # Fit GP
@@ -522,7 +542,7 @@ class BayesianOptimizer(BaseOptimizer):
                         print(f"    Length scale: {length_scale[0]:.4f}")
                 
                 # Compute training RMSE
-                train_pred = gp.predict(X_train)
+                train_pred = gp.predict(X_train_scaled)
                 rmse = np.sqrt(np.mean((y_train - train_pred) ** 2))
                 print(f"  RMSE on training data: {rmse:.2f}s")
             
@@ -595,6 +615,9 @@ class BayesianOptimizer(BaseOptimizer):
         """
         X_candidates = np.array(self._configs_to_features(candidates))
         
+        # Scale candidates using fitted scaler
+        X_candidates_scaled = self.scaler.transform(X_candidates)
+        
         # Current best
         best_y = np.min(self.scores)
         if self.verbose:
@@ -604,7 +627,7 @@ class BayesianOptimizer(BaseOptimizer):
         if self.verbose:
             print(f"Computing acquisition for all {len(candidates)} configs...")
         
-        mu, sigma = gp.predict(X_candidates, return_std=True)
+        mu, sigma = gp.predict(X_candidates_scaled, return_std=True)
         acquisition_scores = self.acquisition.compute(mu, sigma, best_y)
         
         # Find global maximum
@@ -658,13 +681,16 @@ class BayesianOptimizer(BaseOptimizer):
         
         X_sampled = np.array(self._configs_to_features(sampled_candidates))
         
+        # Scale sampled candidates
+        X_sampled_scaled = self.scaler.transform(X_sampled)
+        
         # Current best
         best_y = np.min(self.scores)
         if self.verbose:
             print(f"Current best: {best_y:.2f}s")
         
         # Get GP predictions
-        mu, sigma = gp.predict(X_sampled, return_std=True)
+        mu, sigma = gp.predict(X_sampled_scaled, return_std=True)
         
         # Score by UCB (for pre-selection)
         ucb_scores = -mu + 2.0 * sigma
@@ -753,7 +779,8 @@ class BayesianOptimizer(BaseOptimizer):
         for i in range(min(batch_size, len(candidates))):
             # Get best by acquisition
             X_cand = np.array(self._configs_to_features(candidates))
-            mu, sigma = gp.predict(X_cand, return_std=True)
+            X_cand_scaled = self.scaler.transform(X_cand)
+            mu, sigma = gp.predict(X_cand_scaled, return_std=True)
             best_y = np.min(self.scores)
             acq_scores = self.acquisition.compute(mu, sigma, best_y)
             
@@ -794,7 +821,8 @@ class BayesianOptimizer(BaseOptimizer):
         
         # Sample from GP posterior
         X_cand = np.array(self._configs_to_features(candidates))
-        y_samples = gp.sample_y(X_cand, n_samples=batch_size, random_state=None)
+        X_cand_scaled = self.scaler.transform(X_cand)
+        y_samples = gp.sample_y(X_cand_scaled, n_samples=batch_size, random_state=None)
         
         # Select configs with lowest sampled values
         mean_samples = y_samples.mean(axis=1)
@@ -821,28 +849,29 @@ class BayesianOptimizer(BaseOptimizer):
             return []
         
         X_cand = np.array(self._configs_to_features(candidates))
+        X_cand_scaled = self.scaler.transform(X_cand)
         batch = []
         selected_X = []
         
         for i in range(min(batch_size, len(candidates))):
             # Compute acquisition
-            mu, sigma = gp.predict(X_cand, return_std=True)
+            mu, sigma = gp.predict(X_cand_scaled, return_std=True)
             best_y = np.min(self.scores)
             acq_scores = self.acquisition.compute(mu, sigma, best_y)
             
             # Apply penalty for selected points
             for x_selected in selected_X:
-                distances = np.linalg.norm(X_cand - x_selected, axis=1)
+                distances = np.linalg.norm(X_cand_scaled - x_selected, axis=1)
                 penalty = np.exp(-distances**2 / (2 * 0.5**2))  # Gaussian penalty
                 acq_scores *= (1 - penalty)
             
             best_idx = np.argmax(acq_scores)
             batch.append(candidates[best_idx])
-            selected_X.append(X_cand[best_idx])
+            selected_X.append(X_cand_scaled[best_idx])
             
             # Remove from candidates
             candidates = candidates[:best_idx] + candidates[best_idx+1:]
-            X_cand = np.delete(X_cand, best_idx, axis=0)
+            X_cand_scaled = np.delete(X_cand_scaled, best_idx, axis=0)
         
         return batch
     
