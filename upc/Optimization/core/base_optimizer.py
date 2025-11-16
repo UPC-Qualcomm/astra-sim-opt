@@ -142,7 +142,10 @@ class BaseOptimizer(ABC):
             result = self.simulation_runner.run_simulation(config, return_paths=True)
             
             if result is not None:
-                if isinstance(result, tuple) and len(result) == 3:
+                if isinstance(result, tuple) and len(result) == 4:
+                    # From evaluate_config_worker: (exec_time, is_oom, file_paths, metadata)
+                    exec_time, is_oom, file_paths, metadata = result
+                elif isinstance(result, tuple) and len(result) == 3:
                     exec_time, file_paths, metadata = result
                 elif isinstance(result, tuple) and len(result) == 2:
                     # Backward compatibility
@@ -153,8 +156,8 @@ class BaseOptimizer(ABC):
                     file_paths = {}
                     metadata = {}
                 
-                # Compute objective score
-                score = self.objective.compute(exec_time, metadata)
+                # Compute objective score (pass config as well)
+                score = self.objective.compute(exec_time, metadata, config)
                 
                 # Record results
                 self.configs.append(config)

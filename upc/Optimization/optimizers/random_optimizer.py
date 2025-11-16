@@ -260,7 +260,7 @@ class RandomOptimizer(BaseOptimizer):
                     
                     if exec_time is not None:
                         # Compute objective score
-                        score = self.objective.compute(exec_time, metadata)
+                        score = self.objective.compute(exec_time, metadata, config)
                         
                         # Record results
                         self.configs.append(config)

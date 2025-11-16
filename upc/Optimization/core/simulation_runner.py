@@ -132,7 +132,7 @@ class SimulationRunner:
                     print(f"Removing: {dir_path}")
                 shutil.rmtree(dir_path)
     
-    def run_simulation(self, config: Dict, return_paths: bool = False):
+    def run_simulation(self, config: Dict, return_paths: bool = False, suffix: Optional[str] = None):
         """
         Run simulation for a configuration.
         
@@ -142,6 +142,7 @@ class SimulationRunner:
             config: Configuration dictionary with dp, mp, sp, pp, sharded 
                    (and optionally net_*, sys_*, mem_* parameters)
             return_paths: If True, return (exec_time, file_paths, metadata) tuple
+            suffix: Optional suffix for output files (for parallel execution to avoid conflicts)
         
         Returns:
             If return_paths=False: Execution time in seconds, or None if failed
@@ -153,6 +154,12 @@ class SimulationRunner:
         sp = config['sp']
         pp = config['pp']
         sharded = config['sharded']
+        
+        # Generate unique suffix for parallel execution if requested and not provided
+        if suffix is None:
+            import time
+            import os
+            suffix = f"_pid{os.getpid()}_t{int(time.time() * 1000000)}"
         
         if self.verbose:
             print(f"  Running: dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")
@@ -193,7 +200,7 @@ class SimulationRunner:
             if self.verbose:
                 print(f"    Running simulation: {workload_file}")
             
-            result = self._run_astrasim(workload_file)
+            result = self._run_astrasim(workload_file, suffix=suffix)
             
             if result != "":
                 if self.verbose:
@@ -201,7 +208,7 @@ class SimulationRunner:
                 return None
             
             # 4. Extract execution time
-            exec_time, is_oom = self._extract_execution_time(workload_file)
+            exec_time, is_oom = self._extract_execution_time(workload_file, suffix=suffix)
             
             if exec_time is None:
                 if self.verbose:
@@ -230,7 +237,11 @@ class SimulationRunner:
         except Exception as e:
             if self.verbose:
                 print(f"    ⚠️  Error: {e}")
-            return None
+            # Return appropriate None tuple based on return_paths flag
+            if return_paths:
+                return None, None, {}, {}
+            else:
+                return None, None
     
     def _get_simulation_metadata(self) -> Dict:
         """
@@ -298,12 +309,13 @@ class SimulationRunner:
         
         return None
     
-    def _run_astrasim(self, workload_path: str) -> str:
+    def _run_astrasim(self, workload_path: str, suffix: Optional[str] = None) -> str:
         """
         Run AstraSim simulation.
         
         Args:
             workload_path: Path to workload file
+            suffix: Optional suffix for output files (for parallel execution)
         
         Returns:
             Empty string if successful, error message otherwise
@@ -324,29 +336,34 @@ class SimulationRunner:
             memory=self.memory_config,
             output_dir=self.output_dir,
             network_log=self.network_log_dir,
-            sim_type=self.sim_type
+            sim_type=self.sim_type,
+            suffix=suffix
         )
     
-    def _extract_execution_time(self, workload_file: str) -> Optional[float]:
+    def _extract_execution_time(self, workload_file: str, suffix: Optional[str] = None) -> Optional[tuple]:
         """
         Extract execution time from simulation log.
         
         Args:
             workload_file: Path to workload file (without extension)
+            suffix: Optional suffix for output files (must match what was used in run)
         
         Returns:
-            Execution time in seconds, or None if extraction failed
+            Tuple of (exec_time, is_oom), or None if extraction failed
         """
         # Get workload filename
         workload_filename = workload_file.split('/')[-1]
         
-        # Construct log file path
-        log_file = f"{self.output_dir}/{workload_filename}.log"
+        # Construct log file path with suffix if provided
+        log_file = f"{self.output_dir}/{workload_filename}"
+        if suffix is not None:
+            log_file += suffix
+        log_file += ".log"
         
         if not os.path.exists(log_file):
             if self.verbose:
                 print(f"    ⚠️  Log file does not exist: {log_file}")
-            return None
+            return None, None
         
         # Extract time using output_parser
         exec_time, is_oom = output_parser.extract_execution_time(log_file)

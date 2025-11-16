@@ -92,7 +92,6 @@ class SearchSpaceBuilder:
             'parallelism_strategy': self._parse_parallelism_strategy,
             'system': self._parse_system,
             'network': self._parse_network,
-            'hardware': self._parse_hardware,
             'model': self._parse_model,
         }
         
@@ -124,44 +123,42 @@ class SearchSpaceBuilder:
     
     def _parse_system(self, params: Dict) -> None:
         """Parse collective communication parameters."""
-        if 'scheduling_policy' in params:
-            self.parameters['scheduling_policy'] = params['scheduling_policy']
+        if 'scheduling-policy' in params:
+            self.parameters['scheduling-policy'] = params['scheduling-policy']
         
-        if 'collective_implementation' in params:
-            impl = params['collective_implementation']
+        if 'collective-implementation' in params:
+            impl = params['collective-implementation']
             for collective_type, algorithms in impl.items():
                 # Convert 'all-reduce' to 'all_reduce' for valid Python identifiers
                 param_name = collective_type.replace('-', '_')
                 self.parameters[param_name] = algorithms
         
         if 'active-chunks-per-dimension' in params:
-            self.parameters['active_chunks_per_dimension'] = params['active-chunks-per-dimension']
+            self.parameters['active-chunks-per-dimension'] = params['active-chunks-per-dimension']
         
         if 'preferred-dataset-splits' in params:
-            self.parameters['preferred_dataset_splits'] = params['preferred-dataset-splits']
+            self.parameters['preferred-dataset-splits'] = params['preferred-dataset-splits']
         
         if 'collective-optimization' in params:
-            self.parameters['collective_optimization'] = params['collective-optimization']
+            self.parameters['collective-optimization'] = params['collective-optimization']
+
+        if 'local-mem-bw' in params:
+            self.parameters['local-mem-bw'] = params['local-mem-bw']
+        if 'local-mem-size' in params:
+            self.parameters['local-mem-size'] = params['local-mem-size']
+        if 'peak-perf' in params:
+            self.parameters['peak-perf'] = params['peak-perf']
     
     def _parse_network(self, params: Dict) -> None:
         """Parse network parameters."""
         if 'topology' in params:
             self.parameters['topology'] = params['topology']
-        if 'inter_node_bw' in params:
-            self.parameters['inter_node_bw'] = params['inter_node_bw']
-        if 'intra_node_bw' in params:
-            self.parameters['intra_node_bw'] = params['intra_node_bw']
-        if 'npus_per_node' in params:
-            self.parameters['npus_per_node'] = params['npus_per_node']
-    
-    def _parse_hardware(self, params: Dict) -> None:
-        """Parse hardware parameters."""
-        if 'local_mem_bw' in params:
-            self.parameters['local_mem_bw'] = params['local_mem_bw']
-        if 'local_mem_size' in params:
-            self.parameters['local_mem_size'] = params['local_mem_size']
-        if 'peak_perf' in params:
-            self.parameters['peak_perf'] = params['peak_perf']
+        if 'inter-node-bw' in params:
+            self.parameters['inter-node-bw'] = params['inter-node-bw']
+        if 'intra-node-bw' in params:
+            self.parameters['intra-node-bw'] = params['intra-node-bw']
+        if 'npus-per-node' in params:
+            self.parameters['npus-per-node'] = params['npus-per-node']
     
     def _parse_model(self, params: Dict) -> None:
         """Parse model parameters."""

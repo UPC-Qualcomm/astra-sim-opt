@@ -57,7 +57,7 @@ DEFAULT_SYSTEM_CONFIG = {
     "all-to-all-implementation": ["halvingDoubling", "halvingDoubling"],
     "collective-optimization": "localBWAware",
     "local-mem-bw": 3350,
-    "local-mem-size": 80,
+    "local-mem-size": 800,
     "enable_network_logger": 1,
     "boost-mode": 0,
     "peak-perf": 989,
@@ -70,7 +70,7 @@ DEFAULT_SYSTEM_CONFIG = {
 
 DEFAULT_NETWORK_CONFIG = {
     "topology": ["Switch", "Switch"],
-    "npus_count": [8, 8],
+    "npus_count": [8, 2],
     "bandwidth": [450.0, 100.0],
     "bandwidth_unit": "GB/s",
     "latency": [0.0, 0.0],
@@ -103,21 +103,21 @@ def generate_system_config(config: Dict[str, Any]) -> str:
     system_config = DEFAULT_SYSTEM_CONFIG.copy()
     
     # Override with custom values from config if present
-    param_mapping = {
-        'sys_scheduling-policy': 'scheduling-policy',
-        'sys_endpoint-delay': 'endpoint-delay',
-        'sys_active-chunks-per-dimension': 'active-chunks-per-dimension',
-        'sys_preferred-dataset-splits': 'preferred-dataset-splits',
-        'sys_collective-optimization': 'collective-optimization',
-        'sys_local-mem-bw': 'local-mem-bw',
-        'sys_local-mem-size': 'local-mem-size',
-        'sys_boost-mode': 'boost-mode',
-        'sys_peak-perf': 'peak-perf'
-    }
+    param_mapping = [
+        'scheduling-policy',
+        'endpoint-delay',
+        'active-chunks-per-dimension',
+        'preferred-dataset-splits',
+        'collective-optimization',
+        'local-mem-bw',
+        'local-mem-size',
+        'boost-mode',
+        'peak-perf'
+    ]
     
-    for config_key, system_key in param_mapping.items():
-        if config_key in config:
-            system_config[system_key] = config[config_key]
+    for key in param_mapping:
+        if key in config:
+            system_config[key] = config[key]
     
     # Check cache - reuse if same config exists
     config_hash = _hash_config(system_config)
@@ -163,36 +163,14 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     
     # Override with custom values from config if present
     # Handle list parameters (bandwidth, latency, npus_count have _l0, _l1 suffixes)
-    if 'net_bandwidth_l0' in config or 'net_bandwidth_l1' in config:
+    if 'intra-node-bw' in config or 'inter-node-bw' in config:
         bandwidth = network_config['bandwidth'].copy()
-        if 'net_bandwidth_l0' in config:
-            bandwidth[0] = config['net_bandwidth_l0']
-        if 'net_bandwidth_l1' in config:
-            bandwidth[1] = config['net_bandwidth_l1']
+        if 'intra-node-bw' in config:
+            bandwidth[0] = config['intra-node-bw']
+        if 'inter-node-bw' in config:
+            bandwidth[1] = config['inter-node-bw']
         network_config['bandwidth'] = bandwidth
     
-    if 'net_latency_l0' in config or 'net_latency_l1' in config:
-        latency = network_config['latency'].copy()
-        if 'net_latency_l0' in config:
-            latency[0] = config['net_latency_l0']
-        if 'net_latency_l1' in config:
-            latency[1] = config['net_latency_l1']
-        network_config['latency'] = latency
-    
-    if 'net_npus_count_l0' in config or 'net_npus_count_l1' in config:
-        npus_count = network_config['npus_count'].copy()
-        if 'net_npus_count_l0' in config:
-            npus_count[0] = config['net_npus_count_l0']
-        if 'net_npus_count_l1' in config:
-            npus_count[1] = config['net_npus_count_l1']
-        network_config['npus_count'] = npus_count
-    
-    # Handle scalar parameters
-    if 'net_packet_size' in config:
-        network_config['packet_size'] = config['net_packet_size']
-    
-    if 'net_header_size' in config:
-        network_config['header_size'] = config['net_header_size']
     
     # Check cache - reuse if same config exists
     config_hash = _hash_config(network_config)

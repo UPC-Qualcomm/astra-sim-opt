@@ -13,6 +13,7 @@ from .sampler import (
 from .base_optimizer import BaseOptimizer
 from .simulation_runner import SimulationRunner
 from .time_statistics import TimeStatistics
+from .categorical_encoder import get_numerical, get_str
 from .objective import (
     ObjectiveFunction,
     MinimizeExecutionTime,
@@ -49,13 +50,10 @@ __all__ = [
     'BaseOptimizer',
     'SimulationRunner',
     'TimeStatistics',
+    'get_numerical',
+    'get_str',
     'ObjectiveFunction',
     'MinimizeExecutionTime',
-    'MinimizeMemoryUsage',
-    'MinimizeEnergyConsumption',
-    'MaximizeThroughput',
-    'MinimizeTimeMemoryProduct',
-    'WeightedMultiObjective',
     'CustomObjective',
     'create_objective',
 ]

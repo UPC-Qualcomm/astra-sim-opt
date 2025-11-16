@@ -20,7 +20,7 @@ from functools import partial
 
 # Add parent directory to path for imports
 sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
-from ..core import BaseOptimizer
+from ..core import BaseOptimizer, get_numerical
 from ..helper import config_to_tuple, evaluate_config_worker
 
 # Check for sklearn availability
@@ -246,7 +246,7 @@ class BayesianOptimizer(BaseOptimizer):
         for config, exec_time, is_oom, file_paths, metadata in results:
             if exec_time is not None:
                 # Compute objective score
-                score = self.objective.compute(exec_time, metadata)
+                score = self.objective.compute(exec_time, metadata, config)
                 
                 self.configs.append(config)
                 self.scores.append(score)
@@ -441,7 +441,7 @@ class BayesianOptimizer(BaseOptimizer):
                 
                 if exec_time is not None:
                     # Compute objective score
-                    score = self.objective.compute(exec_time, metadata)
+                    score = self.objective.compute(exec_time, metadata, config)
                     
                     self.configs.append(config)
                     self.scores.append(score)
@@ -850,6 +850,8 @@ class BayesianOptimizer(BaseOptimizer):
         """
         Convert configuration dictionaries to feature vectors for GP.
         
+        Uses get_numerical() to handle both categorical and numerical parameters.
+        
         Args:
             configs: List of configuration dictionaries
         
@@ -864,15 +866,10 @@ class BayesianOptimizer(BaseOptimizer):
         
         features = []
         for config in configs:
-            feature = []
-            for param in param_names:
-                value = config[param]
-                # Convert boolean to float
-                if isinstance(value, bool):
-                    feature.append(float(value))
-                else:
-                    feature.append(float(value))
+            # Build feature vector in consistent order
+            feature = [get_numerical(param, config[param]) for param in param_names]
             features.append(feature)
+        
         return features
     
     def __repr__(self) -> str:

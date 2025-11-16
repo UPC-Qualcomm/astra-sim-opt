@@ -91,8 +91,6 @@ def evaluate_config_worker(config: Dict, simulation_runner) -> Tuple[Dict, Optio
             if isinstance(result, tuple) and len(result) == 4:
                 exec_time, is_oom, file_paths, metadata = result
             elif isinstance(result, tuple) and len(result) == 3:
-                exec_time, is_oom, file_paths, metadata = result
-            elif isinstance(result, tuple) and len(result) == 2:
                 exec_time, is_oom, file_paths = result
                 metadata = {}
             else:
@@ -102,8 +100,8 @@ def evaluate_config_worker(config: Dict, simulation_runner) -> Tuple[Dict, Optio
             
             return config, exec_time, is_oom, file_paths, metadata
         else:
-            return config, None, {}, {}
+            return config, None, None, {}, {}
             
     except Exception as e:
         print(f"⚠️  Evaluation error for config {config}: {e}")
-        return config, None, {}, {}
+        return config, None, None, {}, {}

@@ -28,6 +28,14 @@ from .core.simulation_runner import SimulationRunner
 from .core.base_optimizer import BaseOptimizer
 from .helper import config_to_tuple, tuple_to_config
 
+# Objective functions
+from .core.objective import (
+    ObjectiveFunction,
+    MinimizeExecutionTime,
+    CustomObjective,
+    create_objective
+)
+
 # Samplers
 from .core.sampler import (
     BaseSampler,
@@ -73,6 +81,11 @@ try:
         # Helpers
         'config_to_tuple',
         'tuple_to_config',
+        # Objectives
+        'ObjectiveFunction',
+        'MinimizeExecutionTime',
+        'CustomObjective',
+        'create_objective',
         # Samplers
         'BaseSampler',
         'RandomSampler',
@@ -112,6 +125,11 @@ except ImportError:
         # Helpers
         'config_to_tuple',
         'tuple_to_config',
+        # Objectives
+        'ObjectiveFunction',
+        'MinimizeExecutionTime',
+        'CustomObjective',
+        'create_objective',
         # Samplers
         'BaseSampler',
         'RandomSampler',

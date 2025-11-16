@@ -17,7 +17,8 @@ from Optimization import (
     SimulationRunner,
     MaternKernel,
     ExpectedImprovement,
-    BayesianOptimizer
+    BayesianOptimizer,
+    create_objective  # Import objective factory
 )
 
 
@@ -51,7 +52,7 @@ def main():
     # Note: num_npus is read from the JSON file (npu_count field)
     search_space = create_search_space(
         search_space_path,
-        include_categories=['parallelism_strategy']
+        include_categories=['parallelism_strategy', 'system', 'network', 'collective']
     )
     print(f"   Design space size: {search_space.get_design_space_size()}")
     
@@ -79,6 +80,34 @@ def main():
     print(f"   Kernel: {kernel}")
     print(f"   Acquisition: {acquisition}")
     
+    print("\n4. Creating objective function...")
+    
+    # Option 1: Multiplicative objective (captures resource synergies, penalizes imbalance)
+    objective = create_objective(
+        'net_and_sys_mult',  # Use multiplicative objective
+        bw_weight=1.0,
+        memory_size_weight=1.0,
+        local_bw_weight=1.0,
+        peak_perf_weight=1.0
+    )
+    
+    # Option 2: Additive objective (linear trade-offs, more stable)
+    # objective = create_objective(
+    #     'net_and_sys',  # Use additive objective
+    #     bw_weight=1.0,
+    #     memory_size_weight=0.5,
+    #     local_bw_weight=0.5,
+    #     peak_perf_weight=1.0
+    # )
+    
+    # Option 3: Simple execution time minimization (default)
+    # objective = create_objective('time')
+    
+    print(f"   Using: {objective.name}")
+    print(f"   Type: Multiplicative (captures resource synergies)")
+    print(f"   Weights: BW={objective.bw_weight}, Mem={objective.memory_size_weight}, "
+          f"LocalBW={objective.local_bw_weight}, PeakPerf={objective.peak_perf_weight}")
+
     # 5. Create optimizer
     print("\n5. Creating Bayesian optimizer...")
     optimizer = BayesianOptimizer(
@@ -88,11 +117,12 @@ def main():
         kernel=kernel,
         acquisition=acquisition,
         budget=BUDGET,
+        #objective=objective,  # Pass the objective
         init_samples=INIT_SAMPLES,
         verbose=True,
-        keep_top_k=5,
-        n_workers = 6,
-        batch_size= 6,
+        keep_top_k=30,
+        n_workers=1,
+        batch_size=1,
         profile_time=True  # Enable time profiling
 
     )
@@ -106,7 +136,7 @@ def main():
     best_config, history = optimizer.run()
     
     # 7. Display results
-    if best_config:
+    if best_config is not None:
         print("\n" + "="*70)
         print("OPTIMIZATION COMPLETE")
         print("="*70)

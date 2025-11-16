@@ -43,13 +43,14 @@ class ObjectiveFunction(ABC):
         self.minimize = minimize
     
     @abstractmethod
-    def compute(self, exec_time: float, metadata: Dict[str, Any]) -> float:
+    def compute(self, exec_time: float, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
         """
         Compute objective score from simulation results.
         
         Args:
             exec_time: Execution time in seconds (from simulation)
             metadata: Additional simulation metadata (model params, hardware config, etc.)
+            config: Configuration dictionary with hardware/network parameters (e.g., npu_count, local_mem_bw, etc.)
         
         Returns:
             Scalar score to optimize
@@ -106,7 +107,7 @@ class MinimizeExecutionTime(ObjectiveFunction):
     def __init__(self):
         super().__init__("Minimize Execution Time")
     
-    def compute(self, exec_time: float, metadata: Dict[str, Any]) -> float:
+    def compute(self, exec_time: float, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
         """Return execution time as objective."""
         return exec_time
 
@@ -143,7 +144,7 @@ class CustomObjective(ObjectiveFunction):
         super().__init__(name, minimize)
         self.compute_fn = compute_fn
     
-    def compute(self, exec_time: float, metadata: Dict[str, Any]) -> float:
+    def compute(self, exec_time: float, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
         """Call user-provided compute function."""
         return self.compute_fn(exec_time, metadata)
 

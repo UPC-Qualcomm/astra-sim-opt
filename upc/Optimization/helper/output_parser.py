@@ -1,6 +1,6 @@
 
 def extract_execution_time(log_file):
-    """Extract wall time (in cycles) from AstraSim log file."""
+    """Extract wall time (in cycles) from AstraSim log file. Returns tuple (time_seconds, is_oom)."""
     try:
         with open(log_file, 'r') as f:
             content = f.read()
@@ -16,7 +16,7 @@ def extract_execution_time(log_file):
             time_seconds = cycles / 1e9
             return time_seconds, int(match_is_oom.group(1))
         
-        return None
+        return None, None
     except Exception as e:
         print(f"Error extracting execution time: {e}")
-        return None
+        return None, None
