@@ -48,7 +48,8 @@ upc/network_log/
 upc/streamlit/temp
 upc/comparing_networks/output/
 upc/comparing_networks/workload/
-upc/Optimization/histogram/data
+upc/Optimization/histogram/data/
+upc/Optimization/temp/config/
 
 **/*/__pycache__
 

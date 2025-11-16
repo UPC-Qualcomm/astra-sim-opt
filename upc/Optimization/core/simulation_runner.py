@@ -179,7 +179,8 @@ class SimulationRunner:
             success = workload_generator.generate_workload_with_env(
                 config,
                 workload_generator.Model(self.model_num),
-                self.folder_name
+                self.folder_name,
+                suffix=suffix
             )
             
             if not success:
@@ -189,7 +190,7 @@ class SimulationRunner:
             
             # 2. Find generated workload file
             config_name = f"{dp}_{mp}_{sp}_{pp}_{1 if sharded else 0}"
-            workload_file = self._find_workload_file(config_name)
+            workload_file = self._find_workload_file(config_name, suffix=suffix)
             
             if workload_file is None:
                 if self.verbose:
@@ -288,7 +289,7 @@ class SimulationRunner:
         
         return metadata
     
-    def _find_workload_file(self, config_name: str) -> Optional[str]:
+    def _find_workload_file(self, config_name: str, suffix: str = "") -> Optional[str]:
         """
         Find generated workload file.
         
@@ -300,9 +301,9 @@ class SimulationRunner:
         """
         import glob
         
-        pattern = f"{self.workload_dir}/{config_name}.seq_*.batch_*.0.et"
+        pattern = f"{self.workload_dir}/{config_name}.seq_*.batch_*{suffix}.0.et"
         matching_files = glob.glob(pattern)
-        
+        print("matching_files:",matching_files)
         if matching_files:
             # Remove .0.et suffix
             return matching_files[0][:-5]
@@ -337,7 +338,7 @@ class SimulationRunner:
             output_dir=self.output_dir,
             network_log=self.network_log_dir,
             sim_type=self.sim_type,
-            suffix=suffix
+            #suffix=suffix
         )
     
     def _extract_execution_time(self, workload_file: str, suffix: Optional[str] = None) -> Optional[tuple]:
@@ -356,8 +357,6 @@ class SimulationRunner:
         
         # Construct log file path with suffix if provided
         log_file = f"{self.output_dir}/{workload_filename}"
-        if suffix is not None:
-            log_file += suffix
         log_file += ".log"
         
         if not os.path.exists(log_file):

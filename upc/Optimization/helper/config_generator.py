@@ -57,7 +57,7 @@ DEFAULT_SYSTEM_CONFIG = {
     "all-to-all-implementation": ["halvingDoubling", "halvingDoubling"],
     "collective-optimization": "localBWAware",
     "local-mem-bw": 3350,
-    "local-mem-size": 800,
+    "local-mem-size": 80,
     "enable_network_logger": 1,
     "boost-mode": 0,
     "peak-perf": 989,

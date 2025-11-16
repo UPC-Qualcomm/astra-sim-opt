@@ -7,7 +7,7 @@ sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc')
 from generate_workloads import Model
 
 
-def generate_workload_with_env(design_point: Dict, model, folder_name):
+def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""):
     """
     Generate workload using the correct Python environment.
     
@@ -46,7 +46,8 @@ def generate_workload_with_env(design_point: Dict, model, folder_name):
         f"--head {head} "
         f"--num_stacks {num_stacks} "
         f"--weight_sharded {sharded} "
-        f"--chakra_schema_version v0.0.4"
+        f"--chakra_schema_version v0.0.4 "
+        f"--suffix {suffix}"
     )
     cwd = "/media/mohammad/extension/experiments/astra-sim/extern/symbolic_tensor_graph"
     
