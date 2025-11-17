@@ -107,8 +107,10 @@ class MinimizeExecutionTime(ObjectiveFunction):
     def __init__(self):
         super().__init__("Minimize Execution Time")
     
-    def compute(self, exec_time: float, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
         """Return execution time as objective."""
+        if is_oom:
+            return float('inf')
         return exec_time
 
 
@@ -144,9 +146,9 @@ class CustomObjective(ObjectiveFunction):
         super().__init__(name, minimize)
         self.compute_fn = compute_fn
     
-    def compute(self, exec_time: float, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
         """Call user-provided compute function."""
-        return self.compute_fn(exec_time, metadata)
+        return self.compute_fn(exec_time, is_oom, metadata)
 
 
 # Convenience factory function

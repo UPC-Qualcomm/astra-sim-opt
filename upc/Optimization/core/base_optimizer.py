@@ -146,18 +146,15 @@ class BaseOptimizer(ABC):
                     # From evaluate_config_worker: (exec_time, is_oom, file_paths, metadata)
                     exec_time, is_oom, file_paths, metadata = result
                 elif isinstance(result, tuple) and len(result) == 3:
-                    exec_time, file_paths, metadata = result
-                elif isinstance(result, tuple) and len(result) == 2:
-                    # Backward compatibility
-                    exec_time, file_paths = result
+                    exec_time, is_oom, file_paths = result
                     metadata = {}
                 else:
-                    exec_time = result
+                    exec_time, is_oom = result
                     file_paths = {}
                     metadata = {}
                 
                 # Compute objective score (pass config as well)
-                score = self.objective.compute(exec_time, metadata, config)
+                score = self.objective.compute(exec_time, is_oom, metadata, config)
                 
                 # Record results
                 self.configs.append(config)

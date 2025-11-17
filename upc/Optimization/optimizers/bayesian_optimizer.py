@@ -251,14 +251,14 @@ class BayesianOptimizer(BaseOptimizer):
         for config, exec_time, is_oom, file_paths, metadata in results:
             if exec_time is not None:
                 # Compute objective score
-                score = self.objective.compute(exec_time, metadata, config)
+                score = self.objective.compute(exec_time, is_oom, metadata, config)
                 
                 self.configs.append(config)
                 self.scores.append(score)
                 self.file_paths.append(file_paths)
                 self.metadata.append(metadata)
                 
-                if not is_oom and self.objective.is_better(score, self.best_score):
+                if self.objective.is_better(score, self.best_score):
                     self.best_score = score
                     self.best_config = config
                     self.best_iteration = len(self.configs) - 1
@@ -446,7 +446,7 @@ class BayesianOptimizer(BaseOptimizer):
                 
                 if exec_time is not None:
                     # Compute objective score
-                    score = self.objective.compute(exec_time, metadata, config)
+                    score = self.objective.compute(exec_time, is_oom, metadata, config)
                     
                     self.configs.append(config)
                     self.scores.append(score)
@@ -454,7 +454,7 @@ class BayesianOptimizer(BaseOptimizer):
                     self.metadata.append(metadata)
                     successful_in_batch += 1
                     
-                    if not is_oom and self.objective.is_better(score, self.best_score):
+                    if self.objective.is_better(score, self.best_score):
                         self.best_score = score
                         self.best_config = config
                         self.best_iteration = self.current_iteration
