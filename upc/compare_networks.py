@@ -228,7 +228,6 @@ def main(args):
             ns3_output_dir = os.path.join(base_run_dir, "ns3")
             os.makedirs(ns3_output_dir, exist_ok=True)
             ns3_overrides = {
-                "ECMP_SEED": args.seed,
                 "TRACE_OUTPUT_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_trace.tr"),
                 "FCT_OUTPUT_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_fct.txt"),
                 "QLEN_MON_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_qlen.txt"),
@@ -312,7 +311,6 @@ if __name__ == "__main__":
     
     # Otros
     parser.add_argument("--python-exec", type=str, default="../../../opt/venv/astra-sim/bin/python", help="Ruta al ejecutable de Python.")
-    parser.add_argument("--seed", type=int, default=1, help="Seed for the simulation, particularly for ECMP in NS3.")
 
     parsed_args = parser.parse_args()
     main(parsed_args)
