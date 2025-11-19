@@ -78,50 +78,50 @@ class Model(Enum):
     @staticmethod
     def get_model_params(model):
         """Returns parameters as
-        [din, dout, dmodel, dff, batch, seq, head, num_stacks]
+        [din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks]
         """
         if model == Model.T5_Small:
-            return [32128, 512, 512, 2048, [2048], 512, 8, 6]
+            return [32128, 512, 512, 2048, [2048], 32, 512, 8, 6]
         elif model == Model.T5_Base:
-            return [32128, 768, 768, 3072, [2048], 512, 12, 12]
+            return [32128, 768, 768, 3072, [2048], 32, 512, 12, 12]
         elif model == Model.T5_Large:
-            return [32128, 1024, 1024, 4096, [2048], 512, 16, 24]
+            return [32128, 1024, 1024, 4096, [2048], 32, 512, 16, 24]
         elif model == Model.GPT_2_Small:
-            return [50257, 768, 768, 3072, [2048], 1024, 12, 12]
+            return [50257, 768, 768, 3072, [2048], 32, 1024, 12, 12]
         elif model == Model.GPT_2_Medium:
-            return [50257, 1024, 1024, 4096, [2048], 1024, 16, 24]
+            return [50257, 1024, 1024, 4096, [2048], 32, 1024, 16, 24]
         elif model == Model.GPT_3_1300M:
-            return [50257, 2048, 2048, 8192, [1024], 2048, 16, 24]
+            return [50257, 2048, 2048, 8192, [1024], 32, 2048, 16, 24]
         elif model == Model.GPT_Neo_2700M:
-            return [50257, 2560, 2560, 10240, [2048], 2048, 32, 32]
+            return [50257, 2560, 2560, 10240, [2048], 32, 2048, 32, 32]
         elif model == Model.llama_8B:
-            return [30522, 4096, 4096, 16384, [2048], 256, 32, 32]
+            return [30522, 4096, 4096, 16384, [2048], 32, 256, 32, 32]
         elif model == Model.FLAN_T5_XXL_11B:
-            return [32128, 4096, 4096, 10240, [2048], 1024, 64, 24]
+            return [32128, 4096, 4096, 10240, [2048], 32, 1024, 64, 24]
         elif model == Model.OPT_13B:
-            return [50257, 5120, 5120, 20480, [2048], 2048, 40, 40]
+            return [50257, 5120, 5120, 20480, [2048], 32, 2048, 40, 40]
         elif model == Model.GPT_NeoX_20B:
-            return [50257, 6144, 6144, 24576, [2048], 2048, 64, 44]
+            return [50257, 6144, 6144, 24576, [2048], 32, 2048, 64, 44]
         elif model == Model.GPT_30B:
-            return [50257, 6144, 6144, 24576, [2048], 2048, 32, 48]
+            return [50257, 6144, 6144, 24576, [2048], 32, 2048, 32, 48]
         elif model == Model.GPT_40B:
-            return [50257, 8192, 8192, 32768, [2048], 2048, 32, 32]
+            return [50257, 8192, 8192, 32768, [256], 32, 2048, 32, 32]
         elif model == Model.LLaMA_3_70B:
-            return [30522, 30522, 8192, 32768, [2048], 2048, 64, 80]
+            return [30522, 30522, 8192, 32768, [2048], 32, 2048, 64, 80]
         elif model == Model.Model_100B:
             return [32000, 32000, 9216, 36864, [2048], 2048, 72, 88]
         elif model == Model.Model_120B:
-            return [32000, 32000, 10240, 40960, [2048], 2048, 80, 96]
+            return [32000, 32000, 10240, 40960, [2048], 32, 2048, 80, 96]
         elif model == Model.GPT_3_175B:
-            return [50257, 12288, 12288, 49152, [2048], 1024, 96, 96]
+            return [50257, 12288, 12288, 49152, [2048], 32, 1024, 96, 96]
         elif model == Model.PaLM_540B:
-            return [50257, 18432, 18432, 73728, [2048], 8192, 72, 118]
+            return [50257, 18432, 18432, 73728, [2048], 32, 8192, 72, 118]
         elif model == Model.GPT_4_Estimated_over_1T:
-            return [50257, 20480, 20480, 81920, [2048], 8192, 128, 128]
+            return [50257, 20480, 20480, 81920, [2048], 32, 8192, 128, 128]
         elif model == Model.Simple:
-            return [1024, 1024, 1024, 4096, [32], 32, 4, 4]
+            return [1024, 1024, 1024, 4096, [32], 32, 32, 4, 4]
         else:
-            return [51200, 25600, 25600, 25600 * 4, [1024], 1024, 1024, 32]
+            return [51200, 25600, 25600, 25600 * 4, [1024], 32, 1024, 1024, 32]
 
     # def get_model_params(model):
     #    din = 51200
@@ -135,13 +135,25 @@ class Model(Enum):
     #    return [din, dout, dmodel, dff, batch, seq, head, num_stacks]
 
 
-def generate_instance(design_point, model=Model.Default, folder_name="default"):
+def generate_instance(design_point, model=Model.Default, folder_name="default",  custom_args=None):
     root = os.path.join(
         os.path.split(os.path.abspath(__file__))[0], "workload", folder_name
     )
+    #root = f"/media/mohammad/SSD2/GPT_175/workload/{folder_name}"
     dp, mp, ssp, pp, sharded = design_point
 
-    din, dout, dmodel, dff, batch, seq, head, num_stacks = Model.get_model_params(model)
+    din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = Model.get_model_params(model)
+    if custom_args is not None:
+        weight_sharded = custom_args[0]
+        activation_recompute = custom_args[1]
+        tpsp = custom_args[2]
+        model_type = custom_args[3]
+        mixed_precision = custom_args[4]
+        print_gpu_vram = custom_args[5]
+        ep = custom_args[6]
+        kvhead = custom_args[7]
+        experts = custom_args[8]
+        kexperts = custom_args[9]
 
     cmd = (
         f"python main.py "
@@ -157,10 +169,21 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
         f"--dmodel {dmodel} "
         f"--dff {dff} "
         f"--batch '{batch}' "
+        f"--micro_batch '{micro_batch}' "
         f"--seq {seq} "
         f"--head {head} "
         f"--num_stacks {num_stacks} "
         f"--weight_sharded {sharded} "
+        f"--weight_sharded {weight_sharded} "
+        f"--activation_recompute {activation_recompute} "
+        f"--tpsp {tpsp} "
+        f"--model_type {model_type} "
+        f"--mixed_precision {mixed_precision} "
+        f"--print_gpu_vram {print_gpu_vram} "
+        f"--ep {ep} "
+        f"--kvhead {kvhead} "
+        f"--experts {experts} "
+        f"--kexperts {kexperts} "
         f"--chakra_schema_version v0.0.4"
     )
     cwd = os.path.join(
@@ -171,6 +194,10 @@ def generate_instance(design_point, model=Model.Default, folder_name="default"):
     )
     print(cmd)
     run_command(cmd, cwd)
+
+def str_to_bool(v):
+    # Convert "true" to True and "false" to False
+    return v.lower() in ("true", "t", "1", "yes", "y")
 
 if __name__ == "__main__":
     from functools import partial
@@ -234,8 +261,63 @@ if __name__ == "__main__":
         default=max_sp,
         help="Maximum spatial parallelism"
     )
-    args = parser.parse_args()
 
+    # Additional custom arguments newly added in STG
+    parser.add_argument(
+        "--weight_sharded",
+        type=str_to_bool,
+        help="whether weight sharded",
+        required=False,
+        default=False,
+    )
+    parser.add_argument(
+        "--activation_recompute",
+        type=str_to_bool,
+        help="whether recompute activation",
+        required=False,
+        default=False,
+    )
+    parser.add_argument(
+        "--tpsp",
+        type=str_to_bool,
+        help="use tp+sp or tp only",
+        required=False,
+        default=True,
+    )
+    parser.add_argument("--model_type", type=str, default="dense", required=False)
+    parser.add_argument(
+        "--mixed_precision", type=str_to_bool, default=False, required=False
+    )
+    parser.add_argument(
+        "--print_gpu_vram",
+        type=str_to_bool,
+        default=False,
+        required=False,
+        help="Whether to print per-GPU VRAM footprint (total / params / acts / grads) in GiB",
+    )
+
+    # These argument related to Expert Parallelism only for Mixture of Experts models.
+    # We may add a preset models later.
+    parser.add_argument(
+        "--ep", type=int, help="expert parallel degree", required=False, default=1
+    )
+    parser.add_argument("--kvhead", type=int, default=8, required=False)
+    parser.add_argument("--experts", type=int, default=8, required=False)
+    parser.add_argument("--kexperts", type=int, default=2, required=False)
+
+    args = parser.parse_args()
+    custom_args = [
+        args.weight_sharded,
+        args.activation_recompute,
+        args.tpsp,
+        args.model_type,
+        args.mixed_precision,
+        args.print_gpu_vram,
+        args.ep,
+        args.kvhead,
+        args.experts,
+        args.kexperts,
+    ]
     num_npus = args.num_npus
     dp = set(map(int, args.dp.split(',')))
     mp = set(map(int, args.mp.split(',')))
@@ -248,7 +330,7 @@ if __name__ == "__main__":
 
     design_space = get_design_space(num_npus, dp, mp, pp, sharded, max_sp)
     #design_space = get_design_space_no_sp(num_npus, dp, mp, pp, sharded)
-    func = partial(generate_instance, model=Model(int(model)), folder_name=folder_name)
+    func = partial(generate_instance, model=Model(int(model)), folder_name=folder_name, custom_args=custom_args)
 
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:
         results = list(tqdm(pool.imap_unordered(func, design_space), total=len(design_space)))
