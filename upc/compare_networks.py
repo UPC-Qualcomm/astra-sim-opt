@@ -144,8 +144,12 @@ def main(args):
         print(f"\n=== Fase 2: Ejecutando para el Colectivo='{coll_name}' ===")
         
         # Crear directorio de salida único para esta ejecución
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
+        run_start_time = datetime.now()
+        timestamp = run_start_time.strftime("%Y%m%d_%H%M%S_%f")[:-3] + "ms"
+        if args.g2_network_config:
+            network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
+        elif args.ns3_network_config:
+            network_name = os.path.splitext(os.path.basename(args.ns3_network_config))[0].split('_')[0]
         run_folder_name = f"run_{timestamp}"
         base_run_dir = os.path.join("output/comparison_run", network_name, coll_name, run_folder_name)
         
@@ -175,6 +179,11 @@ def main(args):
             f.write(f"Analytical Network Config: {args.analytical_network_config}\n")
             f.write(f"NS3 Network Config: {args.ns3_network_config}\n")
             f.write(f"NS3 Logical Topology: {args.logical_topology_config}\n")
+            f.write("\n### Overrides ###\n")
+            f.write(f"G2 Topology File Override: {args.g2_topology_file}\n")
+            f.write(f"NS3 Topology File Override: {args.ns3_topology_file}\n")
+            f.write(f"NS3 Precomputed Paths Override: {args.ns3_precomputed_paths}\n")
+            f.write("\n")
             f.write(f"Python Executable: {args.python_exec}\n")
         print(f"Guardada la configuración de la ejecución en: {config_summary_path}")
 
@@ -188,12 +197,16 @@ def main(args):
             sim_types.append("g2")
             g2_sys_conf_dest = os.path.join(configs_dir, f"g2_{os.path.basename(args.g2_system_config)}")
             shutil.copy(args.g2_system_config, g2_sys_conf_dest)
+            
             g2_net_conf_dest = os.path.join(configs_dir, f"g2_{os.path.basename(args.g2_network_config)}")
-            shutil.copy(args.g2_network_config, g2_net_conf_dest)
+            g2_overrides = {}
+            if args.g2_topology_file:
+                g2_overrides["topology_file"] = os.path.abspath(args.g2_topology_file)
+            modify_config_file(args.g2_network_config, g2_net_conf_dest, g2_overrides)
 
             # Leer el fichero de config de red de G2 para encontrar el fichero de topología
             try:
-                with open(args.g2_network_config, 'r') as f:
+                with open(g2_net_conf_dest, 'r') as f: # Leer desde el fichero modificado
                     g2_net_data = yaml.safe_load(f)
                 
                 g2_topology_file_src = g2_net_data.get("topology_file")
@@ -233,6 +246,11 @@ def main(args):
                 "QLEN_MON_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_qlen.txt"),
                 "PFC_OUTPUT_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_pfc.txt"),
             }
+            if args.ns3_topology_file:
+                ns3_overrides["TOPOLOGY_FILE"] = os.path.abspath(args.ns3_topology_file)
+            if args.ns3_precomputed_paths is not None:
+                ns3_overrides["USE_PRECOMPUTED_ROUTES"] = args.ns3_precomputed_paths
+
             modify_config_file(args.ns3_network_config, ns3_conf_dest, ns3_overrides)
 
         # Memory Config (solo copiar)
@@ -285,6 +303,16 @@ def main(args):
         # Restaurar PYTHONPATH
         os.environ['PYTHONPATH'] = original_pythonpath
 
+        # --- 5. Guardar el tiempo de ejecución ---
+        run_end_time = datetime.now()
+        runtime = run_end_time - run_start_time
+        with open(config_summary_path, "a") as f:
+            f.write("\n### Execution Summary ###\n")
+            f.write(f"Start Time: {run_start_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
+            f.write(f"End Time: {run_end_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
+            f.write(f"Total Runtime: {str(runtime)}\n")
+        print(f"Tiempo de ejecución total para '{coll_name}': {runtime}")
+
     print("\n=== Todas las simulaciones han finalizado. ===")
 
 
@@ -309,6 +337,11 @@ if __name__ == "__main__":
     
     parser.add_argument("--logical-topology-config", type=str, default=None, help="Ruta al fichero de topología lógica para NS3.")
     
+    # Argumentos para sobreescribir configuraciones
+    parser.add_argument("--g2-topology-file", type=str, default=None, help="Sobrescribe la ruta del fichero de topología en la configuración de red de G2.")
+    parser.add_argument("--ns3-topology-file", type=str, default=None, help="Sobrescribe la ruta del fichero de topología en la configuración de red de NS3.")
+    parser.add_argument("--ns3-precomputed-paths", type=int, default=None, help="Sobrescribe el valor de PRECOMPUTED_PATHS en la configuración de red de NS3.")
+
     # Otros
     parser.add_argument("--python-exec", type=str, default="../../../opt/venv/astra-sim/bin/python", help="Ruta al ejecutable de Python.")
 
