@@ -1,22 +1,31 @@
 
-def extract_execution_time(log_file):
-    """Extract wall time (in cycles) from AstraSim log file. Returns tuple (time_seconds, is_oom)."""
+def output_log_parser(log_file):
+    """Extract wall time (in cycles) from AstraSim log file. Returns tuple (max_time_seconds, is_any_oom)."""
     try:
         with open(log_file, 'r') as f:
             content = f.read()
         
-        # Look for wall time in cycles from any system (use sys[0] as reference)
+        # Look for wall time in cycles from all systems
         import re
-        match_exec = re.search(r'\[statistics\] \[info\] sys\[0\], Wall time: (\d+)', content)
-        match_is_oom = re.search(r'\[workload\] \[info\] sys\[0\] is OOM: (\d+)', content)
-        if match_exec and match_is_oom:
-            cycles = int(match_exec.group(1))
-            # Convert cycles to seconds assuming 1GHz frequency
-            # (you can adjust this frequency based on your simulation setup)
-            time_seconds = cycles / 1e9
-            return time_seconds, int(match_is_oom.group(1))
+        matches_exec = re.findall(r'\[statistics\] \[info\] sys\[(\d+)\], Wall time: (\d+)', content)
+        matches_oom = re.findall(r'\[workload\] \[info\] sys\[(\d+)\] is OOM: (\d+)', content)
         
-        return None, None
+        slowest_npu = None
+        is_any_oom = None
+        if matches_exec and matches_oom:
+            # Extract all execution times and convert to seconds (1GHz frequency)
+            exec_times = [int(cycles) / 1e9 for sys_id, cycles in matches_exec]
+            
+            # Return max execution time and 1 if any system is OOM
+            slowest_npu = max(exec_times)
+        
+        if matches_exec and matches_oom:
+            # Extract all OOM statuses
+            oom_statuses = [int(oom_status) for sys_id, oom_status in matches_oom]
+            
+            is_any_oom = 1 if any(oom_statuses) else 0
+            
+        return slowest_npu, is_any_oom
     except Exception as e:
-        print(f"Error extracting execution time: {e}")
+        print(f"Error parsing output: {e}")
         return None, None

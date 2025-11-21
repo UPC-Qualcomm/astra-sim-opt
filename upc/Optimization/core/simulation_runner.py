@@ -209,7 +209,7 @@ class SimulationRunner:
                 return None
             
             # 4. Extract execution time
-            exec_time, is_oom = self._extract_execution_time(workload_file, suffix=suffix)
+            exec_time, is_oom = self._output_log_parser(workload_file, suffix=suffix)
             
             if exec_time is None:
                 if self.verbose:
@@ -252,7 +252,7 @@ class SimulationRunner:
             Dictionary with model, network, hardware, and simulation parameters
         """
         # Get model parameters
-        din, dout, dmodel, dff, batch, seq, head, num_stacks = workload_generator.Model.get_model_params(
+        din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = workload_generator.Model.get_model_params(
             workload_generator.Model(self.model_num)
         )
         
@@ -341,7 +341,7 @@ class SimulationRunner:
             #suffix=suffix
         )
     
-    def _extract_execution_time(self, workload_file: str, suffix: Optional[str] = None) -> Optional[tuple]:
+    def _output_log_parser(self, workload_file: str, suffix: Optional[str] = None) -> Optional[tuple]:
         """
         Extract execution time from simulation log.
         
@@ -365,7 +365,7 @@ class SimulationRunner:
             return None, None
         
         # Extract time using output_parser
-        exec_time, is_oom = output_parser.extract_execution_time(log_file)
+        exec_time, is_oom = output_parser.output_log_parser(log_file)
         
         return exec_time, is_oom
     

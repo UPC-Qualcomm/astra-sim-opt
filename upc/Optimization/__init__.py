@@ -71,7 +71,60 @@ try:
     from .optimizers import BayesianOptimizer
     
     BO_AVAILABLE = True
-    
+except ImportError:
+    BO_AVAILABLE = False
+
+# Try to import DeepHyper optimizer
+try:
+    from .optimizers import DeepHyperOptimizer
+    DEEPHYPER_AVAILABLE = True
+except ImportError:
+    DEEPHYPER_AVAILABLE = False
+
+# Build exports list
+if BO_AVAILABLE and DEEPHYPER_AVAILABLE:
+    __all__ = [
+        # Core
+        'SearchSpaceBuilder',
+        'create_search_space',
+        'SimulationRunner',
+        'BaseOptimizer',
+        # Helpers
+        'config_to_tuple',
+        'tuple_to_config',
+        # Objectives
+        'ObjectiveFunction',
+        'MinimizeExecutionTime',
+        'CustomObjective',
+        'create_objective',
+        # Samplers
+        'BaseSampler',
+        'RandomSampler',
+        'LatinHypercubeSampler',
+        'SobolSampler',
+        'GridSampler',
+        'StratifiedSampler',
+        'get_sampler',
+        # Optimizers
+        'RandomOptimizer',
+        'BayesianOptimizer',
+        'DeepHyperOptimizer',
+        # Kernels
+        'BaseKernel',
+        'MaternKernel',
+        'RBFKernel',
+        'CustomKernel',
+        'CompositeKernel',
+        'get_kernel',
+        # Acquisition
+        'BaseAcquisitionFunction',
+        'ExpectedImprovement',
+        'UpperConfidenceBound',
+        'ProbabilityOfImprovement',
+        'ThompsonSampling',
+        'get_acquisition',
+    ]
+elif BO_AVAILABLE:
     __all__ = [
         # Core
         'SearchSpaceBuilder',
@@ -112,10 +165,34 @@ try:
         'ThompsonSampling',
         'get_acquisition',
     ]
-    
-except ImportError:
-    BO_AVAILABLE = False
-    
+elif DEEPHYPER_AVAILABLE:
+    __all__ = [
+        # Core
+        'SearchSpaceBuilder',
+        'create_search_space',
+        'SimulationRunner',
+        'BaseOptimizer',
+        # Helpers
+        'config_to_tuple',
+        'tuple_to_config',
+        # Objectives
+        'ObjectiveFunction',
+        'MinimizeExecutionTime',
+        'CustomObjective',
+        'create_objective',
+        # Samplers
+        'BaseSampler',
+        'RandomSampler',
+        'LatinHypercubeSampler',
+        'SobolSampler',
+        'GridSampler',
+        'StratifiedSampler',
+        'get_sampler',
+        # Optimizers
+        'RandomOptimizer',
+        'DeepHyperOptimizer',
+    ]
+else:
     __all__ = [
         # Core
         'SearchSpaceBuilder',

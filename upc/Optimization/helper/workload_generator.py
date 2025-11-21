@@ -28,8 +28,9 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
     pp = design_point['pp']
     sharded = design_point['sharded']
 
-    din, dout, dmodel, dff, batch, seq, head, num_stacks = Model.get_model_params(model)
+    din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = Model.get_model_params(model)
 
+    # Note: Having if the micro batch is much smaller than the global batch, the generator will be much slower.
     cmd = (
         f"/media/mohammad/extension/experiments/astraenv39/bin/python main.py "
         f"--output_dir {root} "
@@ -42,6 +43,7 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
         f"--dmodel {dmodel} "
         f"--dff {dff} "
         f"--batch '{batch}' "
+        f"--micro_batch '{micro_batch}' "
         f"--seq {seq} "
         f"--head {head} "
         f"--num_stacks {num_stacks} "

@@ -23,6 +23,7 @@ Example:
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Callable
 
+PENALTY = 10_000_000_000
 
 class ObjectiveFunction(ABC):
     """
@@ -43,7 +44,7 @@ class ObjectiveFunction(ABC):
         self.minimize = minimize
     
     @abstractmethod
-    def compute(self, exec_time: float, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
         """
         Compute objective score from simulation results.
         
@@ -84,7 +85,7 @@ class ObjectiveFunction(ABC):
             Best score (minimum if minimize=True, maximum if minimize=False)
         """
         if not scores:
-            return float('inf') if self.minimize else float('-inf')
+            return PENALTY if self.minimize else -PENALTY
         return min(scores) if self.minimize else max(scores)
     
     def __repr__(self) -> str:
@@ -110,7 +111,7 @@ class MinimizeExecutionTime(ObjectiveFunction):
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
         """Return execution time as objective."""
         if is_oom:
-            return float('inf')
+            return PENALTY
         return exec_time
 
 
