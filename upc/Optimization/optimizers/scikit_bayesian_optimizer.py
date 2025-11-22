@@ -1,5 +1,5 @@
 """
-BayesianOptimizer: Bayesian Optimization using Gaussian Processes.
+ScikitBayesianOptimizer: Bayesian Optimization using scikit-learn Gaussian Processes.
 
 Uses a Gaussian Process to model the objective function and an acquisition
 function to select the next point to evaluate. Efficiently explores the
@@ -32,9 +32,9 @@ except ImportError:
     SKLEARN_AVAILABLE = False
 
 
-class BayesianOptimizer(BaseOptimizer):
+class ScikitBayesianOptimizer(BaseOptimizer):
     """
-    Bayesian Optimization using Gaussian Process surrogate model.
+    Bayesian Optimization using scikit-learn Gaussian Process surrogate model.
     
     Workflow:
     1. Initialize with random samples
@@ -53,8 +53,7 @@ class BayesianOptimizer(BaseOptimizer):
         from core.search_space_builder import create_search_space
         from core.sampler import LatinHypercubeSampler
         from core.simulation_runner import SimulationRunner
-        from core.kernels import MaternKernel
-        from core.acquisition import ExpectedImprovement
+        from optimizers.scikit_bo import MaternKernel, ExpectedImprovement
         
         search_space = create_search_space(
             "search_space/parallelism_strategy_params.json",
@@ -66,7 +65,7 @@ class BayesianOptimizer(BaseOptimizer):
         kernel = MaternKernel(nu=2.5)
         acquisition = ExpectedImprovement(xi=0.01)
         
-        optimizer = BayesianOptimizer(
+        optimizer = ScikitBayesianOptimizer(
             search_space=search_space,
             sampler=sampler,
             simulation_runner=sim_runner,

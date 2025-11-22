@@ -17,7 +17,7 @@ from Optimization import (
     SimulationRunner,
     MaternKernel,
     ExpectedImprovement,
-    BayesianOptimizer,
+    ScikitBayesianOptimizer,
     create_objective  # Import objective factory
 )
 
@@ -110,7 +110,7 @@ def main():
 
     # 5. Create optimizer
     print("\n5. Creating Bayesian optimizer...")
-    optimizer = BayesianOptimizer(
+    optimizer = ScikitBayesianOptimizer(
         search_space=search_space,
         sampler=sampler,
         simulation_runner=sim_runner,
@@ -120,9 +120,9 @@ def main():
         #objective=objective,  # Pass the objective
         init_samples=INIT_SAMPLES,
         verbose=True,
-        keep_top_k=30,
-        n_workers=1,
-        batch_size=1,
+        keep_top_k=10,
+        n_workers=4,
+        batch_size=4,
         profile_time=True  # Enable time profiling
 
     )

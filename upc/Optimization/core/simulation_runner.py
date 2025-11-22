@@ -265,6 +265,7 @@ class SimulationRunner:
             'hidden_size': dmodel,
             'ffn_hidden_size': dff,
             'batch_size': batch[0] if isinstance(batch, list) else batch,
+            'micro_batch': micro_batch,
             'sequence_length': seq,
             'num_attention_heads': head,
             'num_layers': num_stacks,

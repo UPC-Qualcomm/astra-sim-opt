@@ -23,7 +23,7 @@ from Optimization import (
     ExpectedImprovement,
     UpperConfidenceBound,
     RandomOptimizer,
-    BayesianOptimizer
+    ScikitBayesianOptimizer
 )
 
 
@@ -167,7 +167,7 @@ def main():
     )
     optimizers.append((
         "Bayesian (Matern + EI)",
-        BayesianOptimizer(
+        ScikitBayesianOptimizer(
             search_space=search_space,
             sampler=LatinHypercubeSampler(seed=42),
             simulation_runner=sim_runner_bo1,
@@ -187,7 +187,7 @@ def main():
     )
     optimizers.append((
         "Bayesian (RBF + UCB)",
-        BayesianOptimizer(
+        ScikitBayesianOptimizer(
             search_space=search_space,
             sampler=LatinHypercubeSampler(seed=42),
             simulation_runner=sim_runner_bo2,

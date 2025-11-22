@@ -13,8 +13,8 @@ DEEPHYPER_AVAILABLE = importlib.util.find_spec('deephyper') is not None
 __all__ = ['RandomOptimizer']
 
 if BO_AVAILABLE:
-    from .bayesian_optimizer import BayesianOptimizer
-    __all__.append('BayesianOptimizer')
+    from .scikit_bayesian_optimizer import ScikitBayesianOptimizer
+    __all__.append('ScikitBayesianOptimizer')
 
 if DEEPHYPER_AVAILABLE:
     from .deephyper_optimizer import DeepHyperOptimizer

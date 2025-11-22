@@ -6,7 +6,7 @@ A modular, scalable optimization framework for tuning AstraSim configurations.
 Quick Start:
     >>> from core.search_space_builder import create_search_space
     >>> from optimizers.random_optimizer import RandomOptimizer
-    >>> from optimizers.bayesian_optimizer import BayesianOptimizer
+    >>> from optimizers.scikit_bayesian_optimizer import ScikitBayesianOptimizer
     >>> from core.sampler import RandomSampler
     >>> from core.simulation_runner import SimulationRunner
     
@@ -52,15 +52,13 @@ from .optimizers import RandomOptimizer
 
 # Try to import Bayesian optimization components
 try:
-    from .core.kernels import (
+    from .optimizers.scikit_bo import (
         BaseKernel,
         MaternKernel,
         RBFKernel,
         CustomKernel,
         CompositeKernel,
-        get_kernel
-    )
-    from .core.acquisition import (
+        get_kernel,
         BaseAcquisitionFunction,
         ExpectedImprovement,
         UpperConfidenceBound,
@@ -68,7 +66,7 @@ try:
         ThompsonSampling,
         get_acquisition
     )
-    from .optimizers import BayesianOptimizer
+    from .optimizers import ScikitBayesianOptimizer
     
     BO_AVAILABLE = True
 except ImportError:
@@ -107,7 +105,7 @@ if BO_AVAILABLE and DEEPHYPER_AVAILABLE:
         'get_sampler',
         # Optimizers
         'RandomOptimizer',
-        'BayesianOptimizer',
+        'ScikitBayesianOptimizer',
         'DeepHyperOptimizer',
         # Kernels
         'BaseKernel',
@@ -149,7 +147,7 @@ elif BO_AVAILABLE:
         'get_sampler',
         # Optimizers
         'RandomOptimizer',
-        'BayesianOptimizer',
+        'ScikitBayesianOptimizer',
         # Kernels
         'BaseKernel',
         'MaternKernel',

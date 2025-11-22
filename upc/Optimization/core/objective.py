@@ -17,7 +17,7 @@ Example:
     )
     
     # Use in optimizer
-    optimizer = BayesianOptimizer(..., objective=objective)
+    optimizer = ScikitBayesianOptimizer(..., objective=objective)
 """
 
 from abc import ABC, abstractmethod
@@ -114,6 +114,82 @@ class MinimizeExecutionTime(ObjectiveFunction):
             return PENALTY
         return exec_time
 
+class WeightedMultiObjective(ObjectiveFunction):
+    """
+    Weighted combination of multiple objectives.
+    
+    Combines multiple objectives with configurable weights.
+    Useful for multi-objective optimization.
+    
+    Example:
+        # 70% time, 20% memory, 10% energy
+        objective = WeightedMultiObjective({
+            'exec_time': 0.7,
+            'peak_memory_bytes': 0.2,
+            'energy_joules': 0.1
+        })
+    """
+    
+    def __init__(self, weights: Dict[str, float], normalize: bool = True):
+        """
+        Initialize weighted multi-objective.
+        
+        Args:
+            weights: Dictionary mapping metric names to weights
+                    Special key 'exec_time' uses execution time
+                    Other keys should be in metadata
+            normalize: Whether to normalize metrics before combining
+        """
+        super().__init__("Weighted Multi-Objective")
+        self.weights = weights
+        self.normalize = normalize
+        
+        # Track metric ranges for normalization
+        self.metric_mins: Dict[str, float] = {}
+        self.metric_maxs: Dict[str, float] = {}
+    
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
+        """Return weighted combination of metrics."""
+        if is_oom:
+            return PENALTY
+        # Collect all metrics
+        metrics = {'exec_time': exec_time}
+        metrics.update(metadata)
+        
+        # Update normalization ranges
+        if self.normalize:
+            for metric_name in self.weights.keys():
+                if metric_name in metrics:
+                    value = metrics[metric_name]
+                    if metric_name not in self.metric_mins:
+                        self.metric_mins[metric_name] = value
+                        self.metric_maxs[metric_name] = value
+                    else:
+                        self.metric_mins[metric_name] = min(self.metric_mins[metric_name], value)
+                        self.metric_maxs[metric_name] = max(self.metric_maxs[metric_name], value)
+        
+        # Compute weighted sum
+        weighted_sum = 0.0
+        for metric_name, weight in self.weights.items():
+            if metric_name not in metrics:
+                raise ValueError(f"Metric '{metric_name}' not found in results")
+            
+            value = metrics[metric_name]
+            
+            # Normalize if enabled
+            if self.normalize:
+                min_val = self.metric_mins[metric_name]
+                max_val = self.metric_maxs[metric_name]
+                if max_val > min_val:
+                    value = (value - min_val) / (max_val - min_val)
+                else:
+                    value = 0.0
+            
+            weighted_sum += weight * value
+        
+        return weighted_sum
+
+
 
 class CustomObjective(ObjectiveFunction):
     """
@@ -158,7 +234,7 @@ def create_objective(objective_type: str, **kwargs) -> ObjectiveFunction:
     Factory function to create objective functions by name.
     
     Args:
-        objective_type: Type of objective ('time', 'throughput', 'weighted', etc.)
+        objective_type: Type of objective
         **kwargs: Additional arguments for the objective
     
     Returns:

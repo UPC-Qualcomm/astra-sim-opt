@@ -19,7 +19,7 @@ from Optimization import (
     CustomKernel,
     UpperConfidenceBound,
     get_acquisition,
-    BayesianOptimizer
+    ScikitBayesianOptimizer
 )
 
 
@@ -97,7 +97,7 @@ def main():
     
     # 5. Create optimizer
     print("\n5. Creating Bayesian optimizer...")
-    optimizer = BayesianOptimizer(
+    optimizer = ScikitBayesianOptimizer(
         search_space=search_space,
         sampler=sampler,
         simulation_runner=sim_runner,

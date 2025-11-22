@@ -21,24 +21,6 @@ from .objective import (
     create_objective
 )
 
-# GP-specific modules (optional, only needed for Bayesian optimization)
-try:
-    from .kernels import (
-        BaseKernel,
-        MaternKernel,
-        RBFKernel,
-        CustomKernel
-    )
-    from .acquisition import (
-        BaseAcquisitionFunction,
-        ExpectedImprovement,
-        UpperConfidenceBound,
-        ProbabilityOfImprovement
-    )
-    GP_AVAILABLE = True
-except ImportError:
-    GP_AVAILABLE = False
-
 __all__ = [
     'SearchSpaceBuilder',
     'create_search_space',
@@ -57,15 +39,3 @@ __all__ = [
     'CustomObjective',
     'create_objective',
 ]
-
-if GP_AVAILABLE:
-    __all__.extend([
-        'BaseKernel',
-        'MaternKernel',
-        'RBFKernel',
-        'CustomKernel',
-        'BaseAcquisitionFunction',
-        'ExpectedImprovement',
-        'UpperConfidenceBound',
-        'ProbabilityOfImprovement',
-    ])
