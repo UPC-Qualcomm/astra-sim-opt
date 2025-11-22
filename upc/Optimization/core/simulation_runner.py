@@ -16,12 +16,11 @@ import sys
 import shutil
 from typing import Dict, Optional
 
-# Add UPC to path
-sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc')
+# Add UPC to path using environment variable
+sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
 from run_astrasim import run_astrasim
 
-# Import helper modules
-sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
+sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..helper import workload_generator, output_parser, config_generator, config_parser
 
 
@@ -54,7 +53,7 @@ class SimulationRunner:
         num_npus: int,
         network_name: str = "FoldedClos",
         sim_type: str = "analytical_unaware",
-        base_dir: str = "/media/mohammad/extension/experiments/astra-sim/upc",
+        base_dir: Optional[str] = os.environ['ASTRA_SIM_ROOT'] + "/upc",
         folder_prefix: str = "OPT",
         clean_on_init: bool = True,
         verbose: bool = False,
@@ -85,7 +84,7 @@ class SimulationRunner:
         self.num_npus = num_npus
         self.network_name = network_name
         self.sim_type = sim_type
-        self.base_dir = base_dir
+        self.base_dir = base_dir if base_dir is not None else os.environ['ASTRA_SIM_ROOT'] + '/upc'
         self.verbose = verbose
         
         # Folder names
@@ -324,7 +323,7 @@ class SimulationRunner:
         """
         # Special handling for g2 backend
         if self.sim_type == "g2":
-            g2_path = '/media/mohammad/extension/experiments/astra-sim/extern/network_backend/g2'
+            g2_path = os.environ['ASTRA_SIM_ROOT'] + '/extern/network_backend/g2'
             if 'PYTHONPATH' in os.environ:
                 os.environ['PYTHONPATH'] = f"{g2_path}:{os.environ['PYTHONPATH']}"
             else:

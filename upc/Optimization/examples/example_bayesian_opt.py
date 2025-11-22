@@ -82,32 +82,6 @@ def main():
     
     print("\n4. Creating objective function...")
     
-    # Option 1: Multiplicative objective (captures resource synergies, penalizes imbalance)
-    objective = create_objective(
-        'net_and_sys_mult',  # Use multiplicative objective
-        bw_weight=1.0,
-        memory_size_weight=1.0,
-        local_bw_weight=1.0,
-        peak_perf_weight=1.0
-    )
-    
-    # Option 2: Additive objective (linear trade-offs, more stable)
-    # objective = create_objective(
-    #     'net_and_sys',  # Use additive objective
-    #     bw_weight=1.0,
-    #     memory_size_weight=0.5,
-    #     local_bw_weight=0.5,
-    #     peak_perf_weight=1.0
-    # )
-    
-    # Option 3: Simple execution time minimization (default)
-    # objective = create_objective('time')
-    
-    print(f"   Using: {objective.name}")
-    print(f"   Type: Multiplicative (captures resource synergies)")
-    print(f"   Weights: BW={objective.bw_weight}, Mem={objective.memory_size_weight}, "
-          f"LocalBW={objective.local_bw_weight}, PeakPerf={objective.peak_perf_weight}")
-
     # 5. Create optimizer
     print("\n5. Creating Bayesian optimizer...")
     optimizer = ScikitBayesianOptimizer(

@@ -77,26 +77,7 @@ def main():
     # 4. Create objective function
     print("\n4. Creating objective function...")
     
-    # Option 1: Simple execution time minimization (default)
     objective = create_objective('time')
-    
-    # Option 2: Additive objective (linear trade-offs, more stable)
-    # objective = create_objective(
-    #     'net_and_sys',
-    #     bw_weight=1.0,
-    #     memory_size_weight=0.5,
-    #     local_bw_weight=0.5,
-    #     peak_perf_weight=1.0
-    # )
-    
-    # Option 3: Multiplicative objective (captures resource synergies)
-    # objective = create_objective(
-    #     'net_and_sys_mult',
-    #     bw_weight=1.0,
-    #     memory_size_weight=1.0,
-    #     local_bw_weight=1.0,
-    #     peak_perf_weight=1.0
-    # )
     
     print(f"   Using: {objective.name}")
 

@@ -11,6 +11,7 @@ Supports parallel evaluation when n_workers > 1:
 """
 
 import sys
+import os
 from typing import Tuple, Optional, List, Dict
 import pandas as pd
 import numpy as np
@@ -19,7 +20,7 @@ from multiprocessing import Pool
 from functools import partial
 
 # Add parent directory to path for imports
-sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
+sys.path.append(os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..core import BaseOptimizer, get_numerical
 from ..helper import config_to_tuple, evaluate_config_worker
 

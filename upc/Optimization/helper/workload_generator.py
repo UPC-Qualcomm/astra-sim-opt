@@ -1,9 +1,9 @@
 import os
-import sys
 import subprocess
 from typing import Dict
 
-sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc')
+import sys
+sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
 from generate_workloads import Model
 
 
@@ -19,7 +19,7 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
     Returns:
         True if successful, False otherwise
     """
-    root = os.path.join("/media/mohammad/extension/experiments/astra-sim/upc", "workload", folder_name)
+    root = os.path.join(os.environ['ASTRA_SIM_ROOT'], 'upc', 'workload', folder_name)
     
     # Extract values from design_point dictionary
     dp = design_point['dp']
@@ -32,7 +32,7 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
 
     # Note: Having if the micro batch is much smaller than the global batch, the generator will be much slower.
     cmd = (
-        f"/media/mohammad/extension/experiments/astraenv39/bin/python main.py "
+        f"{os.environ['ASTRA_SIM_PYTHON']} main.py "
         f"--output_dir {root} "
         f"--output_name {dp}_{mp}_{ssp}_{pp}_{1 if sharded else 0}.%d.et "
         f"--dp {dp} "
@@ -51,7 +51,7 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
         f"--chakra_schema_version v0.0.4 "
         f"--suffix {suffix}"
     )
-    cwd = "/media/mohammad/extension/experiments/astra-sim/extern/symbolic_tensor_graph"
+    cwd = os.environ['ASTRA_SIM_ROOT'] + '/extern/symbolic_tensor_graph'
     
     print(cmd)
     result = subprocess.run(cmd, shell=True, cwd=cwd)

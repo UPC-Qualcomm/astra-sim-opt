@@ -6,14 +6,14 @@ DeepHyper provides a mature, well-tested BO implementation with a set of advance
 """
 
 import sys
+import os
 from typing import Tuple, Optional, Dict
 import pandas as pd
 import time
 import tempfile
-import os
 
 # Add parent directory to path for imports
-sys.path.append('/media/mohammad/extension/experiments/astra-sim/upc/Optimization')
+sys.path.append(os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..core import BaseOptimizer
 from ..helper import evaluate_config_worker
 import ConfigSpace as cs
@@ -519,7 +519,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         # Get model parameters for seq and batch
         try:
             import sys
-            sys.path.insert(0, '/media/mohammad/extension/experiments/astra-sim/upc')
+            sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
             from Model import Model
             model = Model(sr.model_num)
             _, _, _, _, batch, _, seq, _, _ = model.get_model_params()
@@ -562,7 +562,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         try:
             # Import Model from correct path
             import sys
-            sys.path.insert(0, '/media/mohammad/extension/experiments/astra-sim/upc')
+            sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
             from Model import Model
             
             model = Model(sr.model_num)
@@ -650,7 +650,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         Execute one optimization iteration.
         
         Note: This method is not typically used with DeepHyper,
-        
+
         Returns:
             (config, score) tuple if successful, (None, None) otherwise
         """
