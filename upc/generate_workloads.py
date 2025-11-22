@@ -143,18 +143,6 @@ def generate_instance(design_point, model=Model.Default, folder_name="default", 
     dp, mp, ssp, pp, sharded = design_point
 
     din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = Model.get_model_params(model)
-    if custom_args is not None:
-        weight_sharded = custom_args[0]
-        activation_recompute = custom_args[1]
-        tpsp = custom_args[2]
-        model_type = custom_args[3]
-        mixed_precision = custom_args[4]
-        print_gpu_vram = custom_args[5]
-        ep = custom_args[6]
-        kvhead = custom_args[7]
-        experts = custom_args[8]
-        kexperts = custom_args[9]
-
     cmd = (
         f"python main.py "
         f"--output_dir {root} "
@@ -174,18 +162,34 @@ def generate_instance(design_point, model=Model.Default, folder_name="default", 
         f"--head {head} "
         f"--num_stacks {num_stacks} "
         f"--weight_sharded {sharded} "
-        f"--weight_sharded {weight_sharded} "
-        f"--activation_recompute {activation_recompute} "
-        f"--tpsp {tpsp} "
-        f"--model_type {model_type} "
-        f"--mixed_precision {mixed_precision} "
-        f"--print_gpu_vram {print_gpu_vram} "
-        f"--ep {ep} "
-        f"--kvhead {kvhead} "
-        f"--experts {experts} "
-        f"--kexperts {kexperts} "
-        f"--chakra_schema_version v0.0.4"
     )
+    
+    if custom_args is not None:
+        weight_sharded = custom_args[0]
+        activation_recompute = custom_args[1]
+        tpsp = custom_args[2]
+        model_type = custom_args[3]
+        mixed_precision = custom_args[4]
+        print_gpu_vram = custom_args[5]
+        ep = custom_args[6]
+        kvhead = custom_args[7]
+        experts = custom_args[8]
+        kexperts = custom_args[9]
+        
+        cmd += (
+            f"--weight_sharded {weight_sharded} "
+            f"--activation_recompute {activation_recompute} "
+            f"--tpsp {tpsp} "
+            f"--model_type {model_type} "
+            f"--mixed_precision {mixed_precision} "
+            f"--print_gpu_vram {print_gpu_vram} "
+            f"--ep {ep} "
+            f"--kvhead {kvhead} "
+            f"--experts {experts} "
+            f"--kexperts {kexperts} "
+        )
+    
+    cmd += f"--chakra_schema_version v0.0.4"
     cwd = os.path.join(
         os.path.split(os.path.abspath(__file__))[0],
         "..",
