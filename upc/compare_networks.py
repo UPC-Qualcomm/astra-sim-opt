@@ -7,85 +7,8 @@ import shutil
 import argparse
 from datetime import datetime
 
-# --- Lógica para la generación de Workloads (integrada desde generate_real_congestion.py) ---
-# Asegúrate de que chakra-tools está instalado y accesible en tu PYTHONPATH
-# pip install chakra-tools
-try:
-    from chakra.src.third_party.utils.protolib import encodeMessage as encode_message
-    from chakra.schema.protobuf.et_def_pb2 import (
-        Node as ChakraNode,
-        GlobalMetadata,
-        AttributeProto as ChakraAttr,
-        COMM_COLL_NODE,
-        GATHER,
-        REDUCE,
-        BROADCAST,
-        ALL_REDUCE,
-        ALL_GATHER,
-        ALL_TO_ALL,
-        REDUCE_SCATTER,
-        BoolList,
-    )
-except ImportError:
-    print("Error: No se pudo importar Chakra. Asegúrate de que 'chakra-tools' está instalado (`pip install chakra-tools`)")
-    print("y de que el PYTHONPATH está configurado correctamente si es necesario.")
-    sys.exit(1)
+from comparing_networks.generate_workloads.compare_networks import generate_workloads
 
-# Mapeo de nombres de colectivos a tipos de Chakra
-COLLECTIVE_MAP = {
-    "gather": GATHER,
-    "reduce": REDUCE,
-    "broadcast": BROADCAST,
-    "all_gather": ALL_GATHER,
-    "all_reduce": ALL_REDUCE,
-    "all_to_all": ALL_TO_ALL,
-    "reduce_scatter": REDUCE_SCATTER,
-}
-
-def generate_comm_group_json(json_path: str, groups: dict):
-    """Genera el fichero JSON de grupos de comunicadores."""
-    with open(json_path, "w") as f:
-        json.dump(groups, f, indent=4)
-
-def generate_congested_et_files(npus_count: int, comm_size: int, groups: dict, output_dir: str, coll_type: int, coll_name: str):
-    """Genera los ficheros de traza (Execution Trace) para cada NPU."""
-    for group_id, members in groups.items():
-        for npu_id in members:
-            output_filename = os.path.join(output_dir, f"{coll_name}.{npu_id}.et")
-            with open(output_filename, "wb") as et:
-                encode_message(et, GlobalMetadata(version="0.0.4"))
-                node = ChakraNode(
-                    id=1,
-                    name=f"{coll_name}_Collective_in_pg_{group_id}",
-                    type=COMM_COLL_NODE
-                )
-                node.attr.extend([
-                    ChakraAttr(name="comm_type", int64_val=coll_type),
-                    ChakraAttr(name="comm_size", uint64_val=comm_size),
-                    ChakraAttr(name="pg_name", string_val=str(group_id)),
-                    ChakraAttr(name="involved_dim", bool_list=BoolList(values=[i in members for i in range(npus_count)]))
-                ])
-                encode_message(et, node)
-    print(f"Generados ETs para el colectivo '{coll_name}' en: {output_dir}")
-
-def generate_workloads(npus_count: int, comm_size: int, collectives: list, groups: dict, base_workload_dir: str):
-    """Función principal para generar todas las cargas de trabajo necesarias."""
-    generated_paths = {}
-    for coll_name in collectives:
-        if coll_name not in COLLECTIVE_MAP:
-            print(f"Aviso: El colectivo '{coll_name}' no es válido. Omitiendo.")
-            continue
-        
-        coll_type = COLLECTIVE_MAP[coll_name]
-        output_dir = os.path.join(base_workload_dir, f"toy_{coll_name}_real_congestion")
-        os.makedirs(output_dir, exist_ok=True)
-        
-        json_path = os.path.join(output_dir, f"{coll_name}.json")
-        generate_comm_group_json(json_path, groups)
-        generate_congested_et_files(npus_count, comm_size, groups, output_dir, coll_type, coll_name)
-        
-        generated_paths[coll_name] = output_dir
-    return generated_paths
 
 # --- Lógica para modificar configuraciones y ejecutar simulaciones ---
 
@@ -187,6 +110,16 @@ def run_simulation(sim_type, python_exec, workload_dir, system_config, network_c
 def main(args):
     """Función principal que orquesta la generación y ejecución."""
     
+    # --- Determine Project Root from Environment Variable ---
+    try:
+        project_root = os.environ["ASTRA_SIM_ROOT"]
+        if not os.path.isdir(project_root):
+            print(f"Error: ASTRA_SIM_ROOT environment variable '{project_root}' is not a valid directory.")
+            sys.exit(1)
+    except KeyError:
+        print("Error: Please set the 'ASTRA_SIM_ROOT' environment variable to the astra-sim project root directory.")
+        sys.exit(1)
+
     workload_paths = {}
     if args.workload_dir:
         # --- Fase 1 (Opción A): Usar workload existente ---
@@ -211,8 +144,12 @@ def main(args):
         print(f"\n=== Fase 2: Ejecutando para el Colectivo='{coll_name}' ===")
         
         # Crear directorio de salida único para esta ejecución
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
+        run_start_time = datetime.now()
+        timestamp = run_start_time.strftime("%Y%m%d_%H%M%S_%f")[:-3] + "ms"
+        if args.g2_network_config:
+            network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
+        elif args.ns3_network_config:
+            network_name = os.path.splitext(os.path.basename(args.ns3_network_config))[0].split('_')[0]
         run_folder_name = f"run_{timestamp}"
         base_run_dir = os.path.join("output/comparison_run", network_name, coll_name, run_folder_name)
         
@@ -242,6 +179,11 @@ def main(args):
             f.write(f"Analytical Network Config: {args.analytical_network_config}\n")
             f.write(f"NS3 Network Config: {args.ns3_network_config}\n")
             f.write(f"NS3 Logical Topology: {args.logical_topology_config}\n")
+            f.write("\n### Overrides ###\n")
+            f.write(f"G2 Topology File Override: {args.g2_topology_file}\n")
+            f.write(f"NS3 Topology File Override: {args.ns3_topology_file}\n")
+            f.write(f"NS3 Precomputed Paths Override: {args.ns3_precomputed_paths}\n")
+            f.write("\n")
             f.write(f"Python Executable: {args.python_exec}\n")
         print(f"Guardada la configuración de la ejecución en: {config_summary_path}")
 
@@ -255,12 +197,16 @@ def main(args):
             sim_types.append("g2")
             g2_sys_conf_dest = os.path.join(configs_dir, f"g2_{os.path.basename(args.g2_system_config)}")
             shutil.copy(args.g2_system_config, g2_sys_conf_dest)
+            
             g2_net_conf_dest = os.path.join(configs_dir, f"g2_{os.path.basename(args.g2_network_config)}")
-            shutil.copy(args.g2_network_config, g2_net_conf_dest)
+            g2_overrides = {}
+            if args.g2_topology_file:
+                g2_overrides["topology_file"] = os.path.abspath(args.g2_topology_file)
+            modify_config_file(args.g2_network_config, g2_net_conf_dest, g2_overrides)
 
             # Leer el fichero de config de red de G2 para encontrar el fichero de topología
             try:
-                with open(args.g2_network_config, 'r') as f:
+                with open(g2_net_conf_dest, 'r') as f: # Leer desde el fichero modificado
                     g2_net_data = yaml.safe_load(f)
                 
                 g2_topology_file_src = g2_net_data.get("topology_file")
@@ -295,10 +241,16 @@ def main(args):
             ns3_output_dir = os.path.join(base_run_dir, "ns3")
             os.makedirs(ns3_output_dir, exist_ok=True)
             ns3_overrides = {
-                "ECMP_SEED": args.seed,
-                "TRACE_OUTPUT_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_trace.tr"),
-                "FCT_OUTPUT_FILE": os.path.join("/home/xavid/feina/astra-sim/upc", ns3_output_dir, "astrasim_fct.txt"),
+                "TRACE_OUTPUT_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_trace.tr"),
+                "FCT_OUTPUT_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_fct.txt"),
+                "QLEN_MON_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_qlen.txt"),
+                "PFC_OUTPUT_FILE": os.path.join(project_root, "upc", ns3_output_dir, "astrasim_pfc.txt"),
             }
+            if args.ns3_topology_file:
+                ns3_overrides["TOPOLOGY_FILE"] = os.path.abspath(args.ns3_topology_file)
+            if args.ns3_precomputed_paths is not None:
+                ns3_overrides["USE_PRECOMPUTED_ROUTES"] = args.ns3_precomputed_paths
+
             modify_config_file(args.ns3_network_config, ns3_conf_dest, ns3_overrides)
 
         # Memory Config (solo copiar)
@@ -351,6 +303,16 @@ def main(args):
         # Restaurar PYTHONPATH
         os.environ['PYTHONPATH'] = original_pythonpath
 
+        # --- 5. Guardar el tiempo de ejecución ---
+        run_end_time = datetime.now()
+        runtime = run_end_time - run_start_time
+        with open(config_summary_path, "a") as f:
+            f.write("\n### Execution Summary ###\n")
+            f.write(f"Start Time: {run_start_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
+            f.write(f"End Time: {run_end_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
+            f.write(f"Total Runtime: {str(runtime)}\n")
+        print(f"Tiempo de ejecución total para '{coll_name}': {runtime}")
+
     print("\n=== Todas las simulaciones han finalizado. ===")
 
 
@@ -375,9 +337,13 @@ if __name__ == "__main__":
     
     parser.add_argument("--logical-topology-config", type=str, default=None, help="Ruta al fichero de topología lógica para NS3.")
     
+    # Argumentos para sobreescribir configuraciones
+    parser.add_argument("--g2-topology-file", type=str, default=None, help="Sobrescribe la ruta del fichero de topología en la configuración de red de G2.")
+    parser.add_argument("--ns3-topology-file", type=str, default=None, help="Sobrescribe la ruta del fichero de topología en la configuración de red de NS3.")
+    parser.add_argument("--ns3-precomputed-paths", type=int, default=None, help="Sobrescribe el valor de PRECOMPUTED_PATHS en la configuración de red de NS3.")
+
     # Otros
-    parser.add_argument("--python-exec", type=str, default="../../astraenv39/bin/python3.9", help="Ruta al ejecutable de Python.")
-    parser.add_argument("--seed", type=int, default=1, help="Seed for the simulation, particularly for ECMP in NS3.")
+    parser.add_argument("--python-exec", type=str, default="../../../opt/venv/astra-sim/bin/python", help="Ruta al ejecutable de Python.")
 
     parsed_args = parser.parse_args()
     main(parsed_args)

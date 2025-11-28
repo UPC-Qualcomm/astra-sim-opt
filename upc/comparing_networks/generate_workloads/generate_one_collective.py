@@ -39,8 +39,8 @@ def generate_congested_et_files(npus_count: int, comm_size: int, groups: dict, o
             print(f"Generated ET for NPU {npu_id} in group {group_id} at {output_dir}")
 
 def main():
-    npus_count = 8
-    comm_size = 128 * 1024 * 1024  # 128 MB
+    npus_count = 16
+    comm_size = 15 * 1024 * 1024  # 15 MB
 
     collectives = [
         ("all_gather", ALL_GATHER),
@@ -51,7 +51,7 @@ def main():
 
     # Example: overlapping groups for real congestion
     groups = {
-        "1": [0, 1, 2, 3, 4, 5, 6, 7],
+        "1": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     }
 
     base_dir = os.path.join(os.path.dirname(__file__), "..", "workload")

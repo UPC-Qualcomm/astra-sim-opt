@@ -10,7 +10,7 @@ import networkx as nx
 from itertools import permutations, product
 
 class CustomizedDragonfly:
-    def __init__(self, G, A, h=1, concentration=1):
+    def __init__(self, G, A, h=1, concentration=1, bandwidth_config=None):
         self.name = "dragonfly"
         self.num_groups = G # number of groups
         self.num_switches = A # number of switches per group
@@ -22,6 +22,11 @@ class CustomizedDragonfly:
         self.adjacency_matrix = None
         self.interpod_links = []
         self.intrapod_links = []
+        
+        # Bandwidth Configuration
+        # Expected keys: 'host_switch', 'intra_group', 'inter_group'
+        self.bandwidth_config = bandwidth_config if bandwidth_config else {}
+        self.link_bandwidths = {} 
    
     def NumServers(self):
         return self.total_num_switches * self.concentration_factor
@@ -140,24 +145,71 @@ class CustomizedDragonfly:
                     links.append( ("s{}".format(src+1), "s{}".format(dst+1) ) )
                     count += 1
         host_num = 1
-        switch_num = 1
-        for src in range(self.total_num_switches):
-            str_builder += ("({},h{},s{});".format(count,host_num, switch_num))
-            host_num += 1
-            switch_num += 1
-            count += 1
+        for switch_num in range(1, self.total_num_switches + 1):
+            for _ in range(self.concentration_factor):
+                str_builder += ("({},h{},s{});".format(count, host_num, switch_num))
+                links.append( ("h{}".format(host_num), "s{}".format(switch_num)) )
+                host_num += 1
+                count += 1
         return links, str_builder, count
+    
+    def LinksToG2ConfFile(self):
+        # Ensure self.links is populated with switch-to-switch links
+        if not hasattr(self, 'links') or not self.links:
+            self.writeAdjacencyMatrixToLinks()
+
+        # Start with a copy of the existing switch-to-switch links dictionary
+        links = self.links.copy()
+        
+        # Continue numbering from the last link ID
+        link_id = max(links.keys()) + 1
+        
+        # Add host-to-switch links
+        host_bw = self.bandwidth_config.get('host_switch', 1.0)
+        host_num = 1
+        for switch_num in range(1, self.total_num_switches + 1):
+            for _ in range(self.concentration_factor):
+                # Add bidirectional links for hosts
+                links[link_id] = (f"h{host_num}", f"s{switch_num}")
+                self.link_bandwidths[link_id] = host_bw
+                link_id += 1
+                
+                links[link_id] = (f"s{switch_num}", f"h{host_num}")
+                self.link_bandwidths[link_id] = host_bw
+                link_id += 1
+                
+                host_num += 1
+        return links
    
     def writeAdjacencyMatrixToLinks(self):
         self.links = {}
+        # self.link_bandwidths is initialized in __init__ but we populate switch links here
+        # Note: This clears previous switch links but keeps the dict object
+        
+        intra_bw = self.bandwidth_config.get('intra_group', 1.0)
+        inter_bw = self.bandwidth_config.get('inter_group', 1.0)
+        
+        # Convert interpod_links to set for faster lookup
+        interpod_set = set(self.interpod_links)
+
         link_id = 1
         for src in range(self.total_num_switches):
             for dst in range(src, self.total_num_switches):
                 if self.adjacency_matrix[src][dst] != 0:
                     self.links[link_id] = ("s{}".format(src+1), "s{}".format(dst+1))
+                    
+                    # Determine bandwidth
+                    if (src, dst) in interpod_set or (dst, src) in interpod_set:
+                        self.link_bandwidths[link_id] = inter_bw
+                    else:
+                        self.link_bandwidths[link_id] = intra_bw
+                        
                     link_id += 1
+        
+        # Add reverse links
         for i in range(link_id - 1):
             self.links[i+link_id] = (self.links[i + 1][1], self.links[i + 1][0])
+            self.link_bandwidths[i+link_id] = self.link_bandwidths[i+1]
    
     def addFlowsToFlowDict(self,flow_id,flowLinks):
         self.F[str(flow_id)] = []
@@ -248,7 +300,7 @@ class CustomizedDragonfly:
 
 
 class Jellyfish():
-    def __init__(self, num_switches, degree, seed = 0, num_hosts_per_switch=1):
+    def __init__(self, num_switches, degree, seed = 0, num_hosts_per_switch=1, bandwidth_config=None):
         self.name = "jellyfish"
         self.num_switches = num_switches
         self.degree = degree
@@ -260,6 +312,11 @@ class Jellyfish():
         self.links = None
         self.total_num_hosts = self.num_switches * self.num_hosts_per_switch
         self.nodes = ['s'+str(i) for i in range(1, num_switches+1)]
+        
+        # Bandwidth Configuration
+        # Expected keys: 'host_switch', 'switch_switch'
+        self.bandwidth_config = bandwidth_config if bandwidth_config else {}
+        self.link_bandwidths = {}
 
     def NumServers(self):
         return int(self.num_switches*self.num_hosts_per_switch)
@@ -281,15 +338,22 @@ class Jellyfish():
         assert(self.adjacency_matrix), "Need to construct full topology first!"
         self.links = {}
         self.link_weight = {}
+        
+        switch_bw = self.bandwidth_config.get('switch_switch', 1.0)
+        
         linkID = 1
         for src in range(len(self.adjacency_matrix)):
             for dst in range(src+1, len(self.adjacency_matrix[src])):
                 link_count = self.adjacency_matrix[src][dst]
                 while link_count > 0:
                     self.links[linkID] = ("s" + str(src+1), "s" + str(dst+1))
+                    self.link_bandwidths[linkID] = switch_bw
                     linkID += 1
+                    
                     self.links[linkID] = ("s" + str(dst+1), "s" + str(src+1))
+                    self.link_bandwidths[linkID] = switch_bw
                     linkID += 1
+                    
                     link_count -= 1
         assert(linkID == self.NumLinks() + 1)
 
@@ -357,6 +421,35 @@ class Jellyfish():
         #    str_builder += ("({},s{},s{});".format(count,src+1, dst+1))
 
         return self.links, str_builder, count
+
+    def LinksToG2ConfFile(self):
+        # Ensure self.links is populated with switch-to-switch links
+        if not self.links:
+            self.makeLinksFromAdjMatrix()
+
+        # Start with a copy of the existing switch-to-switch links dictionary
+        links = self.links.copy()
+
+        # Continue numbering from the last link ID
+        link_id = max(links.keys()) + 1
+
+        # Add host-to-switch links
+        host_bw = self.bandwidth_config.get('host_switch', 1.0)
+        
+        host_num = 1
+        for switch_num in range(1, self.num_switches + 1):
+            for _ in range(self.num_hosts_per_switch):
+                # Add bidirectional links for hosts
+                links[link_id] = (f"h{host_num}", f"s{switch_num}")
+                self.link_bandwidths[link_id] = host_bw
+                link_id += 1
+                
+                links[link_id] = (f"s{switch_num}", f"h{host_num}")
+                self.link_bandwidths[link_id] = host_bw
+                link_id += 1
+                
+                host_num += 1
+        return links
     
     def addFlowsToFlowDict(self,flow_id,flowLinks):
         self.F[flow_id] = []
@@ -442,7 +535,7 @@ class Jellyfish():
 
 
 class FoldedClos():
-    def __init__(self, K, link_capacity=1, N=3):
+    def __init__(self, K, link_capacity=1, N=3, bandwidth_config=None):
         self.name = "folded_clos"
         self.K = K
         self.numCoreSwitches = K**2 / 4
@@ -460,6 +553,11 @@ class FoldedClos():
         self.num_switches = sum([K**n for n in range(N)])
         self.switches = ['s'+str(i) for i in range(1, self.totalNumSwitches+1)]
         self.nodes = self.hosts + self.switches
+        
+        # Bandwidth Configuration
+        # Expected keys: 'host_edge', 'edge_agg', 'agg_core'
+        self.bandwidth_config = bandwidth_config if bandwidth_config else {}
+        self.link_bandwidths = {}
 
     def NumServers(self):
         return int(self.numHosts)
@@ -473,6 +571,11 @@ class FoldedClos():
     def DesignFullTopology(self):
         # links = {}
         linkID = 1
+        
+        bw_host_edge = self.bandwidth_config.get('host_edge', 1.0)
+        bw_edge_agg = self.bandwidth_config.get('edge_agg', 1.0)
+        bw_agg_core = self.bandwidth_config.get('agg_core', 1.0)
+        
         for pod in range(self.K):
             hostIDStart = int(pod * self.numHostsPerPod + 1)
             coreSwitchStart = int(self.numSwitchesPerPod * self.K + 1)
@@ -484,16 +587,19 @@ class FoldedClos():
             for eS in range(EdgeSwitchStart,EdgeSwitchEnd + 1):
                 for h in range(self.numSwitchPorts // 2):        
                     self.links[linkID] = ('h'+str(hostIDStart + h), 's'+str(eS))
+                    self.link_bandwidths[linkID] = bw_host_edge
                     linkID += 1
                 hostIDStart += self.numSwitchPorts // 2
             for aS in range(aggSwitchStart,aggSwitchEnd + 1):
                 for eS in range(EdgeSwitchStart,EdgeSwitchEnd + 1):
                     self.links[linkID] = ('s'+str(aS), 's'+str(eS))
+                    self.link_bandwidths[linkID] = bw_edge_agg
                     # self.adjacency_matrix[aS][eS] += 1
                     # self.adjacency_matrix[eS][aS] += 1
                     linkID += 1
                 for cS in range(self.numSwitchPorts//2):
                     self.links[linkID] = ('s'+str(coreSwitchStart + cS), 's'+str(aS))
+                    self.link_bandwidths[linkID] = bw_agg_core
                     # self.adjacency_matrix[coreSwitchStart + cS][aS] += 1
                     # self.adjacency_matrix[aS][coreSwitchStart + cS] += 1
                     linkID += 1
@@ -501,6 +607,8 @@ class FoldedClos():
         # links are directed
         for i in range(linkID - 1):
             self.links[i + linkID] = (self.links[i + 1][1], self.links[i + 1][0])
+            self.link_bandwidths[i + linkID] = self.link_bandwidths[i + 1]
+            
         self.num_links = linkID
         # C = {i:args.c for i in range(1, 2 * linkID - 1)}
         # self.c_dict = {i:self.link_capacity for i in range(1, 2 * linkID - 1)}

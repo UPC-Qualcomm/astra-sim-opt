@@ -1,7 +1,7 @@
 import re
 import json
 
-def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=900):
+def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=900, link_bandwidths=None):
     """
     Writes topology data to two files:
     1. A custom .txt file with a simple, quote-less format.
@@ -13,7 +13,8 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
         links (dict): A dictionary of links from the topology generator.
         paths (dict): A dictionary of all possible paths from the generator.
         base_filename (str): The base name for the output files.
-        bandwidth (int): The bandwidth for each link.
+        bandwidth (int): The default bandwidth for each link if not specified in link_bandwidths.
+        link_bandwidths (dict): Optional dictionary mapping link IDs to bandwidth values.
     """
     # --- 1. Filter paths to keep only host-to-host routes ---
     host_to_host_paths = {}
@@ -30,8 +31,11 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
     txt_content = []
     
     # Add the edges without quotes
-    for node1, node2 in links.values():
-        txt_content.append(f"({node1}, {node2}, {bandwidth})")
+    for link_id, (node1, node2) in links.items():
+        bw = bandwidth
+        if link_bandwidths and link_id in link_bandwidths:
+            bw = link_bandwidths[link_id]
+        txt_content.append(f"({node1}, {node2}, {bw})")
     
     # Add a separator for readability
     txt_content.append("\n# Paths\n")
@@ -50,9 +54,16 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
     print(f"Successfully wrote custom text topology to {txt_filename}")
 
     # --- 3. Create and write the standard .json file ---
+    edges = []
+    for link_id, (n1, n2) in links.items():
+        bw = bandwidth
+        if link_bandwidths and link_id in link_bandwidths:
+            bw = link_bandwidths[link_id]
+        edges.append([n1, n2, bw])
+
     json_data = {
         "numEdges": len(links),
-        "edges": [[n1, n2, bandwidth] for n1, n2 in links.values()],
+        "edges": edges,
         "paths": host_to_host_paths
     }
 
@@ -62,7 +73,7 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
     print(f"Successfully wrote JSON topology to {json_filename}")
 
 
-def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth="900GiB/s", latency="0.000ms"):
+def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth="900GiB/s", latency="0.000ms", link_bandwidths=None, bw_unit="GB/s"):
     """
     Maps node names to sequential IDs and writes a topology file in the NS3 format,
     including pre-computed routes.
@@ -73,8 +84,10 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
         links (dict): Dictionary of links with string node names (e.g., 'h1', 's1').
         paths (dict): Dictionary of paths with string node names.
         filename (str): The name of the output file.
-        bandwidth (str): Bandwidth for all links.
+        bandwidth (str): Default bandwidth for all links.
         latency (str): Link latency.
+        link_bandwidths (dict): Optional dictionary mapping link IDs to bandwidth values.
+        bw_unit (str): Unit string to append to bandwidth values (e.g., "GB/s").
     """
     def get_num(name):
         """Extracts the integer part of a node name for sorting."""
@@ -94,8 +107,15 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
     num_switches = len(switch_names)
     num_nodes = num_hosts + num_switches
     
-    # Calculate unique links, as the input might contain duplicates for bidirectional links
+    # Calculate unique links and map bandwidths
     unique_links = set()
+    pair_to_bw = {}
+    
+    if link_bandwidths:
+        for lid, (n1, n2) in links.items():
+            pair = tuple(sorted((n1, n2)))
+            pair_to_bw[pair] = link_bandwidths[lid]
+
     for n1, n2 in links.values():
         # Store links in a canonical order (smaller name first) to handle duplicates
         sorted_pair = tuple(sorted((n1, n2)))
@@ -116,11 +136,22 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
         switch_ids.append(new_id)
 
     # 3. Process links using the new IDs
-    processed_links = []
+    processed_links_with_bw = []
     for n1_str, n2_str in unique_links:
         id1 = name_to_id_map[n1_str]
         id2 = name_to_id_map[n2_str]
-        processed_links.append(tuple(sorted((id1, id2))))
+        
+        pair_key = tuple(sorted((n1_str, n2_str)))
+        bw_val = bandwidth
+        if pair_key in pair_to_bw:
+            val = pair_to_bw[pair_key]
+            # Format if int/float to string with unit if needed, or just string
+            if isinstance(val, (int, float)):
+                bw_val = f"{val}{bw_unit}"
+            else:
+                bw_val = str(val)
+        
+        processed_links_with_bw.append((tuple(sorted((id1, id2))), bw_val))
 
     # 4. Write to file
     with open(filename, "w") as f:
@@ -132,8 +163,8 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
             f.write(f"{switch_id}\n")
             
         # Links
-        for id1, id2 in sorted(processed_links):
-            f.write(f"{id1} {id2} {bandwidth} {latency} 0\n")
+        for (id1, id2), bw in sorted(processed_links_with_bw, key=lambda x: x[0]):
+            f.write(f"{id1} {id2} {bw} {latency} 0\n")
 
         # 5. Write paths
         f.write("\nROUTES\n")

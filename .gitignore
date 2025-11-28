@@ -9,7 +9,7 @@ compile_commands.json
 # JetBrains
 .idea/
 
-# Analytical Model build and result files
+# Network Model build and result files
 build/astra_analytical/build/
 build/astra_analytical/build_debug/
 build/astra_g2/build/
@@ -18,7 +18,6 @@ build/astra_analytical/result/
 build/astra_garnet/build/
 build/astra_garnet/result/
 build/astra_htsim/build/
-extern/network_backend/ns-3/
 
 # Generated Chakra ET files
 *.eg
@@ -46,10 +45,10 @@ upc/log/
 upc/results/
 upc/network_log/
 upc/streamlit/temp
-upc/comparing_networks/output/
 upc/comparing_networks/workload/
 upc/Optimization/histogram/data/
 upc/Optimization/temp/config/
+upc/configuration/ns3/output/
 
 **/*/__pycache__
 
