@@ -27,13 +27,15 @@ def main():
     
     # Configuration
     MODEL_NUM = 19 # GPT_40B (Model enum value)
-    MODEL_NAME = "GPT_40B"
+    MODEL_NAME = "GPT_40B_g2_2500"
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
-    BUDGET = 1200
+    BUDGET = 1000
     INIT_SAMPLES = 20
-    N_WORKERS = 10
+    N_WORKERS = 8
     
+    
+
     print("="*70)
     print("EXAMPLE: DeepHyper Bayesian Optimization")
     print("="*70)
@@ -62,15 +64,34 @@ def main():
     sampler = RandomSampler(seed=42)
     print(f"   Using: {sampler}")
     
+    #net_sim_config = {
+    #    'sim_type': 'g2',
+    #    'topology': 'FoldedClos',
+    #    'paths_mode': 'ECMP',
+    #    'topology_config': {
+    #        'num_npus': search_space.num_npus,
+    #        'npus_per_node': 8,
+    #        'intra_node_topology': 'fully_connected',
+    #        'bandwidth_config': {
+    #            'host_edge': 100,
+    #            'edge_agg': 100,
+    #            'agg_core': 100,
+    #            'intra_node': 450
+    #        },
+    #        'bw_unit': 'GB/s'
+    #    }
+    #}
+
     # 3. Setup simulation runner
     print("\n3. Creating simulation runner...")
     sim_runner = SimulationRunner(
         model_num=MODEL_NUM,
         model_name=MODEL_NAME,
-        num_npus=NUM_NPUS,
+        num_npus=search_space.num_npus,
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_DEEPHYPER",
-        verbose=True
+        verbose=True,
+        #net_sim_config=net_sim_config 
     )
     print(f"   Using: {sim_runner}")
     

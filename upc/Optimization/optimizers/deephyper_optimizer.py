@@ -15,7 +15,7 @@ import tempfile
 # Add parent directory to path for imports
 sys.path.append(os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..core import BaseOptimizer
-from ..helper import evaluate_config_worker
+from ..helper import evaluate_config_worker, workload_generator
 import ConfigSpace as cs
 
 try:
@@ -142,7 +142,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         keep_top_k: int = -1,
         profile_time: bool = False,
         evaluator_method: str = "process",
-        filter_failures: str = "mean",
+        filter_failures: str = "ignore",#"ignore",
         max_total_failures: int = -1,
         **cbo_kwargs
     ):
@@ -520,8 +520,8 @@ class DeepHyperOptimizer(BaseOptimizer):
         try:
             import sys
             sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
-            from Model import Model
-            model = Model(sr.model_num)
+
+            model = workload_generator.Model(self.model_num)
             _, _, _, _, batch, _, seq, _, _ = model.get_model_params()
             
             # Build full filename pattern
@@ -563,9 +563,8 @@ class DeepHyperOptimizer(BaseOptimizer):
             # Import Model from correct path
             import sys
             sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
-            from Model import Model
             
-            model = Model(sr.model_num)
+            model = workload_generator.Model(self.model_num)
             din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = model.get_model_params()
             
             metadata = {
@@ -580,7 +579,7 @@ class DeepHyperOptimizer(BaseOptimizer):
                 'num_attention_heads': head,
                 'num_layers': num_stacks,
                 'num_npus': sr.num_npus,
-                'sim_type': sr.sim_type,
+                'sim_type': sr.net_sim_config.get('sim_type', 'analytical_unaware'),
             }
             
             # Add system metadata from search space
@@ -612,7 +611,7 @@ class DeepHyperOptimizer(BaseOptimizer):
                 'model_name': sr.model_name,
                 'model_num': sr.model_num,
                 'num_npus': sr.num_npus,
-                'sim_type': sr.sim_type,
+                'sim_type': sr.net_sim_config.get('sim_type', 'analytical_unaware'),
             }
     
     def _create_cbo(self) -> CBO:

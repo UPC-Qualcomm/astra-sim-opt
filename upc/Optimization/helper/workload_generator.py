@@ -53,7 +53,7 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
     )
     cwd = os.environ['ASTRA_SIM_ROOT'] + '/extern/symbolic_tensor_graph'
     
-    print(cmd)
+    print("generate_workload command:", cmd)
     result = subprocess.run(cmd, shell=True, cwd=cwd)
     return result.returncode == 0
 
