@@ -45,17 +45,19 @@ class SearchSpaceBuilder:
         
         Args:
             config_path: Path to JSON configuration file
-            num_npus: Number of NPUs (if None, read from config)
         """
         self.config_path = config_path
         self.config = self._load_config(config_path)
         
-        # Set num_npus
-        if "npu_count" in self.config:
-            npu_count = self.config["npu_count"]
-            self.num_npus = npu_count[0] if isinstance(npu_count, list) else npu_count
+        # Parse cluster configurations
+        if "clusters" in self.config:
+            self.clusters = self.config["clusters"]
+            # For backward compatibility, set num_npus to first cluster's npu_count
+            first_cluster = next(iter(self.clusters.values()))
+            self.num_npus = first_cluster.get("npu_count")
+
         else:
-            raise ValueError("'npu_count' must be specified in the configuration file")
+            raise ValueError("clusters' must be specified in the configuration file")
         
         # Storage for parsed data
         self.parameters: Dict[str, List[Any]] = {}
@@ -86,6 +88,10 @@ class SearchSpaceBuilder:
             Self for method chaining
         """
         self.parameters = {}
+        
+        # Add cluster names as a parameter (keys, not objects - for DeepHyper compatibility)
+        # Cluster objects can be retrieved later via get_cluster_config()
+        self.parameters['cluster'] = list(self.clusters.keys())
         
         # Define parameter categories
         categories = {
@@ -218,18 +224,29 @@ class SearchSpaceBuilder:
         # Store original constraint string
         self.constraint_strings.append(constraint_str)
         
-        # Replace 'npu_count' with actual value if available
-        if self.num_npus is not None:
-            constraint_str = constraint_str.replace('npu_count', str(self.num_npus))
+        # Note: npu_count replacement will be done per-configuration in constraint_func
+        # since it may vary by cluster selection
         
         # Create constraint function
         def constraint_func(config: Dict[str, Any]) -> bool:
             try:
+                # Get npu_count for this specific configuration
+                if 'cluster' in config:
+                    cluster_name = config['cluster']
+                    # Cluster should be a name (string), look it up
+                    cluster_config = self.clusters.get(cluster_name, {})
+                    npu_count = cluster_config.get('npu_count', self.num_npus)
+                else:
+                    npu_count = self.num_npus
+                
+                # Replace 'npu_count' with actual value
+                expr = constraint_str.replace('npu_count', str(npu_count))
+                
                 # Replace parameter names with values from config
-                expr = constraint_str
                 for param, value in config.items():
-                    # Use word boundaries to avoid partial replacements
-                    expr = re.sub(r'\b' + re.escape(param) + r'\b', str(value), expr)
+                    if param != 'cluster':  # Don't replace 'cluster' parameter
+                        # Use word boundaries to avoid partial replacements
+                        expr = re.sub(r'\b' + re.escape(param) + r'\b', str(value), expr)
                 
                 # Handle comparison operators
                 if '=' in expr and not any(op in expr for op in ['<=', '>=', '==', '!=']):
@@ -437,6 +454,102 @@ class SearchSpaceBuilder:
             json.dump(self.design_space, f, indent=2)
         
         print(f"Design space saved to: {output_path}")
+    
+    def get_cluster_config(self, cluster_name: str) -> Dict[str, Any]:
+        """
+        Get configuration for a specific cluster.
+        
+        Args:
+            cluster_name: Name of the cluster
+        
+        Returns:
+            Dictionary with cluster configuration (npu_count, npus_per_dim, etc.)
+        """
+        if cluster_name not in self.clusters:
+            raise ValueError(f"Cluster '{cluster_name}' not found. Available: {list(self.clusters.keys())}")
+        return self.clusters[cluster_name].copy()
+    
+    def get_cluster_npu_count(self, cluster_name: str) -> int:
+        """
+        Get NPU count for a specific cluster.
+        
+        Args:
+            cluster_name: Name of the cluster
+        
+        Returns:
+            Number of NPUs in the cluster
+        """
+        cluster_config = self.get_cluster_config(cluster_name)
+        return cluster_config.get('npu_count', 0)
+    
+    def get_cluster_npus_per_dim(self, cluster_name: str) -> List[int]:
+        """
+        Get NPUs per dimension for a specific cluster.
+        
+        Args:
+            cluster_name: Name of the cluster
+        
+        Returns:
+            List of NPUs per dimension (e.g., [8, 8] for 2D topology)
+        """
+        cluster_config = self.get_cluster_config(cluster_name)
+        return cluster_config.get('npus_per_dim', [])
+    
+    def get_cluster_dimensions(self, cluster_name: str) -> int:
+        """
+        Get number of dimensions in a cluster's topology.
+        
+        Args:
+            cluster_name: Name of the cluster
+        
+        Returns:
+            Number of dimensions (deduced from npus_per_dim length)
+        """
+        npus_per_dim = self.get_cluster_npus_per_dim(cluster_name)
+        return len(npus_per_dim)
+    
+    def get_all_clusters(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all cluster configurations.
+        
+        Returns:
+            Dictionary mapping cluster names to their configurations
+        """
+        return self.clusters.copy()
+    
+    def enrich_config_with_cluster_info(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enrich a configuration dictionary with cluster information.
+        
+        If the config contains a 'cluster' key, this method adds the cluster's
+        npu_count, npus_per_dim, and num_dimensions to the config.
+        
+        Args:
+            config: Configuration dictionary (may contain 'cluster' key)
+        
+        Returns:
+            Enriched configuration dictionary with cluster info added
+        """
+        enriched = config.copy()
+        
+        if 'cluster' in config:
+            cluster_name = config['cluster']
+            cluster_config = self.get_cluster_config(cluster_name)
+            
+            # Add cluster info to config
+            enriched['npu_count'] = cluster_config.get('npu_count')
+            enriched['npus_per_dim'] = cluster_config.get('npus_per_dim', [])
+            enriched['num_dimensions'] = len(enriched['npus_per_dim'])
+        elif len(self.clusters) == 1:
+            # If only one cluster and no cluster key, use the single cluster's info
+            cluster_name = next(iter(self.clusters.keys()))
+            cluster_config = self.get_cluster_config(cluster_name)
+            
+            enriched['npu_count'] = cluster_config.get('npu_count')
+            enriched['npus_per_dim'] = cluster_config.get('npus_per_dim', [])
+            enriched['num_dimensions'] = len(enriched['npus_per_dim'])
+        
+        return enriched
     
     def __repr__(self) -> str:
         """String representation."""

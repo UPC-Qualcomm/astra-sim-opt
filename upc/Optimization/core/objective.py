@@ -113,6 +113,63 @@ class MinimizeExecutionTime(ObjectiveFunction):
         if is_oom:
             return PENALTY
         return exec_time
+    
+
+
+class MinimizeExecutionTimeAndNetworkBW(ObjectiveFunction):
+    """
+    Minimize execution time and the total network bandwidth.
+    
+    """
+    
+    def __init__(self):
+        super().__init__("Minimize Execution Time and Network Bandwidth Perf per BW/NPU")
+    
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
+        """
+        Compute objective based on COSMIC paper formula.
+        
+        Formula: reward = 1 / sqrt(power(sim_time * sum(network_bw) - 1, 2))
+        where network_bw includes both intra-node and inter-node bandwidths."""
+        if is_oom:
+            return PENALTY
+        
+        if config is None:
+            # Fallback to execution time only if no config provided
+            return exec_time
+        
+        # Extract configuration parameters
+        npu_count = config.get('npu_count', 1)
+        intra_node_bw = config.get('intra-node-bw', 0)  # GB/s
+        inter_node_bw = config.get('inter-node-bw', 0)  # GB/s
+        npus_per_node = 8  # Default: 8 NPUs per node
+        
+        # Calculate number of nodes
+        num_nodes = max(1, (npu_count + npus_per_node - 1) // npus_per_node)  # Ceiling division
+        
+        # Calculate total network bandwidth
+        # Intra-node: bandwidth within each node (connections between NPUs in same node)
+        # Inter-node: bandwidth between nodes
+        if num_nodes == 1:
+            # Single node: only intra-node bandwidth matters
+            total_network_bw = intra_node_bw * (npu_count - 1)  # Connections between NPUs
+        else:
+            # Multiple nodes: both intra-node and inter-node bandwidth
+            intra_bw_total = intra_node_bw * npus_per_node * num_nodes  # Intra-node links
+            inter_bw_total = inter_node_bw * (num_nodes - 1)  # Inter-node links
+            total_network_bw = intra_bw_total + inter_bw_total
+        
+        # Avoid division by zero or negative values
+        if total_network_bw <= 0 or exec_time <= 0:
+            return PENALTY
+        
+        # COSMIC formula: reward = 1 / sqrt((sim_time * sum(network_bw) - 1)^2)
+        import math
+        denominator = math.sqrt((exec_time * total_network_bw - 1 ) ** 2)
+                
+        reward = 1.0 / denominator
+        
+        return reward
 
 class WeightedMultiObjective(ObjectiveFunction):
     """
@@ -246,6 +303,9 @@ def create_objective(objective_type: str, **kwargs) -> ObjectiveFunction:
     """
     objectives = {
         'time': MinimizeExecutionTime,
+        'time_and_network_bw':  MinimizeExecutionTimeAndNetworkBW,
+        'weighted': WeightedMultiObjective,
+        'custom': CustomObjective
     }
     
     if objective_type not in objectives:

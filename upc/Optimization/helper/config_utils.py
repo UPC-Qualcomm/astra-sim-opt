@@ -11,6 +11,40 @@ Also provides worker functions for parallel evaluation using multiprocessing.
 from typing import Dict, Tuple, Optional
 
 
+def enrich_config_with_clusters(config: Dict, clusters: Dict) -> Dict:
+    """
+    Enrich a config with cluster information.
+    
+    This is a module-level function (can be pickled) that duplicates the logic
+    from SearchSpaceBuilder.enrich_config_with_cluster_info() for use in
+    multiprocessing workers.
+    
+    Args:
+        config: Configuration dict potentially containing 'cluster' key
+        clusters: Dictionary mapping cluster names to cluster configs
+    
+    Returns:
+        Enriched configuration with npu_count, npus_per_dim, num_dimensions
+    """
+    if 'cluster' not in config or not clusters:
+        return config
+    
+    cluster_name = config['cluster']
+    if cluster_name not in clusters:
+        return config
+    
+    # Create a copy to avoid modifying the original
+    enriched = config.copy()
+    cluster_config = clusters[cluster_name]
+    
+    # Add cluster info to config
+    enriched['npu_count'] = cluster_config['npu_count']
+    enriched['npus_per_dim'] = cluster_config['npus_per_dim']
+    enriched['num_dimensions'] = len(cluster_config['npus_per_dim'])
+    
+    return enriched
+
+
 def config_to_tuple(config: Dict) -> tuple:
     """
     Convert a configuration dictionary to a hashable tuple.
@@ -52,7 +86,7 @@ def tuple_to_config(config_tuple: tuple) -> Dict:
     return dict(config_tuple)
 
 
-def evaluate_config_worker(config: Dict, simulation_runner) -> Tuple[Dict, Optional[float], Dict, Dict]:
+def evaluate_config_worker(config: Dict, simulation_runner, clusters: Optional[Dict] = None) -> Tuple[Dict, Optional[float], Dict, Dict]:
     """
     Worker function for parallel configuration evaluation.
     
@@ -66,6 +100,7 @@ def evaluate_config_worker(config: Dict, simulation_runner) -> Tuple[Dict, Optio
     Args:
         config: Configuration dictionary to evaluate
         simulation_runner: SimulationRunner instance to run the simulation
+        clusters: Optional dict mapping cluster names to cluster configs for enrichment
     
     Returns:
         Tuple of (config, exec_time, file_paths, metadata):
@@ -80,11 +115,16 @@ def evaluate_config_worker(config: Dict, simulation_runner) -> Tuple[Dict, Optio
         >>> from Optimization.helper import evaluate_config_worker
         >>> 
         >>> worker = partial(evaluate_config_worker, 
-        ...                  simulation_runner=optimizer.simulation_runner)
+        ...                  simulation_runner=optimizer.simulation_runner,
+        ...                  clusters=optimizer.search_space.clusters)
         >>> with Pool(4) as pool:
         >>>     results = pool.map(worker, configs)
     """
     try:
+        # Enrich config with cluster info if cluster parameter exists
+        if clusters and 'cluster' in config:
+            config = enrich_config_with_clusters(config, clusters)
+        
         result = simulation_runner.run_simulation(config, return_paths=True)
         
         if result is not None:

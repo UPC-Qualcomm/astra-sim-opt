@@ -244,7 +244,9 @@ class ScikitBayesianOptimizer(BaseOptimizer):
         """Evaluate initial configs using multiprocessing."""
         # Evaluate using multiprocessing Pool
         with Pool(processes=self.n_workers) as pool:
-            eval_func = partial(evaluate_config_worker, simulation_runner=self.simulation_runner)
+            eval_func = partial(evaluate_config_worker, 
+                              simulation_runner=self.simulation_runner,
+                              clusters=getattr(self.search_space, 'clusters', None))
             results = pool.map(eval_func, init_configs)
         
         # Process results
@@ -436,7 +438,8 @@ class ScikitBayesianOptimizer(BaseOptimizer):
             with self.time_stats.timer("evaluation"):
                 with Pool(processes=self.n_workers) as pool:
                     eval_func = partial(evaluate_config_worker,
-                                    simulation_runner=self.simulation_runner)
+                                    simulation_runner=self.simulation_runner,
+                                    clusters=getattr(self.search_space, 'clusters', None))
                     results = pool.map(eval_func, batch_configs)
             
             # Process results

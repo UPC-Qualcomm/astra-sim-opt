@@ -49,7 +49,7 @@ def main():
     # Note: num_npus is read from the JSON file (npu_count field)
     search_space = create_search_space(
         search_space_path,
-        include_categories=['parallelism_strategy', 'system', 'network', 'collective']
+        include_categories=['parallelism_strategy', 'network']
     )
     print(f"   Design space size: {search_space.get_design_space_size()}")
     
@@ -72,7 +72,9 @@ def main():
     
     # 4. Create objective function (MULTIPLICATIVE)
     print("\n4. Creating objective function...")
-    
+    objective = create_objective(
+        objective_type='time_and_network_bw'
+    )
     # 5. Create optimizer
     print("\n5. Creating random search optimizer...")
     optimizer = RandomOptimizer(
@@ -80,7 +82,7 @@ def main():
         sampler=sampler,
         simulation_runner=sim_runner,
         budget=BUDGET,
-        #objective=objective,  # Pass the objective
+        objective=objective,  # Pass the objective
         verbose=True,
         keep_top_k=5,
         n_workers=1,

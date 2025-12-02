@@ -27,10 +27,10 @@ def main():
     
     # Configuration
     MODEL_NUM = 19 # GPT_40B (Model enum value)
-    MODEL_NAME = "GPT_40B_g2_2500"
+    MODEL_NAME = "GPT_40B_COSMIC_NPUS64"
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
-    BUDGET = 1000
+    BUDGET = 2500
     INIT_SAMPLES = 20
     N_WORKERS = 8
     
@@ -98,7 +98,9 @@ def main():
     # 4. Create objective function
     print("\n4. Creating objective function...")
     
-    objective = create_objective('time')
+    objective = create_objective(
+        objective_type='time_and_network_bw'
+    )
     
     print(f"   Using: {objective.name}")
 

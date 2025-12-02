@@ -81,7 +81,7 @@ class SimulationRunner:
         """
         self.model_num = model_num
         self.model_name = model_name
-        self.num_npus = num_npus
+        self.num_npus = 0
         self.network_name = network_name
         self.net_sim_config = net_sim_config
         self.base_dir = base_dir if base_dir is not None else os.environ['ASTRA_SIM_ROOT'] + '/upc'
@@ -153,6 +153,7 @@ class SimulationRunner:
         sp = config['sp']
         pp = config['pp']
         sharded = config['sharded']
+        self.num_npus = config.get('npu_count', self.num_npus)
         
         # Generate unique suffix for parallel execution if requested and not provided
         if suffix is None:
@@ -208,6 +209,8 @@ class SimulationRunner:
                 return None
             
             # 4. Extract execution time
+            if self.verbose:
+                print(f"    Parsing output log...")
             exec_time, is_oom = self._output_log_parser(workload_file, suffix=suffix)
             
             if exec_time is None:
@@ -236,7 +239,7 @@ class SimulationRunner:
             
         except Exception as e:
             if self.verbose:
-                print(f"    ⚠️  Error: {e}")
+                print(f"    ⚠️  Error in run_simulation: {e}")
             # Return appropriate None tuple based on return_paths flag
             if return_paths:
                 return None, None, {}, {}

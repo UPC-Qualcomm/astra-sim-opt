@@ -138,6 +138,10 @@ class BaseOptimizer(ABC):
             Objective score, or None if evaluation failed
         """
         try:
+            # Enrich config with cluster info if cluster parameter exists
+            if 'cluster' in config and hasattr(self, 'search_space'):
+                config = self.search_space.enrich_config_with_cluster_info(config)
+            
             # Run simulation and get execution time + file paths + metadata
             result = self.simulation_runner.run_simulation(config, return_paths=True)
             
@@ -189,7 +193,7 @@ class BaseOptimizer(ABC):
             self.file_paths.append({})
             self.metadata.append({})
             if verbose:
-                print(f"    ⚠️  Error: {e}")
+                print(f"    ⚠️  Error evaluate config: {e}")
             return None
     
     def get_best_config(self) -> Tuple[Optional[Dict], float]:

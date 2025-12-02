@@ -17,6 +17,7 @@ from .categorical_encoder import get_numerical, get_str
 from .objective import (
     ObjectiveFunction,
     MinimizeExecutionTime,
+    MinimizeExecutionTimeAndNetworkBW,
     CustomObjective,
     create_objective
 )
@@ -36,6 +37,7 @@ __all__ = [
     'get_str',
     'ObjectiveFunction',
     'MinimizeExecutionTime',
+    'MinimizeExecutionTimeAndNetworkBW',
     'CustomObjective',
     'create_objective',
 ]

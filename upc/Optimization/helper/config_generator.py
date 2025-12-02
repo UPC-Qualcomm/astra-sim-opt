@@ -177,11 +177,11 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     Generate network configuration YAML file.
     
     Caches and reuses configs when parameters don't change.
-    If config contains net_* parameters, they override defaults.
+    If config contains network parameters or cluster info, they override defaults.
     Otherwise, uses DEFAULT_NETWORK_CONFIG.
     
     Args:
-        config: Configuration dictionary (may contain net_* prefixed parameters)
+        config: Configuration dictionary (may contain bandwidth, cluster, npus_per_dim, and npu_count parameters)
     
     Returns:
         Absolute path to config file (reused if same parameters)
@@ -191,14 +191,20 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     # Start with defaults
     network_config = DEFAULT_NETWORK_CONFIG.copy()
     
-    # Override with custom values from config if present
-    # Handle list parameters (bandwidth, latency, npus_count have _l0, _l1 suffixes)
+    # Override npus_count if npus_per_dim is provided (from enriched cluster config)
+    if 'npus_per_dim' in config:
+        network_config['npus_count'] = config['npus_per_dim']
+    elif 'npu_count' in config and isinstance(config['npu_count'], (list, tuple)):
+        network_config['npus_count'] = list(config['npu_count'])
+
+    # Override with bandwidth values from config if present
     if 'intra-node-bw' in config or 'inter-node-bw' in config:
         bandwidth = network_config['bandwidth'].copy()
         if 'intra-node-bw' in config:
             bandwidth[0] = config['intra-node-bw']
         if 'inter-node-bw' in config:
-            bandwidth[1] = config['inter-node-bw']
+            for i in range(1, len(network_config['npus_count'])):
+                bandwidth[i] = config['inter-node-bw']
         network_config['bandwidth'] = bandwidth
     
     
@@ -349,6 +355,8 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
         config: Configuration dictionary containing bandwidth parameters:
                 - 'intra-node-bw': Intra-node bandwidth
                 - 'inter-node-bw': Inter-node bandwidth
+                - 'npu_count': Total number of NPUs (optional, used if not in topology_config)
+                - 'npus_per_dim': NPUs per dimension (optional, used to calculate num_npus)
         net_sim_config: Simulation configuration dictionary:
                 - 'topology': 'FoldedClos', 'Jellyfish', or 'Dragonfly'
                 - 'paths_mode': 'ECMP', 'Uniform', etc.
@@ -390,6 +398,16 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
     topology = net_sim_config.get('topology', 'FoldedClos')
     paths_mode = net_sim_config.get('paths_mode', 'ECMP')
     topology_config = net_sim_config.get('topology_config', {}).copy()
+    
+    # If num_npus is not in topology_config, try to get it from config
+    if 'num_npus' not in topology_config:
+        if 'npu_count' in config:
+            topology_config['num_npus'] = config['npu_count']
+        elif 'npus_per_dim' in config:
+            # Calculate num_npus from npus_per_dim
+            import math
+            npus_per_dim = config['npus_per_dim']
+            topology_config['num_npus'] = math.prod(npus_per_dim) if hasattr(math, 'prod') else eval('*'.join(map(str, npus_per_dim)))
     
     # Build bandwidth configuration from config parameters
     bw_config = topology_config.get('bandwidth_config', {}).copy()
@@ -491,7 +509,7 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
         if os.path.exists(cached_path):
             # Also check if the topology file still exists
             with open(cached_path, 'r') as f:
-                cached_config = json.load(f)
+                cached_config = yaml.safe_load(f)
             if os.path.exists(cached_config['topology_file']):
                 return cached_path
     
@@ -686,7 +704,7 @@ def generate_g2_network_config_old(config: Dict[str, Any], net_sim_config: Dict[
         if os.path.exists(cached_path):
             # Also check if the topology file still exists
             with open(cached_path, 'r') as f:
-                cached_config = json.load(f)
+                cached_config = yaml.safe_load(f)
             if os.path.exists(cached_config['topology_file']):
                 return cached_path
     
@@ -757,7 +775,26 @@ def generate_all_configs(config: Dict[str, Any], net_sim_config: Dict[str, Any] 
         system_path = generate_system_config(config)
         network_path = generate_network_config(config)
     elif net_sim_config.get('sim_type') == "g2":
-        system_path = generate_g2_system_config(config)
-        network_path = generate_g2_network_config(config, net_sim_config)
+        try:
+            print(f"[config_generator] Generating G2 system config...")
+            system_path = generate_g2_system_config(config)
+            print(f"[config_generator] G2 system config generated: {system_path}")
+        except Exception as e:
+            print(f"[config_generator] ERROR in generate_g2_system_config: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+        
+        try:
+            print(f"[config_generator] Generating G2 network config...")
+            print(f"[config_generator] Config: {config}")
+            print(f"[config_generator] Net sim config: {net_sim_config}")
+            network_path = generate_g2_network_config(config, net_sim_config)
+            print(f"[config_generator] G2 network config generated: {network_path}")
+        except Exception as e:
+            print(f"[config_generator] ERROR in generate_g2_network_config: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     return system_path, network_path, memory_path

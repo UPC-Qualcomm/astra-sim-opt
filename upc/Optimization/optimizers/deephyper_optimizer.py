@@ -47,9 +47,17 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
     Returns:
         float: objective value for valid configs, 'F' for invalid (DeepHyper requirement)
     """
+    from ..helper.config_utils import enrich_config_with_clusters
+    
     config = dict(job.parameters)
     simulation_runner = optimizer_state['simulation_runner']
     objective = optimizer_state['objective']
+    clusters = optimizer_state.get('clusters')
+    
+    # IMPORTANT: Enrich config with cluster info if clusters dict is available
+    # This adds npu_count, npus_per_dim, num_dimensions from the cluster name
+    if clusters and 'cluster' in config:
+        config = enrich_config_with_clusters(config, clusters)
     
     # Runtime validation to check constraint satisfaction
     # Invalid configs return 'F' which tells DeepHyper this eval FAILED
@@ -129,10 +137,12 @@ class DeepHyperOptimizer(BaseOptimizer):
         search_space,
         sampler,
         simulation_runner,
+        objective,
         budget: int = 30,
         init_samples: int = 20,
         n_workers: int = 1,
         acq_func: str = "UCB",
+        surrogate_model: str = "ET",
         acq_optimizer: str = "auto",
         filter_duplicates: bool = True,
         random_state: Optional[int] = None,
@@ -142,7 +152,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         keep_top_k: int = -1,
         profile_time: bool = False,
         evaluator_method: str = "process",
-        filter_failures: str = "ignore",#"ignore",
+        filter_failures: str = "mean",#"ignore",
         max_total_failures: int = -1,
         **cbo_kwargs
     ):
@@ -153,6 +163,7 @@ class DeepHyperOptimizer(BaseOptimizer):
             search_space: SearchSpace instance
             sampler: Sampler instance (used for fallback if needed)
             simulation_runner: SimulationRunner instance
+            objective: Objective instance
             budget: Total number of evaluations
             init_samples: Number of initial random samples
             n_workers: Number of parallel workers (1 = sequential, >1 = parallel)
@@ -180,6 +191,7 @@ class DeepHyperOptimizer(BaseOptimizer):
             search_space=search_space,
             sampler=sampler,
             simulation_runner=simulation_runner,
+            objective=objective,
             budget=budget,
             init_samples=init_samples,
             verbose=verbose,
@@ -191,6 +203,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         self.n_workers = max(1, n_workers)
         self.acq_func = acq_func
         self.acq_optimizer = acq_optimizer
+        self.surrogate_model = surrogate_model
         self.filter_duplicates = filter_duplicates
         self.random_state = random_state
         self.evaluator_method = evaluator_method
@@ -373,6 +386,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         optimizer_state = {
             'simulation_runner': self.simulation_runner,
             'objective': self.objective,
+            'clusters': getattr(self.search_space, 'clusters', None),  # Pass clusters dict for config enrichment
             'valid_configs_set': getattr(self, '_valid_configs_set', None),
             'param_names': getattr(self, '_param_names', None),
             'verbose': self.verbose
@@ -634,6 +648,7 @@ class DeepHyperOptimizer(BaseOptimizer):
             "verbose": 1 if self.verbose else 0,
             "filter_failures": self.filter_failures,
             "max_total_failures": self.max_total_failures, 
+            "surrogate_model":self.surrogate_model
         }
         
         # Add any additional kwargs

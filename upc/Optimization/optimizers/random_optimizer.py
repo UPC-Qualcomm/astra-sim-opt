@@ -72,6 +72,7 @@ class RandomOptimizer(BaseOptimizer):
         search_space,
         sampler,
         simulation_runner,
+        objective,
         budget: int = 30,
         n_workers: int = 1,
         batch_size: Optional[int] = None,
@@ -87,6 +88,7 @@ class RandomOptimizer(BaseOptimizer):
             search_space: SearchSpace instance
             sampler: Sampler instance for sampling
             simulation_runner: SimulationRunner instance
+            objective: Objective instance
             budget: Total number of evaluations
             n_workers: Number of parallel workers (1 = sequential, >1 = parallel)
             batch_size: Configs per batch when parallel (default: n_workers * 2)
@@ -101,6 +103,7 @@ class RandomOptimizer(BaseOptimizer):
             search_space=search_space,
             sampler=sampler,
             simulation_runner=simulation_runner,
+            objective=objective,
             budget=budget,
             init_samples=0,  # No separate initialization for random search
             verbose=verbose,
@@ -245,7 +248,8 @@ class RandomOptimizer(BaseOptimizer):
                 with Pool(processes=self.n_workers) as pool:
                     # Create partial function with simulation_runner bound
                     eval_func = partial(evaluate_config_worker, 
-                                      simulation_runner=self.simulation_runner)
+                                      simulation_runner=self.simulation_runner,
+                                      clusters=getattr(self.search_space, 'clusters', None))
                     
                     # Map configs to workers
                     results = pool.map(eval_func, batch_configs)
