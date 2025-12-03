@@ -30,7 +30,7 @@ def main():
     MODEL_NAME = "GPT_40B_COSMIC_NPUS64"
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
-    BUDGET = 2500
+    BUDGET = 1500
     INIT_SAMPLES = 20
     N_WORKERS = 8
     
@@ -55,7 +55,7 @@ def main():
     )
     search_space = create_search_space(
         search_space_path,
-        include_categories=['parallelism_strategy', 'system', 'network', 'collective']
+        include_categories=['parallelism_strategy', 'network', 'collective']
     )
     print(f"   Design space size: {search_space.get_design_space_size()}")
     
@@ -114,14 +114,15 @@ def main():
         objective=objective,
         init_samples=INIT_SAMPLES,
         n_workers=N_WORKERS,
-        acq_func="UCB",  # Acquisition function: "UCB", "EI", "PI", "gp_hedge"
-        acq_optimizer="auto",  # "sampling", "lbfgs", "auto"
-        filter_duplicates=True,
+        acq_func="UCB",
+        surrogate_model="ET",
+        acq_optimizer="mixedga",
         random_state=42,
         verbose=True,
         keep_top_k=20,
         profile_time=True,
-        evaluator_method="process"  # "process" or "thread"
+        evaluator_method="process",
+        acq_optimizer_kwargs={"max_total_failures": -1}
     )
     print(f"   Using: {optimizer}")
     
