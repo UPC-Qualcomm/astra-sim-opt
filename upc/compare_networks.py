@@ -128,7 +128,8 @@ def main(args):
             print(f"Error: El directorio de workload '{args.workload_dir}' no existe.")
             sys.exit(1)
         
-        base_name = os.path.basename(args.workload_dir)
+        base_name = args.workload_dir.split('workload/')[1] #os.path.basename(args.workload_dir)
+        print(base_name)
         workload_paths[base_name] = args.workload_dir
 
     else:
@@ -152,6 +153,7 @@ def main(args):
             network_name = os.path.splitext(os.path.basename(args.ns3_network_config))[0].split('_')[0]
         run_folder_name = f"run_{timestamp}"
         base_run_dir = os.path.join("output/comparison_run", network_name, coll_name, run_folder_name)
+        print(base_run_dir)
         
         configs_dir = os.path.join(base_run_dir, "configs")
         os.makedirs(configs_dir, exist_ok=True)
