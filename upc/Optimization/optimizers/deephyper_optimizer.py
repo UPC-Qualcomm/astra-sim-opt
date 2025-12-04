@@ -4,6 +4,7 @@ import sys
 import os
 from typing import Tuple, Optional, Dict
 import pandas as pd
+import numpy as np
 import time
 import tempfile
 
@@ -21,7 +22,7 @@ except ImportError:
 
 
 def _deephyper_evaluate_wrapper(job, optimizer_state):
-    """Wrapper for DeepHyper evaluation. Returns float for valid configs, 'F' for invalid."""
+    """Wrapper for DeepHyper evaluation. Returns objective value or 'F' for failures."""
     from ..helper.config_utils import enrich_config_with_clusters
     
     config = dict(job.parameters)
@@ -31,13 +32,6 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
     
     if clusters and 'cluster' in config:
         config = enrich_config_with_clusters(config, clusters)
-    
-    valid_configs_set = optimizer_state.get('valid_configs_set', None)
-    if valid_configs_set is not None:
-        param_names = optimizer_state.get('param_names', sorted(config.keys()))
-        config_tuple = tuple(config[k] for k in param_names)
-        if config_tuple not in valid_configs_set:
-            return "F"
     
     try:
         returned_config, exec_time, is_oom, file_paths, metadata = evaluate_config_worker(
@@ -205,9 +199,21 @@ class DeepHyperOptimizer(BaseOptimizer):
         self.multi_point_strategy = multi_point_strategy
         
         # Initial points parameters
-        self.n_initial_points = n_initial_points if n_initial_points is not None else init_samples
+        # If initial_points not provided and we have constraints, sample from valid configs
+        if initial_points is None and hasattr(search_space, 'design_space') and search_space.design_space:
+            # Sample initial points from pre-computed valid configurations
+            import random
+            n_init = min(init_samples if n_initial_points is None else n_initial_points, len(search_space.design_space))
+            self.initial_points = random.sample(search_space.design_space, n_init)
+            # Set n_initial_points to match actual initial_points to avoid DeepHyper sampling more
+            self.n_initial_points = len(self.initial_points)
+            if self.verbose:
+                print(f"✓ Sampled {n_init} initial points from valid configurations")
+        else:
+            self.initial_points = initial_points
+            self.n_initial_points = n_initial_points if n_initial_points is not None else init_samples
+        
         self.initial_point_generator = initial_point_generator
-        self.initial_points = initial_points
         
         # Multi-objective optimization parameters
         self.moo_lower_bounds = moo_lower_bounds
@@ -275,7 +281,7 @@ class DeepHyperOptimizer(BaseOptimizer):
             return False
     
     def _create_hp_problem(self) -> HpProblem:
-        """Convert SearchSpace to DeepHyper HpProblem with runtime constraint validation."""
+        """Convert SearchSpace to DeepHyper HpProblem with constraint function."""
         problem = HpProblem(**self.problem_kwargs)
         
         if self.search_space.design_space is None or len(self.search_space.design_space) == 0:
@@ -284,8 +290,9 @@ class DeepHyperOptimizer(BaseOptimizer):
         valid_configs = self.search_space.design_space
         
         if self.verbose:
-            print(f"✓ Using {len(valid_configs)} pre-filtered valid configurations")
+            print(f"✓ Using {len(valid_configs)} valid configurations for reference")
         
+        # Get all unique parameter values from valid configs
         param_names = list(valid_configs[0].keys())
         param_values_map = {name: [] for name in param_names}
         
@@ -294,17 +301,45 @@ class DeepHyperOptimizer(BaseOptimizer):
                 if config[name] not in param_values_map[name]:
                     param_values_map[name].append(config[name])
         
-        for param_name in param_names:
+        # Sort parameter values for consistency
+        for name in param_names:
+            param_values_map[name] = sorted(param_values_map[name], key=lambda x: (x is None, x))
+        
+        # Add hyperparameters in alphabetical order (DeepHyper sorts parameters alphabetically)
+        sorted_param_names = sorted(param_names)
+        for param_name in sorted_param_names:
             unique_values = param_values_map[param_name]
             if unique_values:
-                problem.add_hyperparameter(unique_values, param_name, default_value=unique_values[0])
+                problem.add(unique_values, param_name, default_value=unique_values[0])
         
-        valid_tuples = set(tuple(config[name] for name in sorted(param_names)) for config in valid_configs)
-        self._valid_configs_set = valid_tuples
-        self._param_names = sorted(param_names)
+
+        def constraint_fn(s: pd.DataFrame):
+            """Validate parallelism constraint: dp * mp * sp * pp = npu_count"""
+            is_valid = np.ones(len(s), dtype=bool)
+            
+            for idx, row in s.iterrows():
+                # Get NPU count for this specific cluster
+                # DeepHyper prefixes parameter names with 'p:' in the DataFrame
+                cluster_name = row['cluster']  # Access by column name with 'p:' prefix
+                if cluster_name and hasattr(self.search_space, 'clusters'):
+                    npu_count = self.search_space.clusters[cluster_name]['npu_count']
+                else:
+                    npu_count = self.search_space.num_npus
+                    print("⚠️  Warning: 'cluster' not specified or clusters not defined; using total num_npus")
+                
+                # Check constraint - DataFrame columns are prefixed with 'p:'
+                product = row['dp'] * row['mp'] * row['sp'] * row['pp']
+                is_valid[idx] = (product == npu_count)
+            
+            # Return as pandas Series to avoid AttributeError in DeepHyper
+            return pd.Series(is_valid, index=s.index)
+        
+        problem.set_constraint_fn(constraint_fn)
         
         if self.verbose:
-            print(f"✓ Added {len(param_names)} parameters with runtime validation ({len(valid_tuples)} valid configs)")
+            total_combinations = 1
+            for values in param_values_map.values():
+                total_combinations *= len(values)
         
         return problem
     
@@ -316,8 +351,6 @@ class DeepHyperOptimizer(BaseOptimizer):
             'simulation_runner': self.simulation_runner,
             'objective': self.objective,
             'clusters': getattr(self.search_space, 'clusters', None),
-            'valid_configs_set': getattr(self, '_valid_configs_set', None),
-            'param_names': getattr(self, '_param_names', None),
             'verbose': self.verbose
         }
         
@@ -341,10 +374,17 @@ class DeepHyperOptimizer(BaseOptimizer):
         PENALTY_THRESHOLD = 1e9
         n_failed = 0
         n_success = 0
+        n_infeasible = 0
         
         for idx, row in self.deephyper_results.iterrows():
             objective_value = row['objective']
             
+            # Check if configuration is infeasible (constraint violation)
+            if 'constraint' in row and not row['constraint']:
+                n_infeasible += 1
+                continue
+            
+            # Check for evaluation failures
             if isinstance(objective_value, str):
                 if objective_value == 'F' or objective_value.startswith('F'):
                     n_failed += 1
@@ -382,11 +422,12 @@ class DeepHyperOptimizer(BaseOptimizer):
                 self._cleanup_files()
         
         if self.verbose:
-            print(f"\nCollected {n_success} successful evaluations ({n_failed} failed/invalid)")
-            print(f"Total DeepHyper evaluations attempted: {len(self.deephyper_results)}")
+            print(f"\nCollected {n_success} successful evaluations")
+            print(f"Total DeepHyper evaluations: {len(self.deephyper_results)}")
+            if n_infeasible > 0:
+                print(f"  - Infeasible (constraint violations): {n_infeasible}")
             if n_failed > 0:
-                failed_pct = 100.0 * n_failed / len(self.deephyper_results)
-                print(f"Failed rate: {failed_pct:.1f}% (due to constraint violations)")
+                print(f"  - Failed (simulation errors): {n_failed}")
     
     def _reconstruct_file_paths(self, config: Dict) -> Dict:
         """Reconstruct file paths from config for cleanup support."""
