@@ -1,8 +1,9 @@
 import random
+import os
 from create_topology import CustomizedDragonfly, Jellyfish, FoldedClos
 from utils import write_ns3_topology_file, write_g2_topology_files
 
-def generate_topology_files(topology, paths_mode, config):
+def generate_topology_files(topology, paths_mode, config, g2_path='.', ns3_path='.', file_suffix=''):
     """
     Generates topology and routing files for Astra-Sim.
 
@@ -10,6 +11,9 @@ def generate_topology_files(topology, paths_mode, config):
         topology (str): 'FoldedClos', 'Dragonfly', or 'Jellyfish'.
         paths_mode (str): 'ECMP', 'Uniform', or None.
         config (dict): Configuration parameters for the topology.
+        g2_path (str): Output directory for G2 files.
+        ns3_path (str): Output directory for ns3 files.
+        file_suffix (str): Suffix to append to filenames.
 
     Formulas for Node Counts:
     - Dragonfly: 
@@ -122,24 +126,32 @@ def generate_topology_files(topology, paths_mode, config):
                         all_paths[h1][h2] = [ [h1] + p + [h2] for p in switch_paths ]
         else:
             # FoldedClos handles hosts internally
-            final_paths = raw_paths
+            all_paths = raw_paths
 
-            if paths_mode == "Random":
-                for src, dests in all_paths.items():
-                    final_paths[src] = {}
-                    for dest, path_list in dests.items():
-                        if path_list:
-                            final_paths[src][dest] = [random.choice(path_list)]
-            else:
-                final_paths = all_paths
+        final_paths = {}
+        if paths_mode == "Random":
+            for src, dests in all_paths.items():
+                final_paths[src] = {}
+                for dest, path_list in dests.items():
+                    if path_list:
+                        final_paths[src][dest] = [random.choice(path_list)]
+        else:
+            final_paths = all_paths
     # 4. Write Output Files
-    g2_filename = f"G2_{base_filename}_{paths_mode}"
-    ns3_filename = f"ns3_{base_filename}_{paths_mode}"
+    if file_suffix:
+        base_filename += f"_{file_suffix}"
+        
+    g2_filename_base = f"G2_{base_filename}_{paths_mode}"
+    ns3_filename_base = f"ns3_{base_filename}_{paths_mode}"
     
-    print(f"Writing files: {g2_filename}, {ns3_filename}")
+    g2_filepath = os.path.join(g2_path, g2_filename_base)
+    ns3_filepath = os.path.join(ns3_path, ns3_filename_base)
+    
+    print(f"Writing G2 files with base: {g2_filepath}")
+    print(f"Writing ns3 file: {ns3_filepath}")
     
     # Get bandwidths from topology object
     link_bandwidths = getattr(topo_obj, 'link_bandwidths', None)
     
-    write_g2_topology_files(links, final_paths, base_filename=g2_filename, bandwidth=2, link_bandwidths=link_bandwidths)
-    write_ns3_topology_file(links, final_paths, filename=ns3_filename, bandwidth=2, link_bandwidths=link_bandwidths, bw_unit=bw_unit)
+    write_g2_topology_files(links, final_paths, base_filename=g2_filepath, bandwidth=2, link_bandwidths=link_bandwidths)
+    write_ns3_topology_file(links, final_paths, filename=ns3_filepath, bandwidth=2, link_bandwidths=link_bandwidths, bw_unit=bw_unit)
