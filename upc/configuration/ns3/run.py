@@ -20,7 +20,7 @@ USE_DYNAMIC_PFC_THRESHOLD 1
 ECMP_SEED 25
 USE_PRECOMPUTED_ROUTES 0
 
-PACKET_PAYLOAD_SIZE 1500
+PACKET_PAYLOAD_SIZE 1000
 
 # 16-node ring topology
 TOPOLOGY_FILE {project_root}/upc/configuration/ns3/FoldedClos_16_topology.txt
@@ -81,11 +81,10 @@ PMAX_MAP {pmax_map}
 BUFFER_SIZE {buffer_size}
 """
 if __name__ == "__main__":
-    # Matching bw to topology file (2MB/s = 16Mbps = 0.016Gbps)
-    bw = 0.016
+    bw = 50 *8
     
     # Buffer sizes to test
-    buffer_sizes = [1, 8]
+    buffer_sizes = [int(16 * bw / 50)]
 
     # Parameter space
     # Base CC methods
