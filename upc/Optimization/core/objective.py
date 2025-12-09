@@ -164,12 +164,13 @@ class MinimizeExecutionTimeAndNetworkBW(ObjectiveFunction):
             return PENALTY
         
         # COSMIC formula: reward = 1 / sqrt((sim_time * sum(network_bw) - 1)^2)
+        obj = exec_time * total_network_bw
         import math
         denominator = math.sqrt((exec_time * total_network_bw - 1 ) ** 2)
                 
         reward = 1.0 / denominator
         
-        return reward
+        return obj
 
 class WeightedMultiObjective(ObjectiveFunction):
     """
@@ -209,7 +210,7 @@ class WeightedMultiObjective(ObjectiveFunction):
         """Return weighted combination of metrics."""
         if is_oom:
             return PENALTY
-        # Collect all metrics
+        # Collect all metrics TODO: Not complete list
         metrics = {'exec_time': exec_time}
         metrics.update(metadata)
         

@@ -2,7 +2,7 @@
 SearchSpaceBuilder: Flexible builder for creating search spaces from JSON configurations.
 
 This module provides a builder pattern for creating search spaces with:
-1. Support for all parameter types (parallelism, collective, network, hardware, model)
+1. Support for all parameter types (clusters, parallelism_strategies, network, system, model)
 2. Dynamic constraint parsing and evaluation
 3. Flexible parameter subsets (doesn't require all parameters)
 4. Integration with various sampling strategies

@@ -302,6 +302,8 @@ class DeepHyperOptimizer(BaseOptimizer):
                     param_values_map[name].append(config[name])
         
         # Sort parameter values for consistency
+        # TODO: Report a bug to DeepHyper about this behavior
+        # Note: we do the sorting because DeepHyper sorts parameters alphabetically but they don't sort values as key value pairs.
         for name in param_names:
             param_values_map[name] = sorted(param_values_map[name], key=lambda x: (x is None, x))
         
@@ -334,7 +336,19 @@ class DeepHyperOptimizer(BaseOptimizer):
             # Return as pandas Series to avoid AttributeError in DeepHyper
             return pd.Series(is_valid, index=s.index)
         
+        def custom_sampling_fn(n_samples: int):
+            """Sample directly from valid configurations to avoid constraint violations."""
+            import random
+            sampled = []
+            for _ in range(n_samples):
+                # Randomly select a valid configuration
+                config = random.choice(valid_configs)
+                sampled.append(config)
+            return sampled
+        
+        # Set constraint and sampling functions
         problem.set_constraint_fn(constraint_fn)
+        problem.set_sampling_fn(custom_sampling_fn)
         
         if self.verbose:
             total_combinations = 1

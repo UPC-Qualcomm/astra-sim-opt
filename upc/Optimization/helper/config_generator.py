@@ -428,6 +428,7 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
             actual_nodes = int(K**3 / 4)
             actual_npus = actual_nodes * npus_per_node
             
+            #TODO: Verify the logic if we need to test with npus not equal to power of 2
             # Keep incrementing K until actual_npus is >= num_npus AND is a power of 2
             def is_power_of_2(n):
                 return n > 0 and (n & (n - 1)) == 0

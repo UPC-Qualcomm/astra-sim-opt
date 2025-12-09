@@ -50,7 +50,6 @@ class SimulationRunner:
         self,
         model_num: int,
         model_name: str,
-        num_npus: int,
         network_name: str = "FoldedClos",
         net_sim_config: Dict[str, Any] = {"sim_type": "analytical_unaware"},
         base_dir: Optional[str] = os.environ['ASTRA_SIM_ROOT'] + "/upc",

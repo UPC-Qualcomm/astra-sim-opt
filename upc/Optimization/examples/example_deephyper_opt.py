@@ -87,7 +87,6 @@ def main():
     sim_runner = SimulationRunner(
         model_num=MODEL_NUM,
         model_name=MODEL_NAME,
-        num_npus=search_space.num_npus,
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_DEEPHYPER",
         verbose=True,

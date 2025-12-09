@@ -63,7 +63,6 @@ def main():
     sim_runner = SimulationRunner(
         model_num=MODEL_NUM,
         model_name=MODEL_NAME,
-        num_npus=NUM_NPUS,
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_RS",
         verbose=True

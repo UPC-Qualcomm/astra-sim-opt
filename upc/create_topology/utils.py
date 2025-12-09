@@ -1,7 +1,7 @@
 import re
 import json
 
-def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=900, link_bandwidths=None):
+def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=900, link_bandwidths=None, output_dir="./"):
     """
     Writes topology data to two files:
     1. A custom .txt file with a simple, quote-less format.
@@ -48,7 +48,8 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
                 path_str = ", ".join(path)
                 txt_content.append(f"{src}: {dest}: [{path_str}]")
 
-    txt_filename = f"{base_filename}.txt"
+    import os
+    txt_filename = os.path.join(output_dir, f"{base_filename}.txt")
     with open(txt_filename, "w") as f:
         f.write("\n".join(txt_content))
     print(f"Successfully wrote custom text topology to {txt_filename}")
@@ -67,13 +68,13 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
         "paths": host_to_host_paths
     }
 
-    json_filename = f"{base_filename}.json"
+    json_filename = os.path.join(output_dir, f"{base_filename}.json")
     with open(json_filename, "w") as f:
         json.dump(json_data, f, indent=4)
     print(f"Successfully wrote JSON topology to {json_filename}")
 
 
-def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth="900GiB/s", latency="0.000ms", link_bandwidths=None, bw_unit="GB/s"):
+def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth="900GiB/s", latency="0.000ms", link_bandwidths=None, bw_unit="GB/s", output_dir="./"):
     """
     Maps node names to sequential IDs and writes a topology file in the NS3 format,
     including pre-computed routes.
@@ -154,7 +155,9 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
         processed_links_with_bw.append((tuple(sorted((id1, id2))), bw_val))
 
     # 4. Write to file
-    with open(filename, "w") as f:
+    import os
+    filepath = os.path.join(output_dir, filename)
+    with open(filepath, "w") as f:
         # Header
         f.write(f"{num_nodes} {num_switches} {num_links}\n")
         
@@ -191,7 +194,7 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
                     f.write(f"{src_id}:{dest_id}:[{path_ids_str}]\n")
 
 
-    print(f"Successfully wrote NS3 topology to {filename}")
+    print(f"Successfully wrote NS3 topology to {filepath}")
 
 
 def make_node_names_zero_indexed(links, paths):
