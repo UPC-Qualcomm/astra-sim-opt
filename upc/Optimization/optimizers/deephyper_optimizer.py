@@ -7,6 +7,9 @@ import pandas as pd
 import numpy as np
 import time
 import tempfile
+import matplotlib.pyplot as plt
+import json
+import yaml
 
 # Add parent directory to path for imports
 sys.path.append(os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
@@ -30,6 +33,9 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
     objective = optimizer_state['objective']
     clusters = optimizer_state.get('clusters')
     
+    # Create cache key BEFORE enriching config (so it matches the DataFrame params)
+    config_key = tuple(sorted(config.items()))
+    
     if clusters and 'cluster' in config:
         config = enrich_config_with_clusters(config, clusters)
     
@@ -41,20 +47,51 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
         if exec_time is None:
             return "F"
         
+        # Cache exec_time and config files for enrichment
+        if 'extra_data_cache' in optimizer_state:
+            config_files = {}
+            for key in ['system_config', 'network_config', 'memory_config']:
+                path = file_paths.get(key)
+                if path:
+                    try:
+                        with open(path, 'r') as f:
+                            data = json.load(f) if path.endswith('.json') else yaml.safe_load(f)
+                        config_files[key] = json.dumps(data)
+                    except Exception as e:
+                        print(f"⚠️  Failed to read {key}: {e}")
+                        config_files[key] = None
+            
+            optimizer_state['extra_data_cache'][config_key] = {
+                'exec_time': exec_time,
+                'config_files': config_files
+            }
+            print(f"✓ Cached data for config_key with {len(config_files)} files, exec_time={exec_time}")
+        
         score = objective.compute(exec_time, is_oom, metadata, config)
         if score is None:
             return "F"
         
-        if objective.minimize:
-            objective_value = -score if score != float('inf') else -1e10
+        # Handle multi-objective returns (tuple of scores)
+        if isinstance(score, (tuple, list)):
+            objective_values = []
+            for s in score:
+                if objective.minimize:
+                    obj_val = -s if s != float('inf') else -1e10
+                else:
+                    obj_val = s if s != float('inf') else -1e10
+                objective_values.append(obj_val)
+            return tuple(objective_values)
         else:
-            objective_value = score if score != float('inf') else -1e10
-        
-        return objective_value
+            # Single objective
+            if objective.minimize:
+                objective_value = -score if score != float('inf') else -1e10
+            else:
+                objective_value = score if score != float('inf') else -1e10
+            return objective_value
         
     except Exception as e:
         print(f"    ⚠️  Evaluation error: {e}")
-        return "F" 
+        return "F"
 
 
 class DeepHyperOptimizer(BaseOptimizer):
@@ -82,7 +119,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         surrogate_model_kwargs: Optional[Dict] = None,
         # Acquisition function parameters
         acq_func: str = "UCB",
-        acq_func_kwargs: Optional[Dict] = None,
+        acq_func_kwargs: Optional[Dict] = None ,
         acq_optimizer: str = "mixedga",
         acq_optimizer_kwargs: Optional[Dict] = None,
         # Multi-point strategy
@@ -101,6 +138,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         keep_top_k: int = -1,
         profile_time: bool = False,
         evaluator_method: str = "process",
+        results_filename: Optional[str] = None,
         # Additional kwargs
         problem_kwargs: Optional[Dict] = None,
         cbo_kwargs: Optional[Dict] = None
@@ -225,6 +263,13 @@ class DeepHyperOptimizer(BaseOptimizer):
         self.problem_kwargs = problem_kwargs or {}
         self.cbo_kwargs = cbo_kwargs or {}
         
+        # Results filename - use model name if not specified
+        if results_filename is None:
+            model_name = getattr(simulation_runner, 'model_name', 'deephyper')
+            self.results_filename = f"deephyper_results_{model_name}.csv"
+        else:
+            self.results_filename = results_filename
+        
         # Setup log directory
         if log_dir is None:
             self.log_dir = tempfile.mkdtemp(prefix="deephyper_")
@@ -237,6 +282,11 @@ class DeepHyperOptimizer(BaseOptimizer):
         self.evaluator = None
         self.cbo = None
         self.deephyper_results = None
+        # Use Manager dict for multiprocess-safe cache sharing
+        from multiprocessing import Manager
+        self._manager = Manager()
+        self.extra_data_cache = self._manager.dict()
+        # Note: self.file_paths is already initialized as [] in BaseOptimizer
     
     def initialize(self) -> bool:
         """Initialize DeepHyper components (HpProblem, Evaluator, CBO)."""
@@ -312,7 +362,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         for param_name in sorted_param_names:
             unique_values = param_values_map[param_name]
             if unique_values:
-                problem.add(unique_values, param_name, default_value=unique_values[0])
+                problem.add_hyperparameter(unique_values, param_name, default_value=unique_values[0])
         
 
         def constraint_fn(s: pd.DataFrame):
@@ -365,7 +415,7 @@ class DeepHyperOptimizer(BaseOptimizer):
             'simulation_runner': self.simulation_runner,
             'objective': self.objective,
             'clusters': getattr(self.search_space, 'clusters', None),
-            'verbose': self.verbose
+            'extra_data_cache': self.extra_data_cache
         }
         
         eval_func = partial(_deephyper_evaluate_wrapper, optimizer_state=optimizer_state)
@@ -377,6 +427,81 @@ class DeepHyperOptimizer(BaseOptimizer):
         
         return evaluator
     
+    def _enrich_results_with_config_files(self):
+        """Enrich DeepHyper results dataframe with config file information.
+        
+        This method reads the system, network, and memory config files for each
+        successful evaluation and appends the information as new columns in the
+        results dataframe.
+        """
+        if self.deephyper_results is None or len(self.deephyper_results) == 0:
+            return
+        
+        # Create a temporary optimizer state to re-evaluate configs and get file_paths
+        param_cols = [col for col in self.deephyper_results.columns if col.startswith('p:')]
+        param_names = [col[2:] for col in param_cols]
+        
+        config_file_data = []
+        
+        for idx, row in self.deephyper_results.iterrows():
+            # Skip failed or infeasible evaluations
+            if 'objective' in row:
+                if isinstance(row['objective'], str) and row['objective'] == 'F':
+                    config_file_data.append({})
+                    continue
+            elif 'objective_0' in row:
+                if isinstance(row['objective_0'], str) and row['objective_0'] == 'F':
+                    config_file_data.append({})
+                    continue
+            
+            if 'constraint' in row and not row['constraint']:
+                config_file_data.append({})
+                continue
+            
+            # Reconstruct config from row
+            config = {name: row[f'p:{name}'] for name in param_names}
+            
+            try:
+                # Retrieve exec_time and config files from cache
+                config_key = tuple(sorted(config.items()))
+                if self.verbose and idx < 3:
+                    print(f"  Looking up config_key for row {idx}: {config_key}")
+                    print(f"  Cache has {len(self.extra_data_cache)} entries")
+                    if config_key in self.extra_data_cache:
+                        print(f"  ✓ Found in cache")
+                    else:
+                        print(f"  ✗ NOT found in cache")
+                        print(f"  Available keys: {list(self.extra_data_cache.keys())[:2]}")
+                
+                cached_data = self.extra_data_cache.get(config_key, {})
+                if cached_data:
+                    config_data = dict(cached_data.get('config_files', {}))
+                    config_data['exec_time'] = cached_data.get('exec_time')
+                else:
+                    config_data = {}
+                config_file_data.append(config_data)
+            
+            except Exception as e:
+                if self.verbose:
+                    print(f"    ⚠️  Warning: Could not enrich row {idx} with config files: {e}")
+                config_file_data.append({})
+        
+        # Append config file data to results dataframe
+        if config_file_data:
+            # Add columns for config files (system_config, network_config, memory_config)
+            config_file_keys = ['system_config', 'network_config', 'memory_config']
+            
+            for key in config_file_keys:
+                self.deephyper_results[key] = [data.get(key, None) for data in config_file_data]
+            
+            # Add exec_time column
+            self.deephyper_results['exec_time'] = [data.get('exec_time', None) for data in config_file_data]
+            
+            if self.verbose:
+                n_enriched = sum(1 for data in config_file_data if data)
+                print(f"✓ Enriched {n_enriched}/{len(self.deephyper_results)} rows with config file information")
+                print(f"  Added columns: {', '.join(config_file_keys)}, exec_time")
+    
     def _collect_results_from_deephyper(self):
         """Collect and process results from DeepHyper's output dataframe."""
         if self.deephyper_results is None or len(self.deephyper_results) == 0:
@@ -385,13 +510,28 @@ class DeepHyperOptimizer(BaseOptimizer):
         param_cols = [col for col in self.deephyper_results.columns if col.startswith('p:')]
         param_names = [col[2:] for col in param_cols]
         
+        # Detect if multi-objective by checking for objective_0 column
+        is_multi_objective = 'objective_0' in self.deephyper_results.columns
+        
         PENALTY_THRESHOLD = 1e9
         n_failed = 0
         n_success = 0
         n_infeasible = 0
+        n_config_files_read = 0
         
         for idx, row in self.deephyper_results.iterrows():
-            objective_value = row['objective']
+            # Get objective value(s) - handle both single and multi-objective
+            if is_multi_objective:
+                # For MOO, use first objective as primary score for tracking "best"
+                objective_value = row.get('objective_0', None)
+                if objective_value is None:
+                    n_failed += 1
+                    continue
+            else:
+                objective_value = row.get('objective', None)
+                if objective_value is None:
+                    n_failed += 1
+                    continue
             
             # Check if configuration is infeasible (constraint violation)
             if 'constraint' in row and not row['constraint']:
@@ -417,13 +557,26 @@ class DeepHyperOptimizer(BaseOptimizer):
             
             self.configs.append(config)
             self.scores.append(score)
-            self.file_paths.append(self._reconstruct_file_paths(config))
             self.metadata.append(self._get_simulation_metadata())
             n_success += 1
             
+            # Try to read config files if job_id exists (to retrieve file_paths from job metadata)
+            if 'job_id' in row:
+                try:
+                    # Access job metadata to get file_paths
+                    # Note: This requires DeepHyper to store the file_paths in job metadata
+                    # For now, we'll add this data directly to the dataframe after the search
+                    pass
+                except Exception:
+                    pass
+            
             if self.verbose and n_success <= 10:
                 config_str = ", ".join([f"{k}={v}" for k, v in config.items()])
-                print(f"  Iteration {n_success}: {config_str} | Score: {score:.4f}")
+                if is_multi_objective and 'objective_1' in row:
+                    obj1_val = -row['objective_1'] if self.objective.minimize else row['objective_1']
+                    print(f"  Iteration {n_success}: {config_str} | Obj0: {score:.4f}, Obj1: {obj1_val:.4f}")
+                else:
+                    print(f"  Iteration {n_success}: {config_str} | Score: {score:.4f}")
             
             if not is_penalty and self.objective.is_better(score, self.best_score):
                 self.best_score = score
@@ -442,27 +595,28 @@ class DeepHyperOptimizer(BaseOptimizer):
                 print(f"  - Infeasible (constraint violations): {n_infeasible}")
             if n_failed > 0:
                 print(f"  - Failed (simulation errors): {n_failed}")
+            if is_multi_objective:
+                print(f"  - Multi-objective optimization detected")
+            if n_config_files_read > 0:
+                print(f"  - Config files read: {n_config_files_read}")
     
-    def _reconstruct_file_paths(self, config: Dict) -> Dict:
-        """Reconstruct file paths from config for cleanup support."""
-        sr = self.simulation_runner
-        parallelism_parts = [str(config[key]) for key in ['dp', 'mp', 'sp', 'pp'] if key in config]
-        if 'sharded' in config:
-            parallelism_parts.append('1' if config['sharded'] else '0')
-        config_str = '_'.join(parallelism_parts)
+    def _read_config_files(self, file_paths: Dict) -> Dict:
+        """Read config files and return as JSON strings."""
+        config_data = {}
         
-        try:
-            import sys
-            sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
-            model = workload_generator.Model(self.model_num)
-            _, _, _, _, batch, _, seq, _, _ = model.get_model_params()
-            filename_base = f"{config_str}.seq_{seq}.batch_{batch}"
-            return {
-                'workload': os.path.join(sr.workload_dir, filename_base),
-                'output_pattern': os.path.join(sr.output_dir, filename_base)
-            }
-        except Exception:
-            return {}
+        for key in ['system_config', 'network_config', 'memory_config']:
+            path = file_paths.get(key)
+            if path:
+                try:
+                    with open(path, 'r') as f:
+                        data = json.load(f) if path.endswith('.json') else yaml.safe_load(f)
+                    config_data[key] = json.dumps(data)
+                except Exception as e:
+                    if self.verbose:
+                        print(f"    ⚠️  Could not read {key}: {e}")
+                    config_data[key] = None
+        
+        return config_data
     
     def _get_simulation_metadata(self) -> Dict:
         """Get simulation metadata from simulation_runner."""
@@ -470,7 +624,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         try:
             import sys
             sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
-            model = workload_generator.Model(self.model_num)
+            model = workload_generator.Model(sr.model_num)
             din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = model.get_model_params()
             
             metadata = {
@@ -562,6 +716,12 @@ class DeepHyperOptimizer(BaseOptimizer):
                 )
             
             if self.verbose:
+                print("\n" + "-"*70 + "\nENRICHING RESULTS WITH CONFIG FILES\n" + "-"*70)
+            
+            # Enrich results with config file information
+            self._enrich_results_with_config_files()
+            
+            if self.verbose:
                 print("\n" + "-"*70 + "\nCOLLECTING RESULTS\n" + "-"*70)
             
             self._collect_results_from_deephyper()
@@ -576,11 +736,13 @@ class DeepHyperOptimizer(BaseOptimizer):
                 self.print_summary()
             
             with self.time_stats.timer("save_results"):
-                self.save_results()
-                dh_results_path = os.path.join(self.save_dir, "deephyper_results.csv")
+                # Save only DeepHyper's native results (has job tracking, Pareto info, etc.)
+                # Skip BaseOptimizer's save_results() to avoid duplicate CSV files
+                dh_results_path = os.path.join(self.save_dir, self.results_filename)
                 self.deephyper_results.to_csv(dh_results_path, index=False)
+                
                 if self.verbose:
-                    print(f"✓ DeepHyper results saved to: {dh_results_path}")
+                    print(f"✓ Results saved to: {dh_results_path}")
             
             self.time_stats.end_total()
             return self.best_config, self.get_history()
@@ -599,6 +761,165 @@ class DeepHyperOptimizer(BaseOptimizer):
                 traceback.print_exc()
             return None, pd.DataFrame()
     
+    def plot_hypervolume(self, save_path: Optional[str] = None):
+        """Plot hypervolume indicator over evaluations for multi-objective optimization.
+        
+        The hypervolume indicator measures the volume of objective space dominated by the
+        current Pareto front relative to a reference point. It increases as the optimization
+        finds better solutions, providing a single metric to track MOO progress.
+        
+        A higher hypervolume indicates:
+        - Better overall solution quality
+        - More diverse Pareto front coverage
+        - Improved convergence toward optimal trade-offs
+        
+        Args:
+            save_path: Path to save the plot. If None, uses save_dir/hypervolume.png
+        """
+        if self.deephyper_results is None or len(self.deephyper_results) == 0:
+            print("⚠️  No results to plot hypervolume")
+            return
+        
+        # Check if we have multi-objective results
+        if "objective_0" not in self.deephyper_results.columns or "objective_1" not in self.deephyper_results.columns:
+            print("⚠️  Not a multi-objective optimization - no hypervolume to compute")
+            return
+        
+        try:
+            from deephyper.analysis._matplotlib import update_matplotlib_rc
+            from deephyper.sklearn.moo import MOOScalarBenchmark
+            
+            # Update matplotlib style for better plots
+            update_matplotlib_rc()
+            
+            # Create benchmark for scoring
+            bench = MOOScalarBenchmark(
+                moo_lower_bounds=self.moo_lower_bounds,
+                scalarization_strategy=self.moo_scalarization_strategy
+            )
+            
+            # Compute hypervolume over time
+            results = self.deephyper_results[["objective_0", "objective_1"]].values
+            scorer = bench.scorer
+            hvi = scorer.hypervolume(results)
+            
+            # Create plot
+            x = list(range(1, len(hvi) + 1))
+            fig, ax = plt.subplots(figsize=(9, 6), tight_layout=True)
+            
+            _ = ax.plot(x, hvi, linewidth=2, color="#2E86AB", marker="o", markersize=4, markevery=max(1, len(x)//20))
+            _ = ax.fill_between(x, hvi, alpha=0.3, color="#2E86AB")
+            _ = ax.grid(alpha=0.3, linestyle="--")
+            _ = ax.set_xlabel("Number of Evaluations", fontsize=12)
+            _ = ax.set_ylabel("Hypervolume Indicator", fontsize=12)
+            _ = ax.set_title("Hypervolume Indicator Progress", fontsize=14, fontweight="bold")
+            
+            # Add annotation for final hypervolume
+            final_hv = hvi[-1]
+            _ = ax.annotate(
+                f"Final HV: {final_hv:.2f}",
+                xy=(len(x), final_hv),
+                xytext=(-60, 20),
+                textcoords="offset points",
+                bbox=dict(boxstyle="round,pad=0.5", facecolor="yellow", alpha=0.7),
+                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0")
+            )
+            
+            # Save figure
+            if save_path is None:
+                save_path = os.path.join(self.save_dir, "hypervolume.png")
+            
+            fig.savefig(save_path, dpi=150, bbox_inches="tight")
+            if self.verbose:
+                print(f"✓ Hypervolume plot saved to: {save_path}")
+                print(f"  Final hypervolume: {final_hv:.4f}")
+                print(f"  Initial hypervolume: {hvi[0]:.4f}")
+                print(f"  Improvement: {((final_hv - hvi[0]) / hvi[0] * 100):.2f}%")
+            
+            plt.close(fig)
+            return save_path, hvi
+            
+        except ImportError as e:
+            print(f"⚠️  Cannot plot hypervolume: {e}")
+            print("   Install deephyper with: pip install deephyper[analytics]")
+            return None, None
+        except Exception as e:
+            print(f"⚠️  Error computing hypervolume: {e}")
+            return None, None
+    
+    def plot_results(self, save_path: Optional[str] = None, objective_names: Optional[Tuple[str, str]] = None):
+        """Plot Pareto front for multi-objective optimization.
+        
+        Args:
+            save_path: Path to save the plot. If None, uses save_dir/pareto_front.png
+        """
+        if self.deephyper_results is None or len(self.deephyper_results) == 0:
+            print("⚠️  No results to plot")
+            return
+        
+        # Check if we have multi-objective results
+        if "objective_0" not in self.deephyper_results.columns or "objective_1" not in self.deephyper_results.columns:
+            print("⚠️  Not a multi-objective optimization - no Pareto front to plot")
+            return
+        
+        fig, ax = plt.subplots(figsize=(9, 7), tight_layout=True)
+        
+        # Check if pareto_efficient column exists
+        if "pareto_efficient" in self.deephyper_results.columns:
+            # Plot non-Pareto efficient points
+            non_pareto = self.deephyper_results[~self.deephyper_results["pareto_efficient"]]
+            if len(non_pareto) > 0:
+                _ = ax.plot(
+                    -non_pareto["objective_0"],
+                    -non_pareto["objective_1"],
+                    "o",
+                    color="blue",
+                    alpha=0.7,
+                    label="Non Pareto-Efficient",
+                    markersize=6
+                )
+            
+            # Plot Pareto efficient points
+            pareto = self.deephyper_results[self.deephyper_results["pareto_efficient"]]
+            if len(pareto) > 0:
+                _ = ax.plot(
+                    -pareto["objective_0"],
+                    -pareto["objective_1"],
+                    "o",
+                    color="red",
+                    alpha=0.9,
+                    label="Pareto-Efficient",
+                    markersize=8
+                )
+        else:
+            # Plot all points if pareto_efficient column doesn't exist
+            _ = ax.plot(
+                -self.deephyper_results["objective_0"],
+                -self.deephyper_results["objective_1"],
+                "o",
+                color="blue",
+                alpha=0.7,
+                label="All Evaluations",
+                markersize=6
+            )
+        
+        _ = ax.grid(alpha=0.3)
+        _ = ax.legend(loc="best")
+        _ = ax.set_xlabel(f"Objective 0 ({objective_names[0]})" if objective_names else "Objective 0", fontsize=12)
+        _ = ax.set_ylabel(f"Objective 1 ({objective_names[1]})" if objective_names else "Objective 1", fontsize=12)
+        _ = ax.set_title("Pareto Front: Multi-Objective Optimization", fontsize=14, fontweight="bold")
+        
+        # Save figure
+        if save_path is None:
+            save_path = os.path.join(self.save_dir, "pareto_front.png")
+        
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        if self.verbose:
+            print(f"✓ Pareto front plot saved to: {save_path}")
+        
+        plt.close(fig)
+        return save_path
+
     def __repr__(self) -> str:
         """String representation."""
         return (f"DeepHyperOptimizer(budget={self.budget}, "

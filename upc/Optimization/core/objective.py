@@ -268,22 +268,25 @@ class CustomObjective(ObjectiveFunction):
         self, 
         compute_fn: Callable[[float, Dict[str, Any]], float], 
         name: str = "Custom Objective",
-        minimize: bool = True
+        minimize: bool = True,
+        is_multi_objective: bool = False
     ):
         """
         Initialize custom objective.
         
         Args:
-            compute_fn: Callable that takes (exec_time, metadata) and returns score
+            compute_fn: Callable that takes (exec_time, is_oom, metadata, config) and returns score or tuple of scores
             name: Name for this objective
             minimize: Whether to minimize (True) or maximize (False)
+            is_multi_objective: Whether this objective returns multiple values (tuple)
         """
         super().__init__(name, minimize)
         self.compute_fn = compute_fn
+        self.is_multi_objective = is_multi_objective
     
-    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> float:
-        """Call user-provided compute function."""
-        return self.compute_fn(exec_time, is_oom, metadata)
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None):
+        """Call user-provided compute function with all parameters including config."""
+        return self.compute_fn(exec_time, is_oom, metadata, config)
 
 
 # Convenience factory function

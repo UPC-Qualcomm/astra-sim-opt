@@ -130,7 +130,7 @@ class SimulationRunner:
                     print(f"Removing: {dir_path}")
                 shutil.rmtree(dir_path)
     
-    def run_simulation(self, config: Dict, return_paths: bool = False, suffix: Optional[str] = None):
+    def run_simulation(self, config: Dict, return_paths: bool = True, suffix: Optional[str] = None):
         """
         Run simulation for a configuration.
         
@@ -226,7 +226,10 @@ class SimulationRunner:
                 config_basename = os.path.basename(workload_file)
                 file_paths = {
                     'workload': workload_file,  # Base path without numbered extension
-                    'output_pattern': os.path.join(self.output_dir, config_basename)  # Base path for output files
+                    'output_pattern': os.path.join(self.output_dir, config_basename),  # Base path for output files
+                    'system_config': self.system_config,
+                    'network_config': self.network_config,
+                    'memory_config': self.memory_config,
                 }
                 
                 # Collect metadata about the actual simulation configuration
