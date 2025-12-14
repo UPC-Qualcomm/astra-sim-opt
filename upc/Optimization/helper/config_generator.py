@@ -45,6 +45,63 @@ def _hash_config(config_dict: Dict[str, Any]) -> str:
     return hashlib.md5(config_str.encode()).hexdigest()[:16]
 
 
+def _map_topology_to_network_type(topology: str) -> str:
+    """Map high-level topology name to AstraSim network type.
+    
+    Args:
+        topology: High-level topology name ('FoldedClos', 'Dragonfly', 'Torus')
+    
+    Returns:
+        AstraSim network type ('Switch', 'FullyConnected', 'Ring')
+    """
+    topology_map = {
+        'FoldedClos': 'Switch',
+        'Dragonfly': 'FullyConnected',
+        'Torus': 'Ring'
+    }
+    return topology_map.get(topology, 'Switch')
+
+
+def _build_collective_implementations(config: Dict[str, Any], num_dims: int) -> Dict[str, list]:
+    """Build collective implementation arrays for each dimension.
+    
+    Args:
+        config: Configuration dictionary that may contain:
+                - 'all-reduce': single value or list per dimension
+                - 'all-gather': single value or list per dimension
+                - 'reduce-scatter': single value or list per dimension
+                - 'all-to-all': single value or list per dimension
+        num_dims: Number of network dimensions
+    
+    Returns:
+        Dictionary with collective implementation lists for each collective type
+    """
+    collectives = ['all-reduce', 'all-gather', 'reduce-scatter', 'all-to-all']
+    result = {}
+    
+    for collective in collectives:
+        key = f'{collective}-implementation'
+        if collective in config:
+            value = config[collective]
+            # If it's already a list with correct length, use it
+            if isinstance(value, list) and len(value) == num_dims:
+                result[key] = value
+            # If it's a single value, replicate for all dimensions
+            elif isinstance(value, str):
+                result[key] = [value] * num_dims
+            # If it's a list but wrong length, use first value for all dims
+            elif isinstance(value, list):
+                result[key] = [value[0]] * num_dims
+            else:
+                # Default fallback
+                result[key] = ['halvingDoubling'] * num_dims
+        else:
+            # Not specified, use default
+            result[key] = ['halvingDoubling'] * num_dims
+    
+    return result
+
+
 # Default configurations
 DEFAULT_SYSTEM_CONFIG = {
     "scheduling-policy": "LIFO",
@@ -118,11 +175,14 @@ def generate_system_config(config: Dict[str, Any]) -> str:
     Generate system configuration JSON file.
     
     Caches and reuses configs when parameters don't change.
-    If config contains sys_* parameters, they override defaults.
-    Otherwise, uses DEFAULT_SYSTEM_CONFIG.
+    Supports collective implementations per dimension.
     
     Args:
-        config: Configuration dictionary (may contain sys_* prefixed parameters)
+        config: Configuration dictionary that may contain:
+                - Basic params: 'scheduling-policy', 'endpoint-delay', etc.
+                - Collective algos: 'all-reduce', 'all-gather', 'reduce-scatter', 'all-to-all'
+                  (can be string for all dims, or list per dimension)
+                - 'npus_per_dim': List defining network dimensions (e.g., [8, 8] for 2D)
     
     Returns:
         Absolute path to config file (reused if same parameters)
@@ -131,6 +191,14 @@ def generate_system_config(config: Dict[str, Any]) -> str:
     
     # Start with defaults
     system_config = DEFAULT_SYSTEM_CONFIG.copy()
+    
+    # Determine number of dimensions from npus_per_dim or default to 2
+    npus_per_dim = config.get('npus_per_dim', [8, 8])
+    num_dims = len(npus_per_dim)
+    
+    # Build collective implementations for each dimension
+    collective_impls = _build_collective_implementations(config, num_dims)
+    system_config.update(collective_impls)
     
     # Override with custom values from config if present
     param_mapping = [
@@ -176,12 +244,17 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     """
     Generate network configuration YAML file.
     
-    Caches and reuses configs when parameters don't change.
-    If config contains network parameters or cluster info, they override defaults.
-    Otherwise, uses DEFAULT_NETWORK_CONFIG.
+    Supports topology-based network types:
+    - FoldedClos → Switch
+    - Dragonfly → FullyConnected  
+    - Torus → Ring
     
     Args:
-        config: Configuration dictionary (may contain bandwidth, cluster, npus_per_dim, and npu_count parameters)
+        config: Configuration dictionary that may contain:
+                - 'topology': 'FoldedClos', 'Dragonfly', or 'Torus'
+                - 'npus_per_dim': Network dimensions (e.g., [8, 8])
+                - 'intra-node-bw': Intra-node bandwidth
+                - 'inter-node-bw': Inter-node bandwidth
     
     Returns:
         Absolute path to config file (reused if same parameters)
@@ -191,21 +264,37 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     # Start with defaults
     network_config = DEFAULT_NETWORK_CONFIG.copy()
     
-    # Override npus_count if npus_per_dim is provided (from enriched cluster config)
+    # Get network dimensions from npus_per_dim
     if 'npus_per_dim' in config:
-        network_config['npus_count'] = config['npus_per_dim']
+        npus_per_dim = config['npus_per_dim']
+        network_config['npus_count'] = npus_per_dim
     elif 'npu_count' in config and isinstance(config['npu_count'], (list, tuple)):
         network_config['npus_count'] = list(config['npu_count'])
-
+    
+    num_dims = len(network_config['npus_count'])
+    
+    # Map topology to network type for each dimension
+    if 'topology' in config:
+        topology = config['topology']
+        network_type = _map_topology_to_network_type(topology)
+        network_config['topology'] = [network_type] * num_dims
+    else:
+        # Default to Switch for all dimensions
+        network_config['topology'] = ['Switch'] * num_dims
+    
     # Override with bandwidth values from config if present
     if 'intra-node-bw' in config or 'inter-node-bw' in config:
-        bandwidth = network_config['bandwidth'].copy()
+        bandwidth = [network_config['bandwidth'][0]] * num_dims if num_dims > 0 else [450.0]
         if 'intra-node-bw' in config:
             bandwidth[0] = config['intra-node-bw']
         if 'inter-node-bw' in config:
-            for i in range(1, len(network_config['npus_count'])):
+            for i in range(1, num_dims):
                 bandwidth[i] = config['inter-node-bw']
         network_config['bandwidth'] = bandwidth
+    
+    # Ensure latency array matches dimensions
+    if len(network_config.get('latency', [])) != num_dims:
+        network_config['latency'] = [0.0] * num_dims
     
     
     # Check cache - reuse if same config exists
@@ -281,11 +370,13 @@ def generate_g2_system_config(config: Dict[str, Any]) -> str:
     """
     Generate G2-specific system configuration JSON file.
     
-    Differs from analytical system config by using 1D lists for collective algorithms
-    instead of 2D lists (only one level of hierarchy in G2).
+    G2 uses 1D lists for collective algorithms (single hierarchy level).
+    Supports collective implementations per dimension.
     
     Args:
-        config: Configuration dictionary (may contain sys_* prefixed parameters)
+        config: Configuration dictionary that may contain:
+                - Basic params: 'scheduling-policy', 'endpoint-delay', etc.
+                - Collective algos: 'all-reduce', 'all-gather', 'reduce-scatter', 'all-to-all'
     
     Returns:
         Absolute path to config file (reused if same parameters)
@@ -294,6 +385,11 @@ def generate_g2_system_config(config: Dict[str, Any]) -> str:
     
     # Start with G2 defaults (1D lists for collective algorithms)
     system_config = DEFAULT_G2_SYSTEM_CONFIG.copy()
+    
+    # G2 is single-dimension, but we build collectives same way
+    num_dims = 1
+    collective_impls = _build_collective_implementations(config, num_dims)
+    system_config.update(collective_impls)
     
     # Override with custom values from config if present
     param_mapping = [

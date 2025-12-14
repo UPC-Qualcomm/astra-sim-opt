@@ -134,10 +134,17 @@ class SearchSpaceBuilder:
         
         if 'collective-implementation' in params:
             impl = params['collective-implementation']
+            # Determine number of dimensions from first cluster
+            first_cluster = next(iter(self.clusters.values()))
+            npus_per_dim = first_cluster.get('npus_per_dim', [8, 8])
+            num_dims = len(npus_per_dim)
+            
+            # Parse each collective type with per-dimension parameters
             for collective_type, algorithms in impl.items():
-                # Convert 'all-reduce' to 'all_reduce' for valid Python identifiers
-                param_name = collective_type.replace('-', '_')
-                self.parameters[param_name] = algorithms
+                # Create a parameter for each dimension of this collective
+                for dim in range(num_dims):
+                    param_name = f'{collective_type}-dim{dim}'
+                    self.parameters[param_name] = algorithms
         
         if 'active-chunks-per-dimension' in params:
             self.parameters['active-chunks-per-dimension'] = params['active-chunks-per-dimension']
@@ -517,12 +524,51 @@ class SearchSpaceBuilder:
         """
         return self.clusters.copy()
     
+    def reconstruct_collective_implementations(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Reconstruct collective implementation arrays from per-dimension parameters.
+        
+        Converts parameters like 'all-reduce-dim0', 'all-reduce-dim1' back into
+        'all-reduce': ['ring', 'halvingDoubling'] format for config generator.
+        
+        Args:
+            config: Configuration dictionary with per-dimension parameters
+        
+        Returns:
+            Configuration with reconstructed collective arrays
+        """
+        enriched = config.copy()
+        
+        # Find all collective types by looking for -dim0 parameters
+        collective_types = set()
+        for key in config.keys():
+            if '-dim0' in key:
+                collective_type = key.replace('-dim0', '')
+                collective_types.add(collective_type)
+        
+        # Reconstruct arrays for each collective type
+        for collective_type in collective_types:
+            algorithms = []
+            dim = 0
+            while f'{collective_type}-dim{dim}' in config:
+                algorithms.append(config[f'{collective_type}-dim{dim}'])
+                # Remove the per-dimension parameter
+                del enriched[f'{collective_type}-dim{dim}']
+                dim += 1
+            
+            # Add the reconstructed array
+            if algorithms:
+                enriched[collective_type] = algorithms
+        
+        return enriched
+    
     def enrich_config_with_cluster_info(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Enrich a configuration dictionary with cluster information.
         
         If the config contains a 'cluster' key, this method adds the cluster's
         npu_count, npus_per_dim, and num_dimensions to the config.
+        Also reconstructs collective implementation arrays from per-dimension parameters.
         
         Args:
             config: Configuration dictionary (may contain 'cluster' key)
@@ -530,10 +576,11 @@ class SearchSpaceBuilder:
         Returns:
             Enriched configuration dictionary with cluster info added
         """
-        enriched = config.copy()
+        # First reconstruct collective implementations
+        enriched = self.reconstruct_collective_implementations(config)
         
-        if 'cluster' in config:
-            cluster_name = config['cluster']
+        if 'cluster' in enriched:
+            cluster_name = enriched['cluster']
             cluster_config = self.get_cluster_config(cluster_name)
             
             # Add cluster info to config

@@ -13,18 +13,18 @@ from typing import Dict, Tuple, Optional
 
 def enrich_config_with_clusters(config: Dict, clusters: Dict) -> Dict:
     """
-    Enrich a config with cluster information.
+    Enrich a config with cluster information and reconstruct collective implementations.
     
     This is a module-level function (can be pickled) that duplicates the logic
     from SearchSpaceBuilder.enrich_config_with_cluster_info() for use in
     multiprocessing workers.
     
     Args:
-        config: Configuration dict potentially containing 'cluster' key
+        config: Configuration dict potentially containing 'cluster' key and per-dimension collective params
         clusters: Dictionary mapping cluster names to cluster configs
     
     Returns:
-        Enriched configuration with npu_count, npus_per_dim, num_dimensions
+        Enriched configuration with npu_count, npus_per_dim, num_dimensions, and reconstructed collectives
     """
     if 'cluster' not in config or not clusters:
         return config
@@ -35,9 +35,27 @@ def enrich_config_with_clusters(config: Dict, clusters: Dict) -> Dict:
     
     # Create a copy to avoid modifying the original
     enriched = config.copy()
-    cluster_config = clusters[cluster_name]
+    
+    # Reconstruct collective implementations from per-dimension parameters
+    collective_types = set()
+    for key in list(enriched.keys()):
+        if '-dim0' in key:
+            collective_type = key.replace('-dim0', '')
+            collective_types.add(collective_type)
+    
+    for collective_type in collective_types:
+        algorithms = []
+        dim = 0
+        while f'{collective_type}-dim{dim}' in enriched:
+            algorithms.append(enriched[f'{collective_type}-dim{dim}'])
+            del enriched[f'{collective_type}-dim{dim}']
+            dim += 1
+        
+        if algorithms:
+            enriched[collective_type] = algorithms
     
     # Add cluster info to config
+    cluster_config = clusters[cluster_name]
     enriched['npu_count'] = cluster_config['npu_count']
     enriched['npus_per_dim'] = cluster_config['npus_per_dim']
     enriched['num_dimensions'] = len(cluster_config['npus_per_dim'])
