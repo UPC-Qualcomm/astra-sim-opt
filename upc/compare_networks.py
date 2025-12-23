@@ -147,10 +147,11 @@ def main(args):
         # Crear directorio de salida único para esta ejecución
         run_start_time = datetime.now()
         timestamp = run_start_time.strftime("%Y%m%d_%H%M%S_%f")[:-3] + "ms"
-        if args.g2_network_config:
-            network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
-        elif args.ns3_network_config:
-            network_name = os.path.splitext(os.path.basename(args.ns3_network_config))[0].split('_')[0]
+        # if args.g2_network_config:
+        #     network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
+        # elif args.ns3_network_config:
+        #     network_name = os.path.splitext(os.path.basename(args.ns3_network_config))[0].split('_')[0]
+        network_name = args.topology_name
         run_folder_name = f"run_{timestamp}"
         base_run_dir = os.path.join("output/comparison_run", network_name, coll_name, run_folder_name)
         print(base_run_dir)
@@ -346,6 +347,10 @@ if __name__ == "__main__":
 
     # Otros
     parser.add_argument("--python-exec", type=str, default="../../../opt/venv/astra-sim/bin/python", help="Ruta al ejecutable de Python.")
+
+    # New: topology name to drive output folder naming (overrides network-config derived name)
+    parser.add_argument("--topology-name", type=str, default=None, help="Nombre de la topología (usado para nombrar la carpeta de salida).")
+
 
     parsed_args = parser.parse_args()
     main(parsed_args)
