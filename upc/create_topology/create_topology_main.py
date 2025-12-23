@@ -91,7 +91,10 @@ def generate_topology_files(topology, paths_mode, config, g2_path='.', ns3_path=
     
     if paths_mode == "Uniform":
         # Generate standard uniform routing
-        final_paths = topo_obj.GenerateUniformRouting()
+        raw_paths = topo_obj.GenerateUniformRouting()
+        final_paths = {src: {dst: [path] for dst, path in dests.items() if 'h' in dst} for src, dests in raw_paths.items() if 'h' in src}
+        print('hi')
+
         
     elif paths_mode in ["ECMP", "Random"]:
         topo_obj.GenerateECMPFlowDict(topo_obj.adjacency_matrix)
