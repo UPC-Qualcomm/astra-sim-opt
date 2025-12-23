@@ -46,9 +46,8 @@ COLLECTIVES_TO_GENERATE = [
 
 # Communication sizes in bytes
 COMM_SIZES_TO_GENERATE = [
-    1*1024*1024, # 1 MB
-    32*1024*1024, # 32 MB
-    128*1024*1024, # 128 MB
+    32*1024*1024,  # 32 MB
+    1024*1024*1024, # 1 GB
 ]
 
 # --- Chakra Collective Mapping ---
@@ -191,28 +190,44 @@ def main():
     """
     # Hardcoded group definitions
     group_definitions = {
-        # "1_contiguous_groups_of_16": {
-        #     1: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-        # },
-        # "2_contiguous_groups_of_8": {
+        0: { # "1_contiguous_groups_of_16"
+            1: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        },
+        # 1: { # "2_contiguous_groups_of_8"
         #     1: [0, 1, 2, 3, 4, 5, 6, 7],
-            # 2: [8, 9, 10, 11, 12, 13, 14, 15]
+        #     2: [8, 9, 10, 11, 12, 13, 14, 15]
         # },
-        # "8_strided_groups_of_2_stride_8": {
-        #     1: [0, 8], 2: [1, 9], 3: [2, 10], 4: [3, 11],
-        #     5: [4, 12], 6: [5, 13], 7: [6, 14], 8: [7, 15]
-        # },
-        # "8_strided_groups_of_2_stride_4": {
-        #     1: [0, 4], 2: [1, 5], 3: [2, 6], 4: [3, 7],
-        #     5: [8, 12], 6: [9, 13], 7: [10, 14], 8: [11, 15]
-        # },
-        "2_even_odd_groups_of_4_in_chunk_0": {
+        2: { # "8_strided_groups_of_2_stride_8"
+            1: [0, 8], 2: [1, 9], 3: [2, 10], 4: [3, 11],
+            5: [4, 12], 6: [5, 13], 7: [6, 14], 8: [7, 15]
+        },
+        3: { # "8_strided_groups_of_2_stride_4"
+            1: [0, 4], 2: [1, 5], 3: [2, 6], 4: [3, 7],
+            5: [8, 12], 6: [9, 13], 7: [10, 14], 8: [11, 15]
+        },
+        4: { # "2_even_odd_groups_of_4_in_chunk_0"
             1: [0, 2, 4, 6],
             2: [1, 3, 5, 7]
         },
-        "2_even_odd_groups_of_4_in_chunk_1": {
+        5: { # "2_even_odd_groups_of_4_in_chunk_1"
             1: [8, 10, 12, 14],
             2: [9, 11, 13, 15]
+        },
+        # 6: { # "8_contiguous_groups_of_2"
+        #     1: [0, 1], 2: [2, 3], 3: [4, 5], 4: [6, 7],
+        #     5: [8, 9], 6: [10, 11], 7: [12, 13], 8: [14, 15]
+        # },
+        7: { # "4_strided_groups_of_4_stride_4"
+            1: [0, 4, 8, 12], 2: [1, 5, 9, 13],
+            3: [2, 6, 10, 14], 4: [3, 7, 11, 15]
+        },
+        # 8: { # "4_contiguous_groups_of_4"
+        #     1: [0, 1, 2, 3], 2: [4, 5, 6, 7],
+        #     3: [8, 9, 10, 11], 4: [12, 13, 14, 15]
+        # },
+        9: { # "2_strided_groups_of_8_stride_2"
+            1: [0, 2, 4, 6, 8, 10, 12, 14],
+            2: [1, 3, 5, 7, 9, 11, 13, 15]
         }
     }
 
@@ -224,10 +239,10 @@ def main():
     generated_count = 0
     for coll_name in COLLECTIVES_TO_GENERATE:
         for comm_size in COMM_SIZES_TO_GENERATE:
-            for group_index, (group_name, groups) in enumerate(group_definitions.items()):
+            for group_index, groups in group_definitions.items():
                 generated_count += 1
                 # The print statement now shows the group index for clarity
-                print(f"({generated_count}/{total_workloads}) Generating: {coll_name}, size={comm_size}, group_key={group_index} ('{group_name}')")
+                print(f"({generated_count}/{total_workloads}) Generating: {coll_name}, size={comm_size}, group_key={group_index}")
 
                 # Create a new directory name using the collective, size, and group index.
                 scenario_name = f"{coll_name}_size_{comm_size}_group_{group_index}"
