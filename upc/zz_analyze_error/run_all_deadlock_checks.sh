@@ -15,6 +15,7 @@ set -e
 # Note: You might need to adjust this path based on your directory structure
 WORKLOAD_BASE_DIR="/app/astra-sim/upc/comparing_networks/workload/T5_Small_grouped_128"
 TRACE_BASE_DIR="/app/astra-sim/upc/output/comparison_run/FoldedClos128/T5_Small_grouped_128"
+ANALYSIS_BASE_DIR="/app/astra-sim/upc/zz_analyze_error/analysis"
 
 # Get the list of trace files to be analyzed
 TRACE_FILES=$(python3 count_trace_files.py "$TRACE_BASE_DIR")
@@ -22,21 +23,22 @@ TRACE_FILES=$(python3 count_trace_files.py "$TRACE_BASE_DIR")
 # Change to the script's directory to ensure relative paths are correct
 cd "$(dirname "$0")"
 
+# Clean up previous analysis directories
+rm -rf "$ANALYSIS_BASE_DIR"
+mkdir -p "$ANALYSIS_BASE_DIR"
+
 for trace_file_path in $TRACE_FILES; do
     echo "========================================================================"
     echo "Processing: ${trace_file_path}"
     echo "========================================================================"
 
     # Extract the workload name from the trace file path itself.
-    # This is the directory name that contains the .et files.
-    # e.g., T5_Small_multiple_4_2_16_1_0.seq_2048.batch_1024
-    WORKLOAD_NAME=$(echo "$trace_file_path" | cut -d'/' -f1)
-
-    # The workload group directory (e.g., T5_Small_grouped_128) is the second part of the path
-    WORKLOAD_GROUP="T5_Small_grouped_128"
+    WORKLOAD_DIR_NAME=$(echo "$trace_file_path" | cut -d'/' -f1)
+    # Extract the base name of the trace file, which corresponds to the workload name for .et files
+    WORKLOAD_NAME=$(basename "$trace_file_path" "_trace.csv")
 
     # Construct the full path to the workload directory where the .et files are located
-    WORKLOAD_PATH="${WORKLOAD_BASE_DIR}/${WORKLOAD_NAME}"
+    WORKLOAD_PATH="${WORKLOAD_BASE_DIR}/${WORKLOAD_DIR_NAME}"
     
     # Construct the full path to the trace file
     TRACE_FILE_FULL_PATH="${TRACE_BASE_DIR}/${trace_file_path}"
@@ -46,19 +48,38 @@ for trace_file_path in $TRACE_FILES; do
         continue
     fi
 
+    # Create a dedicated directory for this trace's analysis
+    TRACE_ANALYSIS_DIR_NAME=$(basename "$trace_file_path" .csv)
+    TRACE_ANALYSIS_DIR="${ANALYSIS_BASE_DIR}/${TRACE_ANALYSIS_DIR_NAME}"
+    mkdir -p "$TRACE_ANALYSIS_DIR"
+
     echo "WORKLOAD_PATH: $WORKLOAD_PATH"
     echo "WORKLOAD_NAME: $WORKLOAD_NAME"
     echo "TRACE_FILE: $TRACE_FILE_FULL_PATH"
+    echo "ANALYSIS_DIR: $TRACE_ANALYSIS_DIR"
 
-    # Run the temporal script to extract jsons
+    # Run the temporal script to extract jsons into the dedicated directory
     echo "-> Running run_temporal.sh"
-    ./run_temporal.sh "$WORKLOAD_PATH" "$WORKLOAD_NAME"
+    ./run_temporal.sh "$WORKLOAD_PATH" "$WORKLOAD_NAME" "$TRACE_ANALYSIS_DIR"
     
-    # Run the deadlock detection script
+    # Copy the trace file into the analysis directory
+    cp "$TRACE_FILE_FULL_PATH" "$TRACE_ANALYSIS_DIR/"
+
+    # Define the output file for the deadlock analysis
+    DEADLOCK_OUTPUT_FILE="${TRACE_ANALYSIS_DIR}/deadlock_analysis.txt"
+    
+    # Find the JSON file in the analysis directory
+    JSON_FILE=$(find "$TRACE_ANALYSIS_DIR" -maxdepth 1 -name "*.json" -print -quit)
+
+    # Run the deadlock detection script and redirect its output
     echo "-> Running detect_deadlock.py"
-    python3 detect_deadlock.py --trace "$TRACE_FILE_FULL_PATH"
+    python3 detect_deadlock.py \
+        --trace "$TRACE_ANALYSIS_DIR/$(basename "$TRACE_FILE_FULL_PATH")" \
+        --et-dir "$TRACE_ANALYSIS_DIR/et_txts" \
+        --comm-group "$JSON_FILE" > "$DEADLOCK_OUTPUT_FILE"
     
     echo "-> Finished processing ${trace_file_path}"
+    echo "   Deadlock analysis saved to: $DEADLOCK_OUTPUT_FILE"
     echo ""
 done
 

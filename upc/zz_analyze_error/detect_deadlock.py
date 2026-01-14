@@ -29,22 +29,38 @@ def parse_et_files(jsons_dir):
     Parses .et.txt files to map node_id to communication group info per NPU.
     Returns: npu_node_map[npu_id][node_id] = { 'pg_name': ..., 'name': ... }
     """
-    print(f"Parsing graph files in {jsons_dir}")
+    print(f"-> Parsing graph files in {jsons_dir}")
     npu_node_map = defaultdict(dict)
     
+    if not os.path.isdir(jsons_dir):
+        print(f"Error: et-dir '{jsons_dir}' does not exist or is not a directory.")
+        return npu_node_map
+
     et_files = sorted([f for f in os.listdir(jsons_dir) if f.endswith('.et.txt')])
+    print(f"Found {len(et_files)} '.et.txt' files to process.")
     
     for et_file in et_files:
+        npu_id = -1
         try:
-            npu_id = int(et_file.split('.')[0])
-        except ValueError:
+            # Extract NPU ID from filename like 'T5_Small_multiple_4_2_16_1_0.seq_2048.batch_1024.0.et.txt'
+            # or from '0.et.txt'
+            filename_no_ext = et_file.replace('.et.txt', '')
+            parts = filename_no_ext.split('.')
+            npu_id = int(parts[-1])
+        except (ValueError, IndexError):
+            print(f"  - Warning: Could not parse NPU ID from filename '{et_file}'. Skipping.")
             continue
             
         path = os.path.join(jsons_dir, et_file)
         with open(path, 'r') as f:
             content = f.read()
+            if not content.strip():
+                print("  - File is empty. Skipping.")
+                continue
+
             decoder = json.JSONDecoder()
             idx = 0
+            nodes_found_in_file = 0
             while idx < len(content):
                 # Find start of next JSON object
                 start_brace = content.find('{', idx)
@@ -54,27 +70,31 @@ def parse_et_files(jsons_dir):
                     obj, end_idx = decoder.raw_decode(content, start_brace)
                     idx = end_idx
                     
-                    if 'id' in obj:
+                    if 'id' in obj and (obj.get('type') == 'COMM' or obj.get('type') == 'COMM_COLL_NODE'):
                         node_id = int(obj['id'])
                         
                         # Extract PG Name (Comm Group ID) if available
                         pg_name = None
-                        if 'attr' in obj:
+                        if 'attributes' in obj:
+                            pg_name = obj['attributes'].get('process_group')
+                        elif 'attr' in obj: # Handle COMM_COLL_NODE case
                             for attr in obj['attr']:
-                                if attr.get('name') in ['pg_name', 'comm_group', 'communicator_id']:
-                                    pg_name = attr.get('stringVal') or attr.get('intVal')
+                                if attr.get('name') == 'pg_name':
+                                    pg_name = attr.get('stringVal')
                                     break
                         
                         # Store everything, even if no pg_name, we might need name later
                         npu_node_map[npu_id][node_id] = {
                             'pg_name': str(pg_name) if pg_name is not None else None, 
-                            'name': obj.get('name', f"Available_Node_{node_id}"),
-                            'type': obj.get('type_id') # If available in your ET format
+                            'name': obj.get('name', f"Unnamed_Node_{node_id}")
                         }
+                        nodes_found_in_file += 1
+
                 except json.JSONDecodeError:
+                    # Move past the problematic character to avoid an infinite loop
                     idx = start_brace + 1
                     
-    print(f"Loaded graph info for {len(npu_node_map)} NPUs")
+    print(f"\nLoaded graph info for {len(npu_node_map)} NPUs")
     return npu_node_map
 
 def parse_trace(trace_file):
@@ -242,24 +262,12 @@ def analyze_deadlocks(active_nodes, npu_node_map, comm_groups):
 def main():
     parser = argparse.ArgumentParser(description="Detect deadlock in AstraSim execution traces.")
     parser.add_argument("--trace", required=True, help="Path to the trace CSV file")
-    parser.add_argument("--jsons-dir", default="./jsons", help="Directory containing .et.txt files")
-    parser.add_argument("--comm-group", default=None, help="Path to JSON file defining comm groups.")
+    parser.add_argument("--et-dir", required=True, help="Directory containing .et.txt files")
+    parser.add_argument("--comm-group", required=True, help="Path to JSON file defining comm groups.")
     args = parser.parse_args()
     
-    # Auto-detect comm group
-    comm_group_file = args.comm_group
-    if not comm_group_file:
-        potential_files = [f for f in os.listdir(args.jsons_dir) if f.endswith('.json')]
-        if potential_files:
-            comm_group_file = os.path.join(args.jsons_dir, potential_files[0])
-            print(f"Auto-selected comm group file: {comm_group_file}")
-    
-    if not comm_group_file:
-         print("Error: Provide --comm-group or ensure .json file exists in jsons-dir")
-         sys.exit(1)
-
-    comm_groups = parse_comm_groups(comm_group_file)
-    npu_node_map = parse_et_files(args.jsons_dir)
+    comm_groups = parse_comm_groups(args.comm_group)
+    npu_node_map = parse_et_files(args.et_dir)
     active_nodes = parse_trace(args.trace)
     analyze_deadlocks(active_nodes, npu_node_map, comm_groups)
 
