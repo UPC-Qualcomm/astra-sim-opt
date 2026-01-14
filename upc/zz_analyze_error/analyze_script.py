@@ -126,7 +126,7 @@ def find_ready_nodes(finished_nodes, graph):
 
 def main():
     """Main analysis function."""
-    log_file = '/app/astra-sim/upc/output/comparison_run/FoldedClos/GPT_3_1300M_grouped/GPT_3_1300M_multiple_4_4_1_1_1.seq_2048.batch_1024/run_20251216_100352_768ms/g2/4_2_1_2_1.seq_2048.batch_1024.log'
+    log_file = '/app/astra-sim/upc/output/comparison_run/FoldedClos/T5_Small_grouped/T5_Small_multiple_1_8_2_1_0.seq_2048.batch_1024/run_20251231_174107_934ms/ns3/T5_Small_multiple_1_8_2_1_0.seq_2048.batch_1024.log'
     jsons_folder = '/app/astra-sim/upc/zz_analyze_error/jsons'
 
     # 1. Parse error log

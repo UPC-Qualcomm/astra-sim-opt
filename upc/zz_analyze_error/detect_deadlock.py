@@ -235,14 +235,13 @@ def analyze_deadlocks(active_nodes, npu_node_map, comm_groups):
             involved_npus_str = "Unknown"
             if pg_name:
                 # comm_groups keys are strings
-                involved_npus_str = str(comm_groups.get(str(pg_name), []))
+                involved_npus_str = str(comm_groups.get(str(pg_name), "Not Found in comm_groups"))
             
-            print(f"  NPU {npu}: STUCK at Node {first_node_id} (Involved NPUs: {involved_npus_str})")
+            print(f"  NPU {npu}: STUCK at Node {first_node_id} (Collective Group: {pg_name}, Involved NPUs: {involved_npus_str})")
 
 def main():
     parser = argparse.ArgumentParser(description="Detect deadlock in AstraSim execution traces.")
-    parser.add_argument("--trace", default='/app/astra-sim/upc/output/comparison_run/FoldedClos/T5_Small_grouped_ecmp/T5_Small_multiple_2_8_1_1_0.seq_2048.batch_1024/run_20260106_105728_314ms/ns3/T5_Small_multiple_2_8_1_1_0.seq_2048.batch_1024_trace.csv', help="Path to the trace CSV file")
-    # parser.add_argument("--trace", default='/app/astra-sim/upc/output/comparison_run/FoldedClos/T5_Small_grouped_ecmp/T5_Small_multiple_2_8_1_1_0.seq_2048.batch_1024/run_20260106_105722_409ms/g2/T5_Small_multiple_2_8_1_1_0.seq_2048.batch_1024_trace.csv', help="Path to the trace CSV file")
+    parser.add_argument("--trace", required=True, help="Path to the trace CSV file")
     parser.add_argument("--jsons-dir", default="./jsons", help="Directory containing .et.txt files")
     parser.add_argument("--comm-group", default=None, help="Path to JSON file defining comm groups.")
     args = parser.parse_args()
