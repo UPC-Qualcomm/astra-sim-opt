@@ -1,5 +1,0 @@
-npus_count: [ 16 ]
-bandwidth_unit: MB/s
-packet_size: 1500
-header_size: 44
-topology_file: "/home/xavid/feina/astra-sim/upc/configuration/g2/FoldedClos_16_topology.json"
