@@ -9,10 +9,13 @@
     "all-to-all-implementation": ["halvingDoubling","halvingDoubling"],
     "collective-optimization": "localBWAware",
     "local-mem-bw": 3350,
-    "local-mem-size": 80,
+    "local-mem-size": 64,
     "enable_network_logger": 0,
     "boost-mode": 0,
     "peak-perf": 989,
     "roofline-enabled": 1,
-    "trace-enabled": 1
+    "trace-enabled": 1,
+    "track-local-mem": 1,
+    "dump-local-mem-trace": 0,
+    "local-mem-trace-filename": "mem_trace.json"
 }

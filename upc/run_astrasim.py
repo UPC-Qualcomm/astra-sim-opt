@@ -160,7 +160,7 @@ def run_command(command, cwd=None):
     if match:
         identifier = f" for {match.group(1)}"
 
-    print(command)
+    print("run simulation command:", command)
     start_time = time.time()
     result = subprocess.run(command, shell=True, cwd=cwd)
     
@@ -249,11 +249,9 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
             try:
                 get_timings_df(f"{log}_trace.csv", f"{log}_trace_matched_timing.csv")
             except Exception as e:
-                print(f"    ⚠️  Error: {e}")
+                print(f"    ⚠️  Error run_astrasim: {e} : {cmd}")
                 # Continue even if trace processing fails - the simulation itself succeeded
-    if not success:
-        return cmd
-    return ""
+    return "" if success else cmd
 
 
 if __name__ == "__main__":

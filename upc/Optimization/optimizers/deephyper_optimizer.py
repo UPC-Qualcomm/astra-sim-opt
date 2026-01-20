@@ -715,6 +715,7 @@ class DeepHyperOptimizer(BaseOptimizer):
                     max_evals=self.budget
                 )
             
+
             if self.verbose:
                 print("\n" + "-"*70 + "\nENRICHING RESULTS WITH CONFIG FILES\n" + "-"*70)
             

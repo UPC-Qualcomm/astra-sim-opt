@@ -1,5 +1,7 @@
 npus_count: [ 16 ]
-bandwidth_unit: MB/s
+bandwidth_unit: GB/s
 packet_size: 1500
 header_size: 44
-topology_file: "/home/xavid/feina/astra-sim/upc/configuration/g2/FoldedClos_16_topology.json"
+#topology_file: /media/mohammad/extension/experiments/astra-sim/upc/create_topology_old/totp/FoldedClos_128.json
+topology_file: /media/mohammad/extension/experiments/astra-sim/upc/create_topology_old/FoldedClos_16_Uniform.json
+#topology_file: /media/mohammad/extension/experiments/astra-sim/upc/create_topology/FoldedClos.json

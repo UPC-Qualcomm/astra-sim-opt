@@ -19,14 +19,14 @@ def get_design_space(
     dp={1, 2, 4, 8, 16},
     mp={1, 2, 4, 8, 16},
     pp={1, 2, 4, 8, 16},
-    sharded={True, False},
+    weight_sharded={True, False},
     max_ssp=64
 ):
     design_space = list()
 
     for ddp in dp:
         for mmp in mp:
-            for ssharded in sharded:
+            for ssharded in weight_sharded:
                 for ppp in pp:
                     ssp = num_npus // (ddp * mmp * ppp)
                     if ssp < 1 or ssp > max_ssp or (num_npus != (ddp * mmp * ssp * ppp)):
@@ -39,13 +39,13 @@ def get_design_space_no_sp(
     dp={1, 2, 4, 8, 16},
     mp={1, 2, 4, 8, 16},
     pp={1, 2, 4, 8, 16},
-    sharded={True, False},
+    weight_sharded={True, False},
 ):
     design_space = list()
     ssp=1
     for ddp in dp:
         for mmp in mp:
-            for ssharded in sharded:
+            for ssharded in weight_sharded:
                 for ppp in pp:
                     if num_npus != (ddp * mmp * ppp):
                         continue
@@ -61,7 +61,7 @@ class Model(Enum):
     GPT_3_1300M = 5
     GPT_Neo_2700M = 6
     FLAN_T5_XXL_11B = 7
-    OPT_13B = 8
+    GPT_13B = 8
     GPT_NeoX_20B = 9
     GPT_3_175B = 10
     PaLM_540B = 11
@@ -98,8 +98,8 @@ class Model(Enum):
             return [30522, 4096, 4096, 16384, [2048], 32, 256, 32, 32]
         elif model == Model.FLAN_T5_XXL_11B:
             return [32128, 4096, 4096, 10240, [2048], 32, 1024, 64, 24]
-        elif model == Model.OPT_13B:
-            return [50257, 5120, 5120, 20480, [2048], 32, 2048, 40, 40]
+        elif model == Model.GPT_13B:
+            return [50257, 5140, 5140, 20560, [2048], 32, 2048, 40, 40]
         elif model == Model.GPT_NeoX_20B:
             return [50257, 6144, 6144, 24576, [2048], 32, 2048, 64, 44]
         elif model == Model.GPT_30B:
@@ -140,14 +140,14 @@ def generate_instance(design_point, model=Model.Default, folder_name="default", 
         os.path.split(os.path.abspath(__file__))[0], "workload", folder_name
     )
     #root = f"/media/mohammad/SSD2/GPT_175/workload/{folder_name}"
-    dp, mp, ssp, pp, sharded = design_point
+    dp, mp, ssp, pp, weight_sharded = design_point
 
     din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = Model.get_model_params(model)
     cmd = (
         f"python main.py "
         f"--output_dir {root} "
-        f"--output_name {dp}_{mp}_{ssp}_{pp}_{1 if sharded else 0}.%d.et "
-        #f"--comm_group {dp}_{mp}_{ssp}_{pp}_{1 if sharded else 0}.json "
+        f"--output_name {dp}_{mp}_{ssp}_{pp}_{1 if weight_sharded else 0}.%d.et "
+        #f"--comm_group {dp}_{mp}_{ssp}_{pp}_{1 if weight_sharded else 0}.json "
         f"--dp {dp} "
         f"--tp {mp} "
         f"--sp {ssp} "
@@ -161,23 +161,21 @@ def generate_instance(design_point, model=Model.Default, folder_name="default", 
         f"--seq {seq} "
         f"--head {head} "
         f"--num_stacks {num_stacks} "
-        f"--weight_sharded {sharded} "
+        f"--weight_sharded {weight_sharded} "
     )
     
     if custom_args is not None:
-        weight_sharded = custom_args[0]
-        activation_recompute = custom_args[1]
-        tpsp = custom_args[2]
-        model_type = custom_args[3]
-        mixed_precision = custom_args[4]
-        print_gpu_vram = custom_args[5]
-        ep = custom_args[6]
-        kvhead = custom_args[7]
-        experts = custom_args[8]
-        kexperts = custom_args[9]
+        activation_recompute = custom_args[0]
+        tpsp = custom_args[1]
+        model_type = custom_args[2]
+        mixed_precision = custom_args[3]
+        print_gpu_vram = custom_args[4]
+        ep = custom_args[5]
+        kvhead = custom_args[6]
+        experts = custom_args[7]
+        kexperts = custom_args[8]
         
         cmd += (
-            f"--weight_sharded {weight_sharded} "
             f"--activation_recompute {activation_recompute} "
             f"--tpsp {tpsp} "
             f"--model_type {model_type} "
@@ -226,7 +224,7 @@ if __name__ == "__main__":
     dp = {1, 2, 4, 8, 16}
     mp = {1, 2, 4, 8, 16}
     pp = {1, 2, 4, 8, 16}
-    sharded = {True, False}
+    weight_sharded = {True, False}
     max_sp=16
 
     parser.add_argument(
@@ -254,10 +252,10 @@ if __name__ == "__main__":
         help="Pipeline parallelism degrees, comma-separated"
     )
     parser.add_argument(
-        "--sharded",
+        "--weight_sharded",
         type=str,
-        default=",".join(map(str, sharded)),
-        help="Sharded options (True/False), comma-separated"
+        default=",".join(map(str, weight_sharded)),
+        help="whether weight sharded(True/False), comma-separated"
     )
     parser.add_argument(
         "--max_sp",
@@ -267,13 +265,6 @@ if __name__ == "__main__":
     )
 
     # Additional custom arguments newly added in STG
-    parser.add_argument(
-        "--weight_sharded",
-        type=str_to_bool,
-        help="whether weight sharded",
-        required=False,
-        default=False,
-    )
     parser.add_argument(
         "--activation_recompute",
         type=str_to_bool,
@@ -311,7 +302,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     custom_args = [
-        args.weight_sharded,
         args.activation_recompute,
         args.tpsp,
         args.model_type,
@@ -326,14 +316,14 @@ if __name__ == "__main__":
     dp = set(map(int, args.dp.split(',')))
     mp = set(map(int, args.mp.split(',')))
     pp = set(map(int, args.pp.split(',')))
-    sharded = set(val.lower() == 'true' for val in args.sharded.split(','))
+    weight_sharded = set(val.lower() == 'true' for val in args.weight_sharded.split(','))
 
     max_sp = args.max_sp
     model = args.model
     folder_name = args.folder_name
 
-    design_space = get_design_space(num_npus, dp, mp, pp, sharded, max_sp)
-    #design_space = get_design_space_no_sp(num_npus, dp, mp, pp, sharded)
+    design_space = get_design_space(num_npus, dp, mp, pp, weight_sharded, max_sp)
+    #design_space = get_design_space_no_sp(num_npus, dp, mp, pp, weight_sharded)
     func = partial(generate_instance, model=Model(int(model)), folder_name=folder_name, custom_args=custom_args)
 
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:

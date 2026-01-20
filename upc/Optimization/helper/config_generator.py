@@ -137,7 +137,7 @@ DEFAULT_G2_SYSTEM_CONFIG = {
     "collective-optimization": "localBWAware",
     "local-mem-bw": 3350,
     "local-mem-size": 80,
-    "enable_network_logger": 1,
+    "enable_network_logger": 0,
     "boost-mode": 0,
     "peak-perf": 989,
     "roofline-enabled": 1,
@@ -162,7 +162,7 @@ DEFAULT_G2_NETWORK_CONFIG = {
     "bandwidth_unit": "GB/s",
     "packet_size": 1500,
     "header_size": 44,
-    "topology_file": os.environ['ASTRA_SIM_ROOT'] + "/upc/configuration/g2/FoldedClos_128_topology.json"
+    "topology_file": os.environ['ASTRA_SIM_ROOT'] + "/upc/configuration/g2/FoldedClos.json"
 }
 
 DEFAULT_MEMORY_CONFIG = {
@@ -492,7 +492,7 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
     
     # Extract topology configuration
     topology = net_sim_config.get('topology', 'FoldedClos')
-    paths_mode = net_sim_config.get('paths_mode', 'ECMP')
+    paths_mode = net_sim_config.get('paths_mode', 'Uniform')
     topology_config = net_sim_config.get('topology_config', {}).copy()
     
     # If num_npus is not in topology_config, try to get it from config

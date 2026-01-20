@@ -170,7 +170,7 @@ class MinimizeExecutionTimeAndNetworkBW(ObjectiveFunction):
                 
         reward = 1.0 / denominator
         
-        return obj
+        return reward
 
 class WeightedMultiObjective(ObjectiveFunction):
     """
@@ -295,7 +295,7 @@ def create_objective(objective_type: str, **kwargs) -> ObjectiveFunction:
     Factory function to create objective functions by name.
     
     Args:
-        objective_type: Type of objective
+        objective_type: Type of objective ['time', 'time_and_network_bw', 'weighted', 'custom']
         **kwargs: Additional arguments for the objective
     
     Returns:
