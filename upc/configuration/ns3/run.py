@@ -84,7 +84,7 @@ if __name__ == "__main__":
     bw = 200
     
     # Buffer sizes to test
-    buffer_sizes = [int(16 * bw / 50 / 8)]
+    buffer_sizes = [8]
 
     # Parameter space
     # Base CC methods
@@ -96,14 +96,14 @@ if __name__ == "__main__":
     
     # DCQCN variations
     dcqcn_variants = ['dcqcn', 'dcqcn_paper', 'dcqcn_vwin', 'dcqcn_paper_vwin']
-    dcqcn_params = list(itertools.product(dcqcn_variants, [0.95], [0], [(400, 100),(100, 25)]))
+    dcqcn_params = list(itertools.product(dcqcn_variants, [0.95], [0], [(400, 100)]))
 
     # TIMELY variations
     timely_variants = ['timely', 'timely_vwin']
     timely_params = list(itertools.product(timely_variants, [0.95], [0], [(400, 100),(100, 25)]))
 
     params = hp_params + hpccPint_params + dctcp_params + dcqcn_params + timely_params + pfc_params
-    params = dcqcn_params
+    params = hp_params + hpccPint_params + dctcp_params + dcqcn_params + timely_params + pfc_params 
     
     # Generate configs
     config_idx = 1
