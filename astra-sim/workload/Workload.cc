@@ -383,25 +383,25 @@ void Workload::issue_coll_comm(
 
     if (comm_type == ChakraCollectiveCommType::ALL_REDUCE) {
         DataSet* fp = sys->generate_all_reduce(comm_size, involved_dims,
-                                               comm_group, comm_priority);
+                                               comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::ALL_TO_ALL) {
         DataSet* fp = sys->generate_all_to_all(comm_size, involved_dims,
-                                               comm_group, comm_priority);
+                                               comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::ALL_GATHER) {
         DataSet* fp = sys->generate_all_gather(comm_size, involved_dims,
-                                               comm_group, comm_priority);
+                                               comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
     } else if (comm_type == ChakraCollectiveCommType::REDUCE_SCATTER) {
         DataSet* fp = sys->generate_reduce_scatter(comm_size, involved_dims,
-                                                   comm_group, comm_priority);
+                                                   comm_group, comm_priority, node->id());
         collective_comm_node_id_map[fp->my_id] = node->id();
         collective_comm_wrapper_map[fp->my_id] = fp;
         fp->set_notifier(this, EventType::CollectiveCommunicationFinished);
@@ -636,7 +636,12 @@ void Workload::report() {
 CommunicatorGroup* Workload::extract_comm_group(
     std::shared_ptr<Chakra::ETFeederNode> node) {
     std::string comm_group_name = node->pg_name<std::string>("");
-    if (comm_group_name == "") {
+    // [default communication group]
+    // We assume that an empty comm group, or comm group '0' both correspond
+    // to the default communicator group that includes all ranks.
+    // If, in the future, we want to support a user-defined comm group '0',
+    // revisit this logic.
+    if (comm_group_name == "" || comm_group_name == "0") {
         // No communicator group is specified for this communication ET node.
         return nullptr;
     }
