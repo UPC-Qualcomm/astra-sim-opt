@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include <map>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -62,6 +63,7 @@ Statistics::OperatorStatistics::OperatorType Statistics::OperatorStatistics::
     case ChakraNodeType::COMM_RECV_NODE:
         stat_node_type = Statistics::OperatorStatistics::OperatorType::COMM;
         break;
+    case ChakraNodeType::METADATA_NODE:
     case ChakraNodeType::INVALID_NODE:
         stat_node_type = Statistics::OperatorStatistics::OperatorType::INVALID;
         break;
@@ -89,6 +91,13 @@ void Statistics::extract_type_time() {
 }
 
 void Statistics::extract_comp_comm_overlap() {
+    static std::once_flag warn_once_;
+    std::call_once(warn_once_, [] {
+        LoggerFactory::get_logger("statistics")
+            ->warn("bugs with real trace, disabled");
+    });
+    return;
+
     bool has_comp = false;
     bool has_comm = false;
     for (const auto& [type, time] : this->type_time) {
