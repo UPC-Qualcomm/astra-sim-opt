@@ -27,16 +27,20 @@ std::shared_ptr<CollCommSynchronizer> CollCommSynchronizer::get_instance(
 
 uint64_t CollCommSynchronizer::hashCollCommNode(
     std::shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
-    // simple hash function: comm_type + comm_size + comm_tag
+    // simple hash function: comm_type + comm_size + comm_tag + node_id
     uint64_t hash = 0ul;
     hash =
-        HashUtil::hash_combine(hash, static_cast<uint64_t>(node->comm_type()));
+       HashUtil::hash_combine(hash, static_cast<uint64_t>(node->comm_type()));
     hash = HashUtil::hash_combine(
         hash, static_cast<uint64_t>(node->comm_size<uint64_t>()));
     hash = HashUtil::hash_combine(
         hash, static_cast<uint64_t>(node->comm_tag<uint32_t>(0u)));
     hash = HashUtil::hash_combine(
         hash, HashUtil::fnv1a_64(node->pg_name<std::string>()));
+    hash = HashUtil::hash_combine(
+        hash, static_cast<uint64_t>(node->id()));
+    hash = HashUtil::hash_combine(
+        hash, HashUtil::fnv1a_64(node->name()));
     return hash;
 }
 
