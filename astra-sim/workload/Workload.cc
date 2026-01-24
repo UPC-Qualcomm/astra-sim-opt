@@ -11,7 +11,6 @@ LICENSE file in the root directory of this source tree.
 #include "astra-sim/system/RecvPacketEventHandlerData.hh"
 #include "astra-sim/system/SendPacketEventHandlerData.hh"
 #include "astra-sim/system/WorkloadLayerHandlerData.hh"
-#include "astra-sim/workload/CollCommSynchronizer.hh"
 #include <json/json.hpp>
 
 #include <iostream>
@@ -54,7 +53,7 @@ Workload::Workload(Sys* sys, string et_filename, string comm_group_filename) {
     initialize_comm_groups(comm_group_filename);
     this->stats = new Statistics(this);
     this->is_finished = false;
-    this->coll_comm_synchronizer = CollCommSynchronizer::get_instance(this);
+    this->synchronizer = Synchronizer::get_instance(this);
 }
 
 Workload::~Workload() {
@@ -139,6 +138,7 @@ void Workload::issue_pytorch_pg_metadata(
 }
 
 void Workload::issue_dep_free_nodes() {
+    auto logger = LoggerFactory::get_logger("workload");
     auto& dependancy_resolver = this->et_feeder->getDependancyResolver();
     auto dependancy_free_nodes =
         dependancy_resolver.get_dependancy_free_nodes();
@@ -309,12 +309,20 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         return;
     }
 
-    for (auto& data_dep_id : node->get_chakra_node()->data_deps()) {
-        std::shared_ptr<Chakra::FeederV3::ETFeederNode> dep_node =
-            et_feeder->lookupNode(data_dep_id);
-        uint64_t dep_tensor_size = dep_node->tensor_size<uint64_t>(0);
-        tensor_size += static_cast<double>(dep_tensor_size);
-    }
+    //for (auto& data_dep_id : node->get_chakra_node()->data_deps()) {
+    //    try {
+    //        std::shared_ptr<Chakra::FeederV3::ETFeederNode> dep_node =
+    //            et_feeder->lookupNode(data_dep_id);
+    //        uint64_t dep_tensor_size = dep_node->tensor_size<uint64_t>(0);
+    //        tensor_size += static_cast<double>(dep_tensor_size);
+    //    } catch (const std::exception& e) {
+    //        auto logger = LoggerFactory::get_logger("workload");
+    //        logger->warn("[issue_comp] sys_id={} node_id={} dep_node_id={} exception: {}",
+    //                     sys->id, node->id(), data_dep_id, e.what());
+    //        // Continue without this dependency's tensor size
+    //        continue;
+    //    }
+    //}
 
     double operational_intensity = num_ops / tensor_size;
     double perf = sys->roofline->get_perf(operational_intensity);
@@ -370,12 +378,14 @@ void Workload::issue_comm(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
 
 void Workload::issue_coll_comm(
     shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
-    this->coll_comm_synchronizer->issue_coll_comm(node, sys->id,
-                                                  extract_comm_group(node));
+    this->synchronizer->sync_coll_comm(node, sys->id, extract_comm_group(node));
 }
 
 void Workload::dispatch_coll_comm(
     shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
+    auto logger = LoggerFactory::get_logger("workload");
+    //logger->debug("[DISPATCH_START] sys_id={} node_id={} node_name={} entering dispatch_coll_comm",
+    //              sys->id, node->id(), node->name());
     // hotfix: the coll is synchronized and not occupied yet, occupy it here
     // TODO: move this to issue() which is more general
     this->hw_resource->occupy(node);
@@ -537,6 +547,7 @@ void Workload::call(EventType event, CallData* data) {
     }
 
     if (event == EventType::CollectiveCommunicationFinished) {
+        auto logger = LoggerFactory::get_logger("workload");
         IntData* int_data = (IntData*)data;
         uint64_t coll_comm_id = int_data->data;
 
@@ -578,9 +589,14 @@ void Workload::call(EventType event, CallData* data) {
         collective_comm_wrapper_map.erase(coll_comm_id);
 
         // this coll finished, try dispatch next pending coll
-        this->coll_comm_synchronizer->try_dispatch_coll_comm();
+        this->synchronizer->issue_coll_comm(this);
+        //if (this->synchronizer->pending_nodes.begin() !=
+        //    this->synchronizer->pending_nodes.end()) {
+        //    sys->register_event(sys->workload, EventType::General, nullptr, 1);
+        //}
 
     } else {
+        auto logger = LoggerFactory::get_logger("workload");
         if (data == nullptr) {
             issue_dep_free_nodes();
         } else {
