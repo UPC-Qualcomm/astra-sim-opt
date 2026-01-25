@@ -167,6 +167,11 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     }
 
     this->et_feeder->getDependancyResolver().take_node(node->id());
+    // Cache tensor size before node can be consumed from ETFeeder
+    // Only cache if node has tensor_size attribute (not all node types have it)
+    if (node->has_attr("tensor_size")) {
+        tensor_size_cache[node->id()] = node->tensor_size<uint64_t>();
+    }
     // hotfix: if node type is COMM_COLL, it will be first synchronized then
     // dispatched, so dont occupy now.
     if (node->type() != ChakraNodeType::COMM_COLL_NODE) {
@@ -303,26 +308,19 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     double num_ops = static_cast<double>(node->num_ops<uint64_t>());
     double tensor_size = static_cast<double>(node->tensor_size<uint64_t>());
 
+    // Add dependency tensor sizes from cache (avoids lookup of consumed nodes)
+    for (auto& data_dep_id : node->get_chakra_node()->data_deps()) {
+        auto it = tensor_size_cache.find(data_dep_id);
+        if (it != tensor_size_cache.end()) {
+            tensor_size += static_cast<double>(it->second);
+        }
+    }
+
     // if tensor_size is 0 during roofline mode, this is an invalid node
     if (tensor_size == 0) {
         skip_invalid(node);
         return;
     }
-
-    //for (auto& data_dep_id : node->get_chakra_node()->data_deps()) {
-    //    try {
-    //        std::shared_ptr<Chakra::FeederV3::ETFeederNode> dep_node =
-    //            et_feeder->lookupNode(data_dep_id);
-    //        uint64_t dep_tensor_size = dep_node->tensor_size<uint64_t>(0);
-    //        tensor_size += static_cast<double>(dep_tensor_size);
-    //    } catch (const std::exception& e) {
-    //        auto logger = LoggerFactory::get_logger("workload");
-    //        logger->warn("[issue_comp] sys_id={} node_id={} dep_node_id={} exception: {}",
-    //                     sys->id, node->id(), data_dep_id, e.what());
-    //        // Continue without this dependency's tensor size
-    //        continue;
-    //    }
-    //}
 
     double operational_intensity = num_ops / tensor_size;
     double perf = sys->roofline->get_perf(operational_intensity);
