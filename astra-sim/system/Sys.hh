@@ -340,6 +340,9 @@ class Sys : public Callable {
 
     // local memory
     Memory* memory;
+    
+    // synchronization mode for collective communications
+    std::string sync_mode;
 };
 
 }  // namespace AstraSim

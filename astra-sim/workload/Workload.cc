@@ -53,7 +53,34 @@ Workload::Workload(Sys* sys, string et_filename, string comm_group_filename) {
     initialize_comm_groups(comm_group_filename);
     this->stats = new Statistics(this);
     this->is_finished = false;
-    this->synchronizer = Synchronizer::get_instance(this);
+    
+    // Set synchronization mode from system configuration
+    if (sys->sync_mode == "BARRIER") {
+        this->sync_mode = CollectiveSyncMode::BARRIER;
+    } else if (sys->sync_mode == "ORDER_INJECTION") {
+        this->sync_mode = CollectiveSyncMode::ORDER_INJECTION;
+    } else if (sys->sync_mode == "ASTRASIM_BARRIER") {
+        this->sync_mode = CollectiveSyncMode::ASTRASIM_BARRIER;
+    } else {
+        // Default is Disabled
+        this->sync_mode = CollectiveSyncMode::DISABLED;
+        LoggerFactory::get_logger("workload")->warn(
+            "[SYNC_MODE] sys={} unknown sync_mode '{}', defaulting to DISABLED", 
+            sys->id, sys->sync_mode);
+    } 
+    
+    if (sync_mode == CollectiveSyncMode::ASTRASIM_BARRIER) {
+        this->coll_comm_synchronizer = CollCommSynchronizer::get_instance(this);
+    }
+    else if (sync_mode == CollectiveSyncMode::BARRIER) {
+        this->synchronizer = Synchronizer::get_instance(this);
+        LoggerFactory::get_logger("workload")->info(
+            "[SYNC_MODE] sys={} using BARRIER synchronization", sys->id);
+    } else if (sync_mode == CollectiveSyncMode::ORDER_INJECTION) {
+        this->order_enforcer = std::make_unique<CollectiveOrderEnforcer>(this);
+        LoggerFactory::get_logger("workload")->info(
+            "[SYNC_MODE] sys={} using ORDER_INJECTION synchronization", sys->id);
+    }
 }
 
 Workload::~Workload() {
@@ -150,9 +177,17 @@ void Workload::issue_dep_free_nodes() {
         std::shared_ptr<ETFeederNode> node = et_feeder->lookupNode(node_id);
         // hotfix: if node type is COMM_COLL, it will be first synchronized then
         // dispatched.
-        if (hw_resource->is_available(node) ||
-            node->type() == ChakraNodeType::COMM_COLL_NODE) {
-            issue(node);
+        if (sync_mode == CollectiveSyncMode::BARRIER || sync_mode == CollectiveSyncMode::ASTRASIM_BARRIER)
+        {
+            if (hw_resource->is_available(node) || node->type() == ChakraNodeType::COMM_COLL_NODE) {
+                issue(node);
+            }
+        }
+        else if (sync_mode == CollectiveSyncMode::ORDER_INJECTION || sync_mode == CollectiveSyncMode::DISABLED)
+        {
+            if (hw_resource->is_available(node)) {
+                issue(node);
+            }
         }
     }
 }
@@ -176,6 +211,14 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     // dispatched, so dont occupy now.
     if (node->type() != ChakraNodeType::COMM_COLL_NODE) {
         this->hw_resource->occupy(node);
+        
+        // Update last issued node for ORDER_INJECTION mode
+        // Skip RECV nodes as per user specification
+        if (sync_mode == CollectiveSyncMode::ORDER_INJECTION &&
+            node->type() != ChakraNodeType::COMM_RECV_NODE) {
+            CollectiveOrderEnforcer::update_last_issued(
+                sys->id, node->id(), node->type());
+        }
     }
     // stats->record_end will be called in Workload::call
     stats->record_start(node, Sys::boostedTick());
@@ -376,7 +419,20 @@ void Workload::issue_comm(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
 
 void Workload::issue_coll_comm(
     shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
-    this->synchronizer->sync_coll_comm(node, sys->id, extract_comm_group(node));
+    if (sync_mode == CollectiveSyncMode::ASTRASIM_BARRIER) {
+        this->coll_comm_synchronizer->issue_coll_comm(node, sys->id, extract_comm_group(node));
+    } else if (sync_mode == CollectiveSyncMode::BARRIER) {
+        // Use barrier-based synchronization (old approach)
+        this->synchronizer->sync_coll_comm(node, sys->id, extract_comm_group(node));
+    } else if (sync_mode == CollectiveSyncMode::ORDER_INJECTION){
+        // Use dependency injection ordering (new lightweight approach)
+        this->order_enforcer->enforce_ordering(node, sys->id, extract_comm_group(node));
+        // Directly dispatch without waiting for barrier
+        this->dispatch_coll_comm(node);
+    } else {
+        // No synchronization, directly dispatch
+        this->dispatch_coll_comm(node);
+    }
 }
 
 void Workload::dispatch_coll_comm(
@@ -387,6 +443,10 @@ void Workload::dispatch_coll_comm(
     // hotfix: the coll is synchronized and not occupied yet, occupy it here
     // TODO: move this to issue() which is more general
     this->hw_resource->occupy(node);
+    if (sync_mode == CollectiveSyncMode::ORDER_INJECTION) {
+            CollectiveOrderEnforcer::update_last_issued(
+                sys->id, node->id(), node->type());
+        }
     const bool has_involve_dims = node->has_attr("involve_dims");
     std::vector<bool> involved_dims;
     if (node->has_attr("involved_dim")) {
@@ -586,12 +646,13 @@ void Workload::call(EventType event, CallData* data) {
         delete collective_comm_wrapper_map[coll_comm_id];
         collective_comm_wrapper_map.erase(coll_comm_id);
 
-        // this coll finished, try dispatch next pending coll
-        this->synchronizer->issue_coll_comm(this);
-        //if (this->synchronizer->pending_nodes.begin() !=
-        //    this->synchronizer->pending_nodes.end()) {
-        //    sys->register_event(sys->workload, EventType::General, nullptr, 1);
-        //}
+        // Only try to issue pending collectives in BARRIER mode
+        if (sync_mode == CollectiveSyncMode::ASTRASIM_BARRIER) {
+            this->coll_comm_synchronizer->try_dispatch_coll_comm();
+        } else if (sync_mode == CollectiveSyncMode::BARRIER){
+            this->synchronizer->issue_coll_comm(this);
+        }
+        // In ORDER_INJECTION mode, dependencies handle ordering automatically
 
     } else {
         auto logger = LoggerFactory::get_logger("workload");
