@@ -1,5 +1,5 @@
 #!/bin/bash
-set -ex
+set -e 
 
 SCRIPT_DIR=$(dirname "$(realpath $0)")
 PROJ_DIR=${SCRIPT_DIR}/../..
