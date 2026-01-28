@@ -8,7 +8,7 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
 
     Args:
         topology (str): 'FoldedClos', 'Dragonfly', or 'Jellyfish'.
-        paths_mode (str): 'ECMP', 'Uniform', or None.
+        paths_mode (str): 'ECMP', 'Uniform', 'Random', or None.
         config (dict): Configuration parameters for the topology.
 
     Formulas for Node Counts:
@@ -60,9 +60,18 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
 
     elif topology == "FoldedClos":
         K = config.get('K')
-        total_hosts = int(K**3 / 4)
-        print(f"Formula: Hosts = K^3 / 4 = {total_hosts}")
-        topo_obj = FoldedClos(K, 1, 1, bandwidth_config=bw_config)
+        npus_per_node = config.get('npus_per_node', 1)
+        intra_node_topology = config.get('intra_node_topology', 'fully_connected')
+        num_intra_node_switches = config.get('num_intra_node_switches', None)
+        
+        total_nodes = int(K**3 / 4)
+        total_hosts = total_nodes * npus_per_node
+        print(f"Formula: Nodes = K^3 / 4 = {total_nodes}, Total NPUs = {total_nodes} * {npus_per_node} = {total_hosts}")
+        
+        topo_obj = FoldedClos(K, 1, 1, bandwidth_config=bw_config, 
+                             npus_per_node=npus_per_node, 
+                             intra_node_topology=intra_node_topology,
+                             num_intra_node_switches=num_intra_node_switches)
         #base_filename += f"_{total_hosts}"
         
     else:
@@ -88,7 +97,9 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
     
     if paths_mode == "Uniform":
         # Generate standard uniform routing
-        final_paths = topo_obj.GenerateUniformRouting()
+        raw_paths = topo_obj.GenerateUniformRouting()        
+        final_paths = {src: {dst: [path] for dst, path in dests.items() if 'h' in dst} for src, dests in raw_paths.items() if 'h' in src}
+
         
     elif paths_mode in ["ECMP", "Random"]:
         topo_obj.GenerateECMPFlowDict(topo_obj.adjacency_matrix)
