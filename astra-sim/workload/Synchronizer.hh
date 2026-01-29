@@ -8,52 +8,41 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
-
+#include <spdlog/spdlog.h>
 namespace AstraSim {
 
 class Sys;
 class Workload;
 
-class Synchronizer {
-  //public:
-  //  struct CollCommRecord {
-  //      std::string identifier;
-  //      uint64_t sys_id;
-  //      uint64_t node_id;
-  //      std::string pg_name;
-  //      std::string involved_npus;
-  //      uint32_t comm_tag;
-  //      std::string node_name;
-  //      uint64_t comm_type;
-  //      uint64_t comm_size;
-  //  };
-//
-  //public:
+class Synchronizer {  
+  struct NodeSyncData {
+      std::shared_ptr<Chakra::FeederV3::ETFeederNode> node;
+      uint64_t ready_count;
+      CommunicatorGroup* comm_group;
+      int expected_count;
+      bool is_ready;
+  };
+  
   public:
     static std::shared_ptr<Synchronizer> get_instance(Workload* workload);
-    
-    std::string get_coll_comm_node_identifier(
-        std::shared_ptr<Chakra::FeederV3::ETFeederNode> node);
+    uint64_t get_coll_comm_node_identifier(
+        std::shared_ptr<Chakra::FeederV3::ETFeederNode> node) noexcept;
     
     void sync_coll_comm(std::shared_ptr<Chakra::FeederV3::ETFeederNode> node,
                          uint64_t rank,
                          CommunicatorGroup* comm_group);
     
     void issue_coll_comm(Workload* workload);
-    void issue_single_coll_comm(const std::string& node_identifier, Workload* workload);
+    void issue_single_coll_comm(uint64_t node_identifier, Workload* workload);
 
-    bool can_issue(std::string node_identifier, int involved_NPUs_count);
+    bool can_issue(uint64_t node_identifier, int involved_NPUs_count) noexcept;
     
     ~Synchronizer();
     
-    std::unordered_map<std::string,
-                           std::shared_ptr<Chakra::FeederV3::ETFeederNode>>
-            coll_comm_nodes;
-    std::unordered_map<std::string, uint64_t> pending_nodes;
-    std::unordered_map<std::string, CommunicatorGroup*> coll_comm_groups;
+    std::unordered_map<uint64_t, NodeSyncData> sync_data;
     std::unordered_map<uint64_t, Workload*> sys_workload_map;
-    //std::vector<CollCommRecord> coll_comm_records;
+    std::shared_ptr<spdlog::logger> logger;
 };
-}  // namespace AstraSim
+}
 
 #endif
