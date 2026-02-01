@@ -25,14 +25,11 @@ std::shared_ptr<Synchronizer> Synchronizer::get_instance(Workload* workload) {
     return instance;
 }
 
-uint64_t Synchronizer::get_coll_comm_node_identifier(
-    std::shared_ptr<Chakra::FeederV3::ETFeederNode> node) noexcept {
-    uint64_t hash = node->id() * 0x517cc1b727220a95ULL;
-    const std::string& pg_name = node->pg_name<std::string>();
-    for (char c : pg_name) {
-        hash = hash * 31 + static_cast<uint64_t>(c);
-    }
-    return hash;
+std::string Synchronizer::get_coll_comm_node_identifier(
+    std::shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
+    // Use string concatenation for node identifier
+    std::string node_identifier = std::to_string(node->id()) + "_" + node->pg_name<std::string>();
+    return node_identifier;
 }
 
 void Synchronizer::sync_coll_comm(
@@ -40,7 +37,7 @@ void Synchronizer::sync_coll_comm(
     uint64_t sys_id,
     CommunicatorGroup* comm_group) {
     // Get the node identifier
-    uint64_t node_identifier = get_coll_comm_node_identifier(node);
+    std::string node_identifier = get_coll_comm_node_identifier(node);
     
     auto [it, inserted] = sync_data.try_emplace(node_identifier);
     
@@ -73,7 +70,7 @@ void Synchronizer::sync_coll_comm(
     }
 }
 
-void Synchronizer::issue_single_coll_comm(uint64_t node_identifier, Workload* workload) {
+void Synchronizer::issue_single_coll_comm(const std::string& node_identifier, Workload* workload) {
     auto sync_it = sync_data.find(node_identifier);
     if (sync_it == sync_data.end()) {
         return;  // Not in sync_data
@@ -110,7 +107,7 @@ void Synchronizer::issue_single_coll_comm(uint64_t node_identifier, Workload* wo
 }
 
 void Synchronizer::issue_coll_comm(Workload *workload) {
-    std::vector<uint64_t> to_remove;
+    std::vector<std::string> to_remove;
     to_remove.reserve(sync_data.size());
     
     for (const auto& [node_identifier, data] : sync_data) {
@@ -152,7 +149,7 @@ void Synchronizer::issue_coll_comm(Workload *workload) {
             
             // Mark for removal after issuing
             to_remove.emplace_back(node_identifier);
-            break;
+            //break;
         }
     }
     for (const auto& key : to_remove) {
@@ -160,7 +157,7 @@ void Synchronizer::issue_coll_comm(Workload *workload) {
     }
 }
 
-bool Synchronizer::can_issue(uint64_t node_identifier, int involved_NPUs_count) noexcept {
+bool Synchronizer::can_issue(const std::string& node_identifier, int involved_NPUs_count) noexcept {
     auto sync_it = sync_data.find(node_identifier);
     if (sync_it == sync_data.end()) {
         return false;

@@ -25,21 +25,21 @@ class Synchronizer {
   
   public:
     static std::shared_ptr<Synchronizer> get_instance(Workload* workload);
-    uint64_t get_coll_comm_node_identifier(
-        std::shared_ptr<Chakra::FeederV3::ETFeederNode> node) noexcept;
+    std::string get_coll_comm_node_identifier(
+        std::shared_ptr<Chakra::FeederV3::ETFeederNode> node);
     
     void sync_coll_comm(std::shared_ptr<Chakra::FeederV3::ETFeederNode> node,
                          uint64_t rank,
                          CommunicatorGroup* comm_group);
     
     void issue_coll_comm(Workload* workload);
-    void issue_single_coll_comm(uint64_t node_identifier, Workload* workload);
+    void issue_single_coll_comm(const std::string& node_identifier, Workload* workload);
 
-    bool can_issue(uint64_t node_identifier, int involved_NPUs_count) noexcept;
+    bool can_issue(const std::string& node_identifier, int involved_NPUs_count) noexcept;
     
     ~Synchronizer();
     
-    std::unordered_map<uint64_t, NodeSyncData> sync_data;
+    std::unordered_map<std::string, NodeSyncData> sync_data;
     std::unordered_map<uint64_t, Workload*> sys_workload_map;
     std::shared_ptr<spdlog::logger> logger;
 };

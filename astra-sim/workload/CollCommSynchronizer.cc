@@ -29,6 +29,8 @@ uint64_t CollCommSynchronizer::hashCollCommNode(
     std::shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     // simple hash function: comm_type + comm_size + comm_tag
     uint64_t hash = 0ul;
+    hash = 
+        HashUtil::hash_combine(hash, static_cast<uint64_t>(node->id()));
     hash =
         HashUtil::hash_combine(hash, static_cast<uint64_t>(node->comm_type()));
     hash = HashUtil::hash_combine(
