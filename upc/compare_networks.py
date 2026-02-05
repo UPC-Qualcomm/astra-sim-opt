@@ -152,7 +152,11 @@ def main(args):
         # elif args.ns3_network_config:
         #     network_name = os.path.splitext(os.path.basename(args.ns3_network_config))[0].split('_')[0]
         network_name = args.topology_name
-        run_folder_name = f"run_{timestamp}"
+        # Include run_number in the folder name if provided
+        if args.run_number:
+            run_folder_name = f"run_{args.run_number:02d}_{timestamp}"
+        else:
+            run_folder_name = f"run_{timestamp}"
         base_run_dir = os.path.join("output/comparison_run", network_name, coll_name, run_folder_name)
         print(base_run_dir)
         
@@ -166,6 +170,8 @@ def main(args):
             f.write("### AstraSim Experiment Configuration ###\n")
             f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Run Directory: {base_run_dir}\n")
+            if args.run_number:
+                f.write(f"Run Number: {args.run_number}\n")
             f.write("\n")
             f.write("### Workload Characteristics ###\n")
             f.write(f"Collective: {coll_name}\n")
@@ -186,6 +192,8 @@ def main(args):
             f.write(f"G2 Topology File Override: {args.g2_topology_file}\n")
             f.write(f"NS3 Topology File Override: {args.ns3_topology_file}\n")
             f.write(f"NS3 Precomputed Paths Override: {args.ns3_precomputed_paths}\n")
+            if args.ns3_ecmp_seed is not None:
+                f.write(f"NS3 ECMP Seed Override: {args.ns3_ecmp_seed}\n")
             f.write("\n")
             f.write(f"Python Executable: {args.python_exec}\n")
         print(f"Guardada la configuración de la ejecución en: {config_summary_path}")
@@ -253,6 +261,8 @@ def main(args):
                 ns3_overrides["TOPOLOGY_FILE"] = os.path.abspath(args.ns3_topology_file)
             if args.ns3_precomputed_paths is not None:
                 ns3_overrides["USE_PRECOMPUTED_ROUTES"] = args.ns3_precomputed_paths
+            if args.ns3_ecmp_seed is not None:
+                ns3_overrides["ECMP_SEED"] = args.ns3_ecmp_seed
 
             modify_config_file(args.ns3_network_config, ns3_conf_dest, ns3_overrides)
 
@@ -350,7 +360,12 @@ if __name__ == "__main__":
 
     # New: topology name to drive output folder naming (overrides network-config derived name)
     parser.add_argument("--topology-name", type=str, default=None, help="Nombre de la topología (usado para nombrar la carpeta de salida).")
-
+    
+    # New: run number for multiple runs
+    parser.add_argument("--run-number", type=int, default=None, help="Número de ejecución (para múltiples ejecuciones).")
+    
+    # New: NS3 ECMP seed override
+    parser.add_argument("--ns3-ecmp-seed", type=int, default=None, help="Sobrescribe el valor de ECMP_SEED en la configuración de NS3.")
 
     parsed_args = parser.parse_args()
     main(parsed_args)
