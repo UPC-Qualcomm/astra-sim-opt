@@ -160,7 +160,7 @@ def run_command(command, cwd=None):
     if match:
         identifier = f" for {match.group(1)}"
 
-    print(command)
+    print("run simulation command:", command)
     start_time = time.time()
     result = subprocess.run(command, shell=True, cwd=cwd)
     
@@ -209,13 +209,18 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
     os.makedirs(os.path.join(file_dir, output_dir), exist_ok=True)
     os.makedirs(os.path.join(file_dir, network_log), exist_ok=True)
     log = os.path.join(file_dir, output_dir, os.path.split(workload_path)[1])
-    if suffix is  not None:
+    if suffix is not None:
         log = log + suffix
     # with open(log, 'w') as outfile:
     #    pass
-    network_log = os.path.join(
-        file_dir, network_log, os.path.split(workload_path)[1] + ".csv"
+    
+    # Build network log file path with suffix
+    network_log_file = os.path.join(
+        file_dir, network_log, os.path.split(workload_path)[1]
     )
+    if suffix is not None:
+        network_log_file = network_log_file + suffix
+    network_log_file = network_log_file + ".csv"
     
     # Base command
     cmd = (
@@ -234,17 +239,19 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
     # Add logging arguments
     cmd += (
         f"--logging-folder={log} "
-        f"--network-log={network_log} "
+        f"--network-log={network_log_file} "
     )
     
     success = run_command(cmd)
     if success:
         err_file = f'{log}.err'
         if os.path.exists(err_file) and os.path.getsize(err_file) == 0:
-            get_timings_df(f"{log}_trace.csv", f"{log}_trace_matched_timing.csv")
-    if not success:
-        return cmd
-    return ""
+            try:
+                get_timings_df(f"{log}_trace.csv", f"{log}_trace_matched_timing.csv")
+            except Exception as e:
+                print(f"    ⚠️  Error run_astrasim: {e} : {cmd}")
+                # Continue even if trace processing fails - the simulation itself succeeded
+    return "" if success else cmd
 
 
 if __name__ == "__main__":

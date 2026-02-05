@@ -4,6 +4,7 @@ LICENSE file in the root directory of this source tree.
 *******************************************************************************/
 
 #include "astra-sim/common/Logging.hh"
+#include "astra-sim/workload/Synchronizer.hh"
 #include "common/CmdLineParser.hh"
 #include "congestion_unaware/CongestionUnawareNetworkApi.hh"
 #include <astra-network-analytical/common/EventQueue.h>

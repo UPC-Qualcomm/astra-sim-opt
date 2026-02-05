@@ -53,9 +53,40 @@ Workload::Workload(Sys* sys, string et_filename, string comm_group_filename) {
     initialize_comm_groups(comm_group_filename);
     this->stats = new Statistics(this);
     this->is_finished = false;
+    
+    // Set synchronization mode from system configuration
+    if (sys->sync_mode == "BARRIER") {
+        this->sync_mode = CollectiveSyncMode::BARRIER;
+    } else if (sys->sync_mode == "ORDER_INJECTION") {
+        this->sync_mode = CollectiveSyncMode::ORDER_INJECTION;
+    } else if (sys->sync_mode == "ASTRASIM_BARRIER") {
+        this->sync_mode = CollectiveSyncMode::ASTRASIM_BARRIER;
+    } else {
+        // Default is Disabled
+        this->sync_mode = CollectiveSyncMode::DISABLED;
+        LoggerFactory::get_logger("workload")->warn(
+            "[SYNC_MODE] sys={} unknown sync_mode '{}', defaulting to DISABLED", 
+            sys->id, sys->sync_mode);
+    } 
+    
+    if (sync_mode == CollectiveSyncMode::ASTRASIM_BARRIER) {
+        this->coll_comm_synchronizer = CollCommSynchronizer::get_instance(this);
+    }
+    else if (sync_mode == CollectiveSyncMode::BARRIER) {
+        this->synchronizer = Synchronizer::get_instance(this);
+        LoggerFactory::get_logger("workload")->info(
+            "[SYNC_MODE] sys={} using BARRIER synchronization", sys->id);
+    } else if (sync_mode == CollectiveSyncMode::ORDER_INJECTION) {
+        this->order_enforcer = std::make_unique<CollectiveOrderEnforcer>(this);
+        LoggerFactory::get_logger("workload")->info(
+            "[SYNC_MODE] sys={} using ORDER_INJECTION synchronization", sys->id);
+    }
 }
 
 Workload::~Workload() {
+    if (!this->is_finished) {
+        report();
+    }
     for (auto comm_group : comm_groups) {
         delete comm_group.second;
     }
@@ -134,6 +165,7 @@ void Workload::issue_pytorch_pg_metadata(
 }
 
 void Workload::issue_dep_free_nodes() {
+    auto logger = LoggerFactory::get_logger("workload");
     auto& dependancy_resolver = this->et_feeder->getDependancyResolver();
     auto dependancy_free_nodes =
         dependancy_resolver.get_dependancy_free_nodes();
@@ -143,8 +175,19 @@ void Workload::issue_dep_free_nodes() {
     }
     for (const auto node_id : dependancy_free_nodes_set) {
         std::shared_ptr<ETFeederNode> node = et_feeder->lookupNode(node_id);
-        if (hw_resource->is_available(node)) {
-            issue(node);
+        // hotfix: if node type is COMM_COLL, it will be first synchronized then
+        // dispatched.
+        if (sync_mode == CollectiveSyncMode::BARRIER || sync_mode == CollectiveSyncMode::ASTRASIM_BARRIER)
+        {
+            if (hw_resource->is_available(node) || node->type() == ChakraNodeType::COMM_COLL_NODE) {
+                issue(node);
+            }
+        }
+        else if (sync_mode == CollectiveSyncMode::ORDER_INJECTION || sync_mode == CollectiveSyncMode::DISABLED)
+        {
+            if (hw_resource->is_available(node)) {
+                issue(node);
+            }
         }
     }
 }
@@ -159,12 +202,37 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     }
 
     this->et_feeder->getDependancyResolver().take_node(node->id());
-    this->hw_resource->occupy(node);
+    // Cache tensor size before node can be consumed from ETFeeder
+    // Only cache if node has tensor_size attribute (not all node types have it)
+    if (node->has_attr("tensor_size")) {
+        tensor_size_cache[node->id()] = node->tensor_size<uint64_t>();
+    }
+    // hotfix: if node type is COMM_COLL, it will be first synchronized then
+    // dispatched, so dont occupy now.
+    if (node->type() != ChakraNodeType::COMM_COLL_NODE) {
+        this->hw_resource->occupy(node);
+        
+        // Update last issued node for ORDER_INJECTION mode
+        // Skip RECV nodes as per user specification
+        if (sync_mode == CollectiveSyncMode::ORDER_INJECTION &&
+            node->type() != ChakraNodeType::COMM_RECV_NODE) {
+            CollectiveOrderEnforcer::update_last_issued(
+                sys->id, node->id(), node->type());
+        }
+    }
     // stats->record_end will be called in Workload::call
     stats->record_start(node, Sys::boostedTick());
     if (this->sys->track_local_mem) {
         this->local_mem_usage_tracker->recordStart(node, Sys::boostedTick());
     }
+
+    // hotfix: comm init group is not metadata node
+    if (node->name() == "## process_group:init ##") {
+        issue_pytorch_pg_metadata(node);
+        this->skip_invalid(node);  // for proper dependancy resolving
+        return;
+    }
+
     if (sys->replay_only) {
         issue_replay(node);
     } else {
@@ -283,6 +351,14 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     double num_ops = static_cast<double>(node->num_ops<uint64_t>());
     double tensor_size = static_cast<double>(node->tensor_size<uint64_t>());
 
+    // Add dependency tensor sizes from cache (avoids lookup of consumed nodes)
+    for (auto& data_dep_id : node->get_chakra_node()->data_deps()) {
+        auto it = tensor_size_cache.find(data_dep_id);
+        if (it != tensor_size_cache.end()) {
+            tensor_size += static_cast<double>(it->second);
+        }
+    }
+
     // if tensor_size is 0 during roofline mode, this is an invalid node
     if (tensor_size == 0) {
         skip_invalid(node);
@@ -313,13 +389,16 @@ void Workload::issue_comp(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     op_stat.memory_utilization =
         (perf / operational_intensity) / sys->local_mem_bw;
     op_stat.is_memory_bound = perf < sys->peak_perf;
-    LoggerFactory::get_logger("workload")
-        ->debug("operation_intensity={}, perf={}, elapsed_time={} "
+    if (sys->trace_enabled) {
+        LoggerFactory::get_logger("workload")
+            ->debug(
+                "operation_intensity={}, perf={}, elapsed_time={} "
                 "compute_utilization={} memory_utilization={} tensor_size={} "
                 "num_ops={}",
                 operational_intensity, perf, elapsed_time,
                 op_stat.compute_utilization.value(),
                 op_stat.memory_utilization.value(), tensor_size, num_ops);
+    }
 }
 
 void Workload::issue_comm(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
@@ -340,6 +419,34 @@ void Workload::issue_comm(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
 
 void Workload::issue_coll_comm(
     shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
+    if (sync_mode == CollectiveSyncMode::ASTRASIM_BARRIER) {
+        this->coll_comm_synchronizer->issue_coll_comm(node, sys->id, extract_comm_group(node));
+    } else if (sync_mode == CollectiveSyncMode::BARRIER) {
+        // Use barrier-based synchronization (old approach)
+        this->synchronizer->sync_coll_comm(node, sys->id, extract_comm_group(node));
+    } else if (sync_mode == CollectiveSyncMode::ORDER_INJECTION){
+        // Use dependency injection ordering (new lightweight approach)
+        this->order_enforcer->enforce_ordering(node, sys->id, extract_comm_group(node));
+        // Directly dispatch without waiting for barrier
+        this->dispatch_coll_comm(node);
+    } else {
+        // No synchronization, directly dispatch
+        this->dispatch_coll_comm(node);
+    }
+}
+
+void Workload::dispatch_coll_comm(
+    shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
+    auto logger = LoggerFactory::get_logger("workload");
+    //logger->debug("[DISPATCH_START] sys_id={} node_id={} node_name={} entering dispatch_coll_comm",
+    //              sys->id, node->id(), node->name());
+    // hotfix: the coll is synchronized and not occupied yet, occupy it here
+    // TODO: move this to issue() which is more general
+    this->hw_resource->occupy(node);
+    if (sync_mode == CollectiveSyncMode::ORDER_INJECTION) {
+            CollectiveOrderEnforcer::update_last_issued(
+                sys->id, node->id(), node->type());
+        }
     const bool has_involve_dims = node->has_attr("involve_dims");
     std::vector<bool> involved_dims;
     if (node->has_attr("involved_dim")) {
@@ -498,6 +605,7 @@ void Workload::call(EventType event, CallData* data) {
     }
 
     if (event == EventType::CollectiveCommunicationFinished) {
+        auto logger = LoggerFactory::get_logger("workload");
         IntData* int_data = (IntData*)data;
         uint64_t coll_comm_id = int_data->data;
 
@@ -538,7 +646,16 @@ void Workload::call(EventType event, CallData* data) {
         delete collective_comm_wrapper_map[coll_comm_id];
         collective_comm_wrapper_map.erase(coll_comm_id);
 
+        // Only try to issue pending collectives in BARRIER mode
+        if (sync_mode == CollectiveSyncMode::ASTRASIM_BARRIER) {
+            this->coll_comm_synchronizer->try_dispatch_coll_comm();
+        } else if (sync_mode == CollectiveSyncMode::BARRIER){
+            this->synchronizer->issue_coll_comm(this);
+        }
+        // In ORDER_INJECTION mode, dependencies handle ordering automatically
+
     } else {
+        auto logger = LoggerFactory::get_logger("workload");
         if (data == nullptr) {
             issue_dep_free_nodes();
         } else {
@@ -622,13 +739,19 @@ void Workload::report() {
     if (this->sys->track_local_mem) {
         this->local_mem_usage_tracker->buildMemoryTrace();
         this->local_mem_usage_tracker->buildMemoryTimeline();
-        this->local_mem_usage_tracker->dumpMemoryTrace(
-            this->sys->local_mem_trace_filename);
+        
+        if (this->sys->dump_local_mem_trace) {
+            this->local_mem_usage_tracker->dumpMemoryTrace(
+                this->sys->local_mem_trace_filename);
+        }
         auto [peak_mem_usage, unit] =
             this->local_mem_usage_tracker->getPeakMemUsageFormatted();
         auto logger = LoggerFactory::get_logger("workload");
         logger->info("sys[{}] peak memory usage: {:.2f} {}", sys->id,
                      peak_mem_usage, unit);
+        logger->info(
+            "sys[{}] is OOM: {}",
+            sys->id, (this->sys->memory->memory_size < (peak_mem_usage * 1024 * 1024 * 1024)) ? 1 : 0);
         this->local_mem_usage_tracker.reset();
     }
 }

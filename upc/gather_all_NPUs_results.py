@@ -9,10 +9,14 @@ from intervaltree import IntervalTree
 
 def extract_runtime_results_old(log_path):
     pattern = r"\[(\d+)\] finished, (\d+) cycles, exposed communication (\d+) cycles"
+    memory_pattern = r"sys\[(\d+)\] peak memory usage: ([\d.]+) GB"
+    oom_pattern = r"sys\[(\d+)\] is OOM: (\d+)"
 
     sys_ids = []
     exec_cycles = []
     communication_cycles = []
+    peak_memory = {}
+    is_oom = {}
 
     with open(log_path, "r") as f:
         log_lines = f.read()
@@ -20,25 +24,61 @@ def extract_runtime_results_old(log_path):
 
         if not matches:
             return pd.DataFrame(columns=[
-                'sys_id', 'exec_cycles', 'exposed_comm_cycles'
+                'sys_id', 'exec_cycles', 'exposed_comm_cycles', 'peak_memory_gb', 'is_oom'
             ])
 
         for sys_id, exec_cycles, comm_cycles in matches:
             sys_ids.append(sys_id)
             exec_cycles.append(int(exec_cycles))
             communication_cycles.append(int(comm_cycles))
+        
+        # Extract memory information
+        memory_matches = re.findall(memory_pattern, log_lines)
+        for sys_id, memory in memory_matches:
+            peak_memory[sys_id] = float(memory)
+        
+        # Extract OOM information
+        oom_matches = re.findall(oom_pattern, log_lines)
+        for sys_id, oom in oom_matches:
+            is_oom[sys_id] = int(oom)
 
     df = pd.DataFrame({
         'sys_id': sys_ids,
         'exec_cycles': exec_cycles,
         'exposed_comm_cycles': communication_cycles
     })
+    
+    # Add memory columns
+    df['peak_memory_gb'] = df['sys_id'].map(peak_memory)
+    df['is_oom'] = df['sys_id'].map(is_oom)
 
     return df
 
-def extract_runtime_results(file_path):
+def extract_runtime_results(file_path, file_identifier="_trace_matched_timing.csv"):
     df = pd.read_csv(file_path)
     num_sys = df["sys_id"].max() 
+    
+    # Extract memory information from corresponding log file
+    log_file_path = file_path.replace(file_identifier, ".log")
+    peak_memory = {}
+    is_oom = {}
+    
+    if os.path.exists(log_file_path):
+        memory_pattern = r"sys\[(\d+)\] peak memory usage: ([\d.]+) GB"
+        oom_pattern = r"sys\[(\d+)\] is OOM: (\d+)"
+        
+        with open(log_file_path, "r") as f:
+            log_lines = f.read()
+            
+            # Extract memory information
+            memory_matches = re.findall(memory_pattern, log_lines)
+            for sys_id, memory in memory_matches:
+                peak_memory[int(sys_id)] = float(memory)
+            
+            # Extract OOM information
+            oom_matches = re.findall(oom_pattern, log_lines)
+            for sys_id, oom in oom_matches:
+                is_oom[int(sys_id)] = int(oom)
 
     out_data = []
     for sys_id in range(num_sys+1):
@@ -64,7 +104,9 @@ def extract_runtime_results(file_path):
             'comm_cycles_percent': comm_cycles * 100 / total_cycles,
             'exposed_comm_cycles_percent':exposed_comm_cycles * 100 / total_cycles,
             'comp_cycles_percent': comp_cycles * 100 / total_cycles,
-            'exposed_comp_cycles_percent': exposed_comp_cycles * 100 / total_cycles
+            'exposed_comp_cycles_percent': exposed_comp_cycles * 100 / total_cycles,
+            'peak_memory_gb': peak_memory.get(sys_id, None),
+            'is_oom': is_oom.get(sys_id, None)
         })
 
     return pd.DataFrame(out_data)
@@ -125,7 +167,7 @@ def collect_summary(df, sys_id):
 
 
 def extract_runtime_results_dir(log_dir, output_dir, file_identifier):
-    df = extract_runtime_results(log_dir)
+    df = extract_runtime_results(log_dir, file_identifier)
     file_name = os.path.basename(log_dir).replace(file_identifier,  "_res.csv")
     path = os.path.join(output_dir, file_name)
     if not df.empty:
@@ -147,6 +189,11 @@ def extract_slowest_npu(logs, output_filename):
         df = pd.read_csv(log)
         slowest_row = df[df["sys_id"] == df["sys_id"].min()].copy()
         
+        # Check if ANY NPU/system has OOM
+        any_oom = False
+        if 'is_oom' in df.columns:
+            any_oom = (df['is_oom'] == 1).any() or (df['is_oom'] > 0).any()
+        
         file_base = os.path.splitext(log)[0].split('/')[-1]
         info = file_base.split(".")
         parallelism_str = info[0]  # or file_base[:9] if format is fixed
@@ -160,7 +207,10 @@ def extract_slowest_npu(logs, output_filename):
         slowest_row["pp"] = parallelism_list[3]
         slowest_row["sharding"] = parallelism_list[4]
         slowest_row["seq"] = seq
-        slowest_row["batch"] = batch  
+        slowest_row["batch"] = batch
+        
+        # Override is_oom to reflect if ANY system had OOM
+        slowest_row["is_oom"] = any_oom
 
         slowest_rows.append(slowest_row)
 
@@ -187,7 +237,7 @@ if __name__ == "__main__":
     if os.path.isfile(args.sim_logfile):
         print(args.sim_logfile)
         print(args.output_filename)
-        runtimes_df = extract_runtime_results(args.sim_logfile)
+        runtimes_df = extract_runtime_results(args.sim_logfile, file_identifier = "_trace_matched_timing.csv")
         if not args.output_filename:
             raise ValueError("You must specify --output_filename when processing a single log file.")
         runtimes_df.to_csv(args.output_filename, index=False)

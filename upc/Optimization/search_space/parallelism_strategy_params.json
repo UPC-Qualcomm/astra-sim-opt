@@ -1,0 +1,23 @@
+{   
+    "npu_count": [16],
+    "parallelism_strategy": {
+        "dp": [1],
+        "mp": [2],
+        "sp": [1, 8],
+        "pp": [1, 8],
+        "FSDP": [0, 1]
+    },
+    "system":{
+        "scheduling-policy": ["LIFO", "FIFO"],
+        "collective-optimization": ["localBWAware", "baseline"],
+        "local-mem-bw": [1000, 2000, 3350],
+        "peak-perf": [500, 700, 900, 1100]
+    },
+    "network": {
+        "inter-node-bw": [25, 50, 100, 200, 400],
+        "intra-node-bw": [300, 450, 600, 900, 1800]
+    },
+    "constraints": {
+        "parallelism_strategy": "dp * mp * sp * pp = npu_count"
+    }
+}

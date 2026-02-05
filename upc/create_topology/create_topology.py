@@ -535,32 +535,103 @@ class Jellyfish():
 
 
 class FoldedClos():
-    def __init__(self, K, link_capacity=1, N=3, bandwidth_config=None):
+    def __init__(self, K, link_capacity=1, N=3, bandwidth_config=None, npus_per_node=1, intra_node_topology='fully_connected', num_intra_node_switches=None):
         self.name = "folded_clos"
         self.K = K
         self.numCoreSwitches = K**2 / 4
-        self.numHosts = K**3 / 4
+        self.numNodes = K**3 / 4  # Number of nodes (formerly hosts)
         self.numSwitchesPerPod = K
-        self.numHostsPerPod = K**2 / 4
+        self.numNodesPerPod = K**2 / 4
         self.numSwitchPorts = K
-        self.totalNumSwitches = int(self.numSwitchesPerPod * self.K + self.numCoreSwitches)
-        self.total_num_hosts = self.numHosts
+        self.totalNumSwitches = self.numSwitchesPerPod * self.K + self.numCoreSwitches
+        
+        # NPU Configuration
+        self.npus_per_node = npus_per_node
+        self.intra_node_topology = intra_node_topology
+        self.num_intra_node_switches = num_intra_node_switches or (npus_per_node // 2)
+        if intra_node_topology == 'switch':
+            self.totalNumSwitches = int(self.totalNumSwitches + self.num_intra_node_switches * self.numNodes)
+
+        # Total hosts = number of nodes * NPUs per node
+        self.total_num_hosts = int(self.numNodes * self.npus_per_node)
         self.links = {}
         self.c_dict = None
         self.link_capacity = link_capacity
         self.adjacency_matrix = [[0] * self.totalNumSwitches for _ in range(self.totalNumSwitches)]
-        self.hosts = ['h'+str(i) for i in range(1,int(self.numHosts+1))]
+        self.hosts = ['h'+str(i) for i in range(1, int(self.total_num_hosts + 1))]
         self.num_switches = sum([K**n for n in range(N)])
         self.switches = ['s'+str(i) for i in range(1, self.totalNumSwitches+1)]
         self.nodes = self.hosts + self.switches
         
         # Bandwidth Configuration
-        # Expected keys: 'host_edge', 'edge_agg', 'agg_core'
+        # Expected keys: 'host_edge', 'edge_agg', 'agg_core', 'intra_node'
         self.bandwidth_config = bandwidth_config if bandwidth_config else {}
         self.link_bandwidths = {}
 
+    def _generate_intra_node_fully_connected(self, node_id, linkID, bw_intra_node):
+        """Generate fully connected intra-node topology for a given node."""
+        start_host = (node_id - 1) * self.npus_per_node + 1
+        npus = [f'h{start_host + i}' for i in range(self.npus_per_node)]
+        for i in range(len(npus)):
+            for j in range(i + 1, len(npus)):
+                self.links[linkID] = (npus[i], npus[j])
+                self.link_bandwidths[linkID] = bw_intra_node
+                linkID += 1
+        return linkID
+
+    def _generate_intra_node_ring(self, node_id, linkID, bw_intra_node):
+        """Generate ring intra-node topology for a given node."""
+        start_host = (node_id - 1) * self.npus_per_node + 1
+        npus = [f'h{start_host + i}' for i in range(self.npus_per_node)]
+        for i in range(len(npus)):
+            next_i = (i + 1) % len(npus)
+            self.links[linkID] = (npus[i], npus[next_i])
+            self.link_bandwidths[linkID] = bw_intra_node
+            linkID += 1
+        return linkID
+
+    def _generate_intra_node_switch(self, node_id, linkID, bw_intra_node, switch_start_id):
+        """Generate switch-based intra-node topology for a given node.
+        
+        Args:
+            node_id: The node ID
+            linkID: Current link ID counter
+            bw_intra_node: Bandwidth for intra-node links
+            switch_start_id: Starting switch ID for this node's switches
+        """
+        start_host = (node_id - 1) * self.npus_per_node + 1
+        npus = [f'h{start_host + i}' for i in range(self.npus_per_node)]
+        num_switches = self.num_intra_node_switches
+        
+        # Use switches from the pre-initialized list
+        switch_index_start = switch_start_id - 1  # Convert to 0-indexed
+        switches = self.switches[switch_index_start:switch_index_start + num_switches]
+        
+        # Connect each NPU to switches in a balanced way
+        npus_per_switch = (self.npus_per_node + num_switches - 1) // num_switches
+        
+        for sw_idx, switch in enumerate(switches):
+            start_npu = sw_idx * npus_per_switch
+            end_npu = min((sw_idx + 1) * npus_per_switch, self.npus_per_node)
+            
+            for npu_idx in range(start_npu, end_npu):
+                npu = npus[npu_idx]
+                # Bidirectional links between NPU and switch
+                self.links[linkID] = (npu, switch)
+                self.link_bandwidths[linkID] = bw_intra_node
+                linkID += 1
+        
+        # Connect switches to each other (fully connected switch fabric)
+        for i in range(len(switches)):
+            for j in range(i + 1, len(switches)):
+                self.links[linkID] = (switches[i], switches[j])
+                self.link_bandwidths[linkID] = bw_intra_node
+                linkID += 1
+        
+        return linkID
+
     def NumServers(self):
-        return int(self.numHosts)
+        return int(self.numHosts)  # Total NPUs across all nodes
 
     def NumLinks(self):
         return int(len(self.links))
@@ -575,9 +646,26 @@ class FoldedClos():
         bw_host_edge = self.bandwidth_config.get('host_edge', 1.0)
         bw_edge_agg = self.bandwidth_config.get('edge_agg', 1.0)
         bw_agg_core = self.bandwidth_config.get('agg_core', 1.0)
+        bw_intra_node = self.bandwidth_config.get('intra_node', 1.0)
         
+        # Calculate starting switch ID for intra-node switches (after inter-pod switches)
+        inter_pod_switches = int(self.numSwitchesPerPod * self.K + self.numCoreSwitches)
+        intra_node_switch_start = inter_pod_switches + 1
+        
+        # First, generate intra-node topologies for all nodes
+        for node_id in range(1, int(self.numNodes + 1)):
+            if self.intra_node_topology == 'fully_connected':
+                linkID = self._generate_intra_node_fully_connected(node_id, linkID, bw_intra_node)
+            elif self.intra_node_topology == 'ring':
+                linkID = self._generate_intra_node_ring(node_id, linkID, bw_intra_node)
+            elif self.intra_node_topology == 'switch':
+                switch_id_for_node = intra_node_switch_start + (node_id - 1) * self.num_intra_node_switches
+                linkID = self._generate_intra_node_switch(node_id, linkID, bw_intra_node, switch_id_for_node)
+        
+        # Now create the inter-pod topology
+        # Connect first NPU of each node to edge switches
         for pod in range(self.K):
-            hostIDStart = int(pod * self.numHostsPerPod + 1)
+            nodeIDStart = int(pod * self.numNodesPerPod + 1)
             coreSwitchStart = int(self.numSwitchesPerPod * self.K + 1)
             EdgeSwitchStart =  int(pod*self.numSwitchesPerPod + 1)
             EdgeSwitchEnd = int((pod + 1/2) * self.numSwitchesPerPod)
@@ -585,11 +673,16 @@ class FoldedClos():
             aggSwitchEnd = int(EdgeSwitchEnd + self.numSwitchesPerPod // 2)
 
             for eS in range(EdgeSwitchStart,EdgeSwitchEnd + 1):
-                for h in range(self.numSwitchPorts // 2):        
-                    self.links[linkID] = ('h'+str(hostIDStart + h), 's'+str(eS))
+                for n in range(self.numSwitchPorts // 2):
+                    # Connect the first NPU of each node to the edge switch
+                    node_id = int(nodeIDStart + n)
+                    # Calculate the actual host number (first NPU of this node)
+                    host_num = (node_id - 1) * self.npus_per_node + 1
+                    host_name = f'h{host_num}'
+                    self.links[linkID] = (host_name, 's'+str(eS))
                     self.link_bandwidths[linkID] = bw_host_edge
                     linkID += 1
-                hostIDStart += self.numSwitchPorts // 2
+                nodeIDStart += self.numSwitchPorts // 2
             for aS in range(aggSwitchStart,aggSwitchEnd + 1):
                 for eS in range(EdgeSwitchStart,EdgeSwitchEnd + 1):
                     self.links[linkID] = ('s'+str(aS), 's'+str(eS))
@@ -620,59 +713,33 @@ class FoldedClos():
         return self.links, str_builder
 
     def GenerateUniformRouting(self, tapering_num = 0):
-        """Generate the shortest path routing with balanced link loads for the clos-pods structure.
-        The routing algorithm is compatiable with the algorithm described in http://ccr.sigcomm.org/online/files/p63-alfares.pdf
-        Args:
-            links (dict): Dictionary of the link information (key, value) = (linkID, (src, dst)).
-            K (int): The number of pods in the clos-pods structure.
+        """Generate the shortest path routing for NPU-to-NPU communication.
+        
+        With the introduction of NPUs per node, we use NetworkX to compute shortest paths
+        between all NPU pairs through the complete topology (including intra-node links).
+        
         Returns:
-            list: The routing list Paths[src][dst] = [all transversed nodes].
-        Examples:
-            paths = GenerateUniformRouting(links, 4)
+            dict: The routing dictionary Paths[src][dst] = [path through nodes]
         """
-
-        assert (self.numCoreSwitches.is_integer() and self.numHosts.is_integer()),"K is not appropriate!"
-        # start_time = time.time()
+        print("*** Generating uniform routing for folded clos K = {} with {} NPUs per node".format(
+            self.K, self.npus_per_node))
+        
+        # Build graph from all links
         G = nx.Graph()
         G.add_edges_from(self.links.values())
-        # print("Time to build networks:", str(time.time() - start_time))
-        paths = (nx.shortest_path(G))
-        # print("Time to find all shortest paths:", str(time.time() - start_time))
-        # Intra-Pod inter-EdgeSwitch routing
-        # If source is the ith host in mth edge switch and destination is the jth host in nth edge switch,
-        # the routing will transverse ath aggregation switch, a = (j + m) mod (k/2).
-        # The remaining transversed nodes are then deterministic.
-        for podID in range(self.K):
-            for esrc, edst in permutations(range(1, self.numSwitchesPerPod // 2 + 1),2):
-                for hsrc, hdst in product(range(1, self.numSwitchPorts // 2+1),range(1, self.numSwitchPorts // 2 + 1)):
-                    eOutPort = (hdst - 1 + esrc - 1) % (self.numSwitchesPerPod // 2) + 1
-                    hSrcID = podID * self.numHostsPerPod + (esrc - 1)*self.numSwitchPorts // 2 + hsrc
-                    hDstID = podID * self.numHostsPerPod + (edst - 1)*self.numSwitchPorts // 2 + hdst
-                    eSrcID = podID * self.numSwitchesPerPod + esrc
-                    eDstID = podID * self.numSwitchesPerPod + edst
-                    aID    = podID * self.numSwitchesPerPod + self.numSwitchesPerPod // 2 + eOutPort
-                    paths["h" + str(int(hSrcID))]["h" + str(int(hDstID))] = ['h' + str(int(hSrcID)),'s' + str(int(eSrcID)),'s' + str(int(aID)),'s' + str(int(eDstID)),'h' + str(int(hDstID))]
-        # Inter-Pod routing
-        # If source is the ith host in mth edge switch within pod k1, and destination is the jth host in nth edge switch within pod k2,
-        # the routing will transverse ath aggregation switch in pod k1, a = (j + m) mod (k/2),
-        # and transverse the kth core switch, k = (a + m) mod (k/2).
-        # The remaining transversed nodes are then deterministic.
-
-        for psrc, pdst in permutations(range(self.K),2):
-            for esrc, edst in product(range(1, self.numSwitchesPerPod // 2 + 1), range(1, self.numSwitchesPerPod // 2 + 1)):
-                for hsrc, hdst in product(range(1, self.numSwitchPorts // 2 + 1),range(1, self.numSwitchPorts // 2 + 1)):
-                    eOutPort = (hdst - 1 + esrc -1) % (self.numSwitchesPerPod // 2) + 1
-                    hSrcID = int(psrc * self.numHostsPerPod + (esrc - 1) * self.numSwitchPorts // 2 + hsrc)
-                    hDstID = int(pdst * self.numHostsPerPod + (edst - 1)*self.numSwitchPorts // 2 + hdst)
-                    eSrcID = int(psrc * self.numSwitchesPerPod + esrc)
-                    eDstID = int(pdst * self.numSwitchesPerPod + edst)
-                    aSrcID = int(psrc * self.numSwitchesPerPod + self.numSwitchesPerPod // 2 + eOutPort)
-                    aDstID = int(pdst * self.numSwitchesPerPod + self.numSwitchesPerPod // 2 + eOutPort)
-                    aOutPort = int((hdst - 1 + eOutPort - 1) % (self.numSwitchesPerPod // 2 - tapering_num) + 1)
-                    coreID = int(self.numSwitchesPerPod * self.K + (eOutPort - 1) * self.numSwitchPorts // 2 + aOutPort)
-
-                    paths["h" + str(hSrcID)]["h" + str(hDstID)] = ['h' + str(hSrcID),'s' + str(eSrcID),'s' + str(aSrcID),'s' + str(coreID),'s' + str(aDstID),'s' + str(eDstID),'h' + str(hDstID)]        
-        # print("Time to generate all clos paths:", str(time.time() - start_time))
+        
+        # Compute all shortest paths between NPUs
+        paths = {}
+        for src_host in self.hosts:
+            paths[src_host] = {}
+            for dst_host in self.hosts:
+                if src_host != dst_host:
+                    try:
+                        paths[src_host][dst_host] = nx.shortest_path(G, source=src_host, target=dst_host)
+                    except nx.NetworkXNoPath:
+                        print(f"Warning: No path found from {src_host} to {dst_host}")
+                        paths[src_host][dst_host] = []
+        
         return paths
 
     def addFlowsToFlowDict(self,flow_id,flowLinks):
@@ -686,8 +753,8 @@ class FoldedClos():
                 self.F[flow_id] = []
 
     def addFlows(self, i, j): # for ECMP routing
-        src = "h"+str(i+1)
-        dst = "h"+str(j+1)
+        src = self.hosts[i]
+        dst = self.hosts[j]
         path_lists = self.paths[src][dst]
         path_list_len = len(path_lists)
         for path_list in path_lists:
@@ -706,8 +773,8 @@ class FoldedClos():
         self.reverseL = dict( (v[0]+"-"+v[1],k)for k,v in self.links.items() )
         for i in range(len(tm)):
             for j in range(i+1, len(tm[i])):
-                src = "h"+str(i+1)
-                dst = "h"+str(j+1)
+                src = self.hosts[i]
+                dst = self.hosts[j]
                 if tm[i][j] != 0:
                     forwardPathList = self.paths[src][dst]
                     forwardFlowLinks = [(x,y) for x,y in zip(forwardPathList, forwardPathList[1:])]
@@ -728,13 +795,16 @@ class FoldedClos():
         print("*** Generating ECMP flow dict for folded clos K = {}".format(self.K))
         G = nx.DiGraph(self.links.values())
         self.paths = {}
+        
+        # Generate paths for all NPU pairs
         for i in range(1, int(self.numHosts+1)):
-            src = "h{}".format(i)
+            src = self.hosts[i-1]
             self.paths[src] = {}
             for j in range(1, int(self.numHosts+1)):
                 if i != j:
-                    dst = "h{}".format(j)
-                    self.paths[src][dst] = list(nx.all_shortest_paths(G,source=src,target=dst, weight="weight"))
+                    dst = self.hosts[j-1]
+                    self.paths[src][dst] = list(nx.all_shortest_paths(G, source=src, target=dst, weight="weight"))
+        
         self.tm = tm
         self.F = {}
         self.sorted_traffic = {}

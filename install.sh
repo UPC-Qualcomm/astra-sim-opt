@@ -27,6 +27,12 @@ ASTRA_SIM_BIN_AWARE=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analy
 echo "export ASTRA_SIM_BIN_AWARE=${ASTRA_SIM_BIN_AWARE}" >> "${HOME}/.bashrc"
 ASTRA_SIM_BIN_UNAWARE=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware
 echo "export ASTRA_SIM_BIN_UNAWARE=${ASTRA_SIM_BIN_UNAWARE}" >> "${HOME}/.bashrc"
+G2_SIM_BIN=${ASTRA_SIM}/build/astra_g2/build/bin/AstraSim_G2_congestion
+echo "export G2_SIM_BIN=${G2_SIM_BIN}" >> "${HOME}/.bashrc"
+
+echo "export ASTRA_SIM_ROOT=${ASTRA_SIM}" >> "${HOME}/.bashrc"
+ASTRA_SIM_PYTHON=$(realpath ../astraenv39/bin/python)
+echo "export ASTRA_SIM_PYTHON=${ASTRA_SIM_PYTHON}" >> "${HOME}/.bashrc"
 
 ./build/astra_ns3/build.sh -c
 

@@ -3,13 +3,13 @@ import os
 from create_topology import CustomizedDragonfly, Jellyfish, FoldedClos
 from utils import write_ns3_topology_file, write_g2_topology_files
 
-def generate_topology_files(topology, paths_mode, config, g2_path='.', ns3_path='.', file_suffix=''):
+def generate_topology_files(topology, paths_mode, config, output_dir="./", base_filename=None):
     """
     Generates topology and routing files for Astra-Sim.
 
     Args:
         topology (str): 'FoldedClos', 'Dragonfly', or 'Jellyfish'.
-        paths_mode (str): 'ECMP', 'Uniform', or None.
+        paths_mode (str): 'ECMP', 'Uniform', 'Random', or None.
         config (dict): Configuration parameters for the topology.
         g2_path (str): Output directory for G2 files.
         ns3_path (str): Output directory for ns3 files.
@@ -35,7 +35,8 @@ def generate_topology_files(topology, paths_mode, config, g2_path='.', ns3_path=
     print(f"--- Generating {topology} with {paths_mode} routing ---")
     
     topo_obj = None
-    base_filename = f"{topology}"
+    if base_filename is None:
+        base_filename = f"{topology}"
     
     # Extract bandwidth config
     bw_config = config.get('bandwidth_config', {})
@@ -50,7 +51,7 @@ def generate_topology_files(topology, paths_mode, config, g2_path='.', ns3_path=
         total_hosts = G * A * conc
         print(f"Formula: Hosts = G({G}) * A({A}) * conc({conc}) = {total_hosts}")
         topo_obj = CustomizedDragonfly(G, A, h, conc, bandwidth_config=bw_config)
-        base_filename += f"_{total_hosts}"
+        #base_filename += f"_{total_hosts}"
         
     elif topology == "Jellyfish":
         switches = config.get('num_switches')
@@ -59,14 +60,23 @@ def generate_topology_files(topology, paths_mode, config, g2_path='.', ns3_path=
         total_hosts = switches * hosts_per_switch
         print(f"Formula: Hosts = Switches({switches}) * Hosts/Switch({hosts_per_switch}) = {total_hosts}")
         topo_obj = Jellyfish(switches, degree, num_hosts_per_switch=hosts_per_switch, bandwidth_config=bw_config)
-        base_filename += f"_{total_hosts}"
+        #base_filename += f"_{total_hosts}"
 
     elif topology == "FoldedClos":
         K = config.get('K')
-        total_hosts = int(K**3 / 4)
-        print(f"Formula: Hosts = K^3 / 4 = {total_hosts}")
-        topo_obj = FoldedClos(K, 1, 1, bandwidth_config=bw_config)
-        base_filename += f"_{total_hosts}"
+        npus_per_node = config.get('npus_per_node', 1)
+        intra_node_topology = config.get('intra_node_topology', 'fully_connected')
+        num_intra_node_switches = config.get('num_intra_node_switches', None)
+        
+        total_nodes = int(K**3 / 4)
+        total_hosts = total_nodes * npus_per_node
+        print(f"Formula: Nodes = K^3 / 4 = {total_nodes}, Total NPUs = {total_nodes} * {npus_per_node} = {total_hosts}")
+        
+        topo_obj = FoldedClos(K, 1, 1, bandwidth_config=bw_config, 
+                             npus_per_node=npus_per_node, 
+                             intra_node_topology=intra_node_topology,
+                             num_intra_node_switches=num_intra_node_switches)
+        #base_filename += f"_{total_hosts}"
         
     else:
         print(f"Error: Unknown topology {topology}")
@@ -91,9 +101,8 @@ def generate_topology_files(topology, paths_mode, config, g2_path='.', ns3_path=
     
     if paths_mode == "Uniform":
         # Generate standard uniform routing
-        raw_paths = topo_obj.GenerateUniformRouting()
+        raw_paths = topo_obj.GenerateUniformRouting()        
         final_paths = {src: {dst: [path] for dst, path in dests.items() if 'h' in dst} for src, dests in raw_paths.items() if 'h' in src}
-        print('hi')
 
         
     elif paths_mode in ["ECMP", "Random"]:
@@ -131,30 +140,20 @@ def generate_topology_files(topology, paths_mode, config, g2_path='.', ns3_path=
             # FoldedClos handles hosts internally
             all_paths = raw_paths
 
-        final_paths = {}
+        # Apply path selection mode
         if paths_mode == "Random":
             for src, dests in all_paths.items():
                 final_paths[src] = {}
                 for dest, path_list in dests.items():
                     if path_list:
                         final_paths[src][dest] = [random.choice(path_list)]
-        else:
+        else:  # ECMP
             final_paths = all_paths
     # 4. Write Output Files
-    if file_suffix:
-        base_filename += f"_{file_suffix}"
-        
-    g2_filename_base = f"G2_{base_filename}_{paths_mode}"
-    ns3_filename_base = f"ns3_{base_filename}_{paths_mode}"
-    
-    g2_filepath = os.path.join(g2_path, g2_filename_base)
-    ns3_filepath = os.path.join(ns3_path, ns3_filename_base)
-    
-    print(f"Writing G2 files with base: {g2_filepath}")
-    print(f"Writing ns3 file: {ns3_filepath}")
+    print(f"Writing files to: {output_dir}")
     
     # Get bandwidths from topology object
     link_bandwidths = getattr(topo_obj, 'link_bandwidths', None)
     
-    write_g2_topology_files(links, final_paths, base_filename=g2_filepath, bandwidth=2, link_bandwidths=link_bandwidths)
-    write_ns3_topology_file(links, final_paths, filename=ns3_filepath, bandwidth=2, link_bandwidths=link_bandwidths, bw_unit=bw_unit)
+    write_g2_topology_files(links, final_paths, base_filename=base_filename, bandwidth=2, link_bandwidths=link_bandwidths, output_dir=output_dir)
+    write_ns3_topology_file(links, final_paths, filename=base_filename, bandwidth=2, link_bandwidths=link_bandwidths, bw_unit=bw_unit, output_dir=output_dir)

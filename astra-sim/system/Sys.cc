@@ -480,6 +480,11 @@ bool Sys::initialize_sys(string name) {
         mem_size = mem_size * 1024 * 1024 * 1024;
         this->memory->set_memory_size(mem_size);
     }
+    if (j.contains("sync_mode")) {
+        sync_mode = j["sync_mode"];
+    } else {
+        sync_mode = "ASTRASIM_BARRIER";
+    }
     if (j.contains("roofline-enabled")) {
         if (j["roofline-enabled"] != 0) {
             roofline_enabled = true;
@@ -532,6 +537,15 @@ bool Sys::initialize_sys(string name) {
         this->track_local_mem = true;
         } else {
         this->track_local_mem = false;
+        }
+    }
+
+    this->dump_local_mem_trace = false;
+    if (j.contains("dump-local-mem-trace")) {
+        if (j["dump-local-mem-trace"] != 0) {
+        this->dump_local_mem_trace = true;
+        } else {
+        this->dump_local_mem_trace = false;
         }
     }
 

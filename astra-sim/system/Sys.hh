@@ -267,6 +267,7 @@ class Sys : public Callable {
 
     // memory
     bool track_local_mem;
+    bool dump_local_mem_trace;
     std::string local_mem_trace_filename;
     double local_mem_bw;
     AstraRemoteMemoryAPI* remote_mem;
@@ -341,6 +342,9 @@ class Sys : public Callable {
 
     // local memory
     Memory* memory;
+    
+    // synchronization mode for collective communications
+    std::string sync_mode;
 };
 
 }  // namespace AstraSim

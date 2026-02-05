@@ -106,6 +106,10 @@ ENV ASTRA_SIM_BIN_AWARE=/app/astra-sim/build/astra_analytical/build/bin/AstraSim
 ENV ASTRA_SIM_BIN_UNAWARE=/app/astra-sim/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware
 ENV G2_SIM_BIN=/app/astra-sim/build/astra_g2/build/bin/AstraSim_G2_congestion
 
+## Set path environment variables for portability
+ENV ASTRA_SIM_ROOT=/app/astra-sim
+ENV ASTRA_SIM_PYTHON=/opt/venv/astra-sim/bin/python
+
 
 ### ================== Finalize ==========================
 ## Move to the application directory
