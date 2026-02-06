@@ -58,17 +58,35 @@ class ObjectiveFunction(ABC):
         """
         pass
     
-    def is_better(self, score1: float, score2: float) -> bool:
+    def is_better(self, score1, score2) -> bool:
         """
         Check if score1 is better than score2.
         
         Args:
-            score1: First score
-            score2: Second score
+            score1: First score (float or tuple for multi-objective)
+            score2: Second score (float or tuple for multi-objective)
         
         Returns:
             True if score1 is better than score2
+        
+        Note:
+            For multi-objective (tuples), uses lexicographic comparison:
+            compares first element, then second if equal, etc.
         """
+        # Handle None/infinity cases
+        if score2 is None or score2 == float('inf'):
+            return score1 is not None and score1 != float('inf')
+        if score1 is None or score1 == float('inf'):
+            return False
+            
+        # Handle tuple comparison for multi-objective
+        if isinstance(score1, tuple) and isinstance(score2, tuple):
+            if self.minimize:
+                return score1 < score2  # Lexicographic comparison
+            else:
+                return score1 > score2
+        
+        # Handle single value comparison
         if self.minimize:
             return score1 < score2
         else:

@@ -16,6 +16,16 @@ from .time_statistics import TimeStatistics
 from .objective import ObjectiveFunction, MinimizeExecutionTime
 
 
+def format_score(score) -> str:
+    """Format score for display, handling both floats and tuples."""
+    if isinstance(score, tuple):
+        return f"({', '.join([f'{s:.4f}' for s in score])})"
+    elif score is None or score == float('inf'):
+        return "N/A"
+    else:
+        return f"{score:.4f}"
+
+
 class BaseOptimizer(ABC):
     """
     Abstract base class for optimization algorithms.
@@ -278,19 +288,32 @@ class BaseOptimizer(ABC):
         scores_array = np.array(self.scores)
         print("\n📊 STATISTICS:")
         print(f"   Total evaluations: {len(self.scores)}")
-        print(f"   Best score: {scores_array.min():.4f}")
-        print(f"   Worst score: {scores_array.max():.4f}")
-        print(f"   Mean score: {scores_array.mean():.4f}")
-        print(f"   Std Dev: {scores_array.std():.4f}")
+        if isinstance(self.scores[0], tuple):
+            # Multi-objective: show statistics for each objective
+            n_objectives = len(self.scores[0])
+            for i in range(n_objectives):
+                obj_scores = [s[i] for s in self.scores]
+                print(f"\n   Objective {i+1}:")
+                print(f"     Best: {min(obj_scores):.4f}")
+                print(f"     Worst: {max(obj_scores):.4f}")
+                print(f"     Mean: {np.mean(obj_scores):.4f}")
+                print(f"     Std Dev: {np.std(obj_scores):.4f}")
+        else:
+            # Single objective
+            print(f"   Best score: {scores_array.min():.4f}")
+            print(f"   Worst score: {scores_array.max():.4f}")
+            print(f"   Mean score: {scores_array.mean():.4f}")
+            print(f"   Std Dev: {scores_array.std():.4f}")
         
         # Improvement
         if len(self.scores) > 1 and self.init_samples > 0:
             initial_best = self.objective.get_best_score(self.scores[:self.init_samples])
-            improvement_pct = abs((initial_best - self.best_score) / initial_best * 100)
             print("\n📈 IMPROVEMENT:")
-            print(f"   Initial best: {initial_best:.4f}")
-            print(f"   Final best: {self.best_score:.4f}")
-            print(f"   Improvement: {improvement_pct:.1f}%")
+            print(f"   Initial best: {format_score(initial_best)}")
+            print(f"   Final best: {format_score(self.best_score)}")
+            if not isinstance(self.best_score, tuple):
+                improvement_pct = abs((initial_best - self.best_score) / initial_best * 100)
+                print(f"   Improvement: {improvement_pct:.1f}%")
         
         # Best configuration
         if self.best_config:
@@ -298,7 +321,7 @@ class BaseOptimizer(ABC):
             # Print all parameters in the config
             config_str = ", ".join([f"{k}={v}" for k, v in self.best_config.items()])
             print(f"   {config_str}")
-            print(f"   Score: {self.best_score:.4f}")
+            print(f"   Score: {format_score(self.best_score)}")
             print(f"   Found at iteration: {self.best_iteration + 1}")
             
             # Configuration profile (only if parallelism params exist)
@@ -434,6 +457,6 @@ class BaseOptimizer(ABC):
         ]
         
         if self.best_config:
-            info.append(f"Best score: {self.best_score:.2f}s")
+            info.append(f"Best score: {format_score(self.best_score)}")
         
         return "\n".join(info)

@@ -18,7 +18,10 @@ from functools import partial
 # Add parent directory to path for imports
 sys.path.append(os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..core import BaseOptimizer
+from ..core.base_optimizer import format_score
 from ..helper import config_to_tuple, evaluate_config_worker
+
+PENALTY_THRESHOLD = 1e9
 
 
 class RandomOptimizer(BaseOptimizer):
@@ -296,8 +299,98 @@ class RandomOptimizer(BaseOptimizer):
                 if failed > 0:
                     print(f"  Failed: {failed}")
                 if self.best_config:
-                    print(f"  Best so far: {self.best_score:.4f}")
+                    print(f"  Best so far: {format_score(self.best_score)}")
                 print()
+    
+    def save_results(self):
+        """Override base class method to enrich results with config files (DeepHyper-compatible format)."""
+        if not self.configs:
+            return
+        
+        # Create base DataFrame with configuration parameters
+        history = []
+        for i, (config, score, file_paths, metadata) in enumerate(zip(
+            self.configs, self.scores, self.file_paths, self.metadata
+        )):
+            record = {}
+            
+            # Add configuration parameters with 'p:' prefix for consistency with DeepHyper
+            for key, value in config.items():
+                record[f'p:{key}'] = value
+            
+            # Add objective score
+            if isinstance(score, tuple):
+                # Multi-objective: add each objective separately
+                for j, obj_val in enumerate(score):
+                    record[f'objective_{j}'] = obj_val
+            else:
+                record['objective'] = score
+            
+            # Add job metadata
+            record['job_id'] = i
+            record['job_status'] = 'DONE' if score not in [None, float('inf')] else 'FAILED'
+            
+            # Read and add config file contents
+            if file_paths:
+                system_config = self._read_json_file(file_paths.get('system'))
+                network_config = self._read_json_file(file_paths.get('network'))
+                memory_config = self._read_json_file(file_paths.get('memory'))
+                
+                record['system_config'] = system_config
+                record['network_config'] = network_config
+                record['memory_config'] = memory_config
+            else:
+                record['system_config'] = None
+                record['network_config'] = None
+                record['memory_config'] = None
+            
+            # Add exec_time from metadata
+            record['exec_time'] = metadata.get('exec_cycles', None) if metadata else None
+            
+            history.append(record)
+        
+        # Create DataFrame
+        df = pd.DataFrame(history)
+        
+        # Reorder columns: parameters first, then objective, job info, then config files
+        param_cols = [col for col in df.columns if col.startswith('p:')]
+        obj_cols = [col for col in df.columns if col.startswith('objective')]
+        meta_cols = ['job_id', 'job_status']
+        config_cols = ['system_config', 'network_config', 'memory_config', 'exec_time']
+        
+        # Reorder
+        column_order = param_cols + obj_cols + meta_cols + config_cols
+        df = df[column_order]
+        
+        # Save to CSV
+        optimizer_name = self.__class__.__name__.replace('Optimizer', '').lower()
+        filename = (f"{optimizer_name}_results_"
+                   f"{self.simulation_runner.model_name}_"
+                   f"{self.simulation_runner.num_npus}npus.csv")
+        filepath = os.path.join(self.save_dir, filename)
+        
+        df.to_csv(filepath, index=False)
+        
+        if self.verbose:
+            print(f"\n✓ Results saved to: {filepath}")
+            print(f"   Format: DeepHyper-compatible with config enrichment")
+        
+        return filepath
+    
+    def _read_json_file(self, filepath):
+        """Read and return JSON file content as string, or empty string if not available."""
+        if not filepath or not os.path.exists(filepath):
+            return ""
+        
+        try:
+            import json
+            with open(filepath, 'r') as f:
+                content = json.load(f)
+            return json.dumps(content)
+        except Exception as e:
+            if self.verbose:
+                print(f"Warning: Could not read config file {filepath}: {e}")
+            return ""
     
     def __repr__(self) -> str:
         """String representation."""

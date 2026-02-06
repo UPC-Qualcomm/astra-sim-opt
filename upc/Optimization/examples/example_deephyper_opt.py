@@ -21,6 +21,7 @@ from Optimization import (
     create_objective,
     CustomObjective
 )
+from Optimization.core.base_optimizer import format_score
 
 PENALTY = 10_000_000_000
 
@@ -95,10 +96,10 @@ def main():
     
     # Configuration
     MODEL_NUM = 19 # GPT_40B (Model enum value)
-    MODEL_NAME = "GPT_40B_cosmic_paper_example"
+    MODEL_NAME = "GPT_40B_analytical_sync_obj_latency_network_test"
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
-    BUDGET = 300
+    BUDGET = 1310
     INIT_SAMPLES = 80
     N_WORKERS = 8
     
@@ -119,7 +120,7 @@ def main():
         os.path.dirname(__file__), 
         "..", 
         "search_space", 
-        "cosmic.json" 
+        "parallelism_strategy_params_g2_intra.json" 
     )
     search_space = create_search_space(
         search_space_path,
@@ -158,7 +159,7 @@ def main():
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_DEEPHYPER",
         verbose=True,
-        net_sim_config=net_sim_config 
+        #net_sim_config=net_sim_config 
     )
     print(f"   Using: {sim_runner}")
     
@@ -168,12 +169,12 @@ def main():
     objective = create_objective(
         objective_type='time'
     )
-    #objective = CustomObjective(
-    #    obj_latency_network, 
-    #    "MOO_time_network",
-    #    minimize=True,
-    #    is_multi_objective=True
-    #)
+    objective = CustomObjective(
+        obj_latency_network, 
+        "MOO_time_network",
+        minimize=True,
+        is_multi_objective=True
+    )
     print(f"   Using: {objective.name}")
 
     # 5. Create DeepHyper optimizer
@@ -216,7 +217,7 @@ def main():
         
         print(f"\n🏆 BEST CONFIGURATION:")
         print(f"   {config_str}")
-        print(f"   Execution time: {optimizer.best_score:.2f}s")
+        print(f"   Score: {format_score(optimizer.best_score)}")
         print(f"\n📊 History saved with {len(history)} evaluations")
         print(f"\n💡 TIP: Check deephyper_results.csv for detailed DeepHyper output")
     else:

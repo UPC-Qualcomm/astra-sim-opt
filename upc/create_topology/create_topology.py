@@ -538,12 +538,12 @@ class FoldedClos():
     def __init__(self, K, link_capacity=1, N=3, bandwidth_config=None, npus_per_node=1, intra_node_topology='fully_connected', num_intra_node_switches=None):
         self.name = "folded_clos"
         self.K = K
-        self.numCoreSwitches = K**2 / 4
-        self.numNodes = K**3 / 4  # Number of nodes (formerly hosts)
+        self.numCoreSwitches = int(K**2 / 4)
+        self.numNodes = int(K**3 / 4)  # Number of nodes (formerly hosts)
         self.numSwitchesPerPod = K
-        self.numNodesPerPod = K**2 / 4
+        self.numNodesPerPod = int(K**2 / 4)
         self.numSwitchPorts = K
-        self.totalNumSwitches = self.numSwitchesPerPod * self.K + self.numCoreSwitches
+        self.totalNumSwitches = int(self.numSwitchesPerPod * self.K + self.numCoreSwitches)
         
         # NPU Configuration
         self.npus_per_node = npus_per_node
@@ -631,7 +631,7 @@ class FoldedClos():
         return linkID
 
     def NumServers(self):
-        return int(self.numHosts)  # Total NPUs across all nodes
+        return int(self.total_num_hosts)  # Total NPUs across all nodes
 
     def NumLinks(self):
         return int(len(self.links))
@@ -797,10 +797,10 @@ class FoldedClos():
         self.paths = {}
         
         # Generate paths for all NPU pairs
-        for i in range(1, int(self.numHosts+1)):
+        for i in range(1, int(self.total_num_hosts+1)):
             src = self.hosts[i-1]
             self.paths[src] = {}
-            for j in range(1, int(self.numHosts+1)):
+            for j in range(1, int(self.total_num_hosts+1)):
                 if i != j:
                     dst = self.hosts[j-1]
                     self.paths[src][dst] = list(nx.all_shortest_paths(G, source=src, target=dst, weight="weight"))
