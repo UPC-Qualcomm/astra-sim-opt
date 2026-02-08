@@ -788,6 +788,61 @@ class DeepHyperOptimizer(BaseOptimizer):
                 traceback.print_exc()
             return None, pd.DataFrame()
     
+    def _remove_outliers_iqr(self, df: pd.DataFrame, columns: list, iqr_multiplier: float = 1.5) -> pd.DataFrame:
+        """Remove outliers using Interquartile Range (IQR) method.
+        
+        Args:
+            df: DataFrame to filter
+            columns: List of column names to check for outliers
+            iqr_multiplier: IQR multiplier for outlier detection (default: 1.5)
+            
+        Returns:
+            DataFrame with outliers removed
+        """
+        # First, remove failure values (like -10000000000.0 = -1e10)
+        mask = pd.Series([True] * len(df), index=df.index)
+        
+        for col in columns:
+            if col not in df.columns:
+                continue
+            
+            # Remove failure markers (-1e10) and NaN values
+            # Using abs() to catch both positive and negative failure markers
+            valid_mask = (df[col].notna()) & (df[col].abs() < 9e9)
+            mask = mask & valid_mask
+        
+        # Now apply IQR filtering on the valid values
+        df_valid = df[mask].copy()
+        
+        if len(df_valid) == 0:
+            return df_valid
+        
+        for col in columns:
+            if col not in df_valid.columns:
+                continue
+            
+            values = df_valid[col]
+            
+            if len(values) < 4:  # Need at least 4 points for IQR
+                continue
+            
+            # Calculate IQR
+            q1 = values.quantile(0.25)
+            q3 = values.quantile(0.75)
+            iqr = q3 - q1
+            
+            if iqr == 0:  # All values are the same
+                continue
+            
+            # Define outlier bounds
+            lower_bound = q1 - iqr_multiplier * iqr
+            upper_bound = q3 + iqr_multiplier * iqr
+            
+            # Update mask to keep only points within bounds
+            df_valid = df_valid[(df_valid[col] >= lower_bound) & (df_valid[col] <= upper_bound)]
+        
+        return df_valid
+    
     def plot_hypervolume(self, save_path: Optional[str] = None):
         """Plot hypervolume indicator over evaluations for multi-objective optimization.
         
@@ -852,9 +907,10 @@ class DeepHyperOptimizer(BaseOptimizer):
                 arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0")
             )
             
-            # Save figure
+            # Save figure with model_name
             if save_path is None:
-                save_path = os.path.join(self.save_dir, "hypervolume.png")
+                model_name = getattr(self.simulation_runner, 'model_name', 'model')
+                save_path = os.path.join(self.save_dir, f"hypervolume_{model_name}.png")
             
             fig.savefig(save_path, dpi=150, bbox_inches="tight")
             if self.verbose:
@@ -874,11 +930,13 @@ class DeepHyperOptimizer(BaseOptimizer):
             print(f"⚠️  Error computing hypervolume: {e}")
             return None, None
     
-    def plot_results(self, save_path: Optional[str] = None, objective_names: Optional[Tuple[str, str]] = None):
+    def plot_results(self, save_path: Optional[str] = None, objective_names: Optional[Tuple[str, str]] = None, remove_outliers: bool = True):
         """Plot Pareto front for multi-objective optimization.
         
         Args:
-            save_path: Path to save the plot. If None, uses save_dir/pareto_front.png
+            save_path: Path to save the plot. If None, uses save_dir/pareto_front_{model_name}.png
+            objective_names: Tuple of (objective_0_name, objective_1_name) for axis labels
+            remove_outliers: If True, removes outliers using IQR method (default: True)
         """
         if self.deephyper_results is None or len(self.deephyper_results) == 0:
             print("⚠️  No results to plot")
@@ -889,12 +947,22 @@ class DeepHyperOptimizer(BaseOptimizer):
             print("⚠️  Not a multi-objective optimization - no Pareto front to plot")
             return
         
+        # Create a copy to avoid modifying original
+        df = self.deephyper_results.copy()
+        
+        # Remove outliers using IQR method if requested
+        if remove_outliers:
+            df = self._remove_outliers_iqr(df, ["objective_0", "objective_1"])
+            if self.verbose and len(df) < len(self.deephyper_results):
+                n_removed = len(self.deephyper_results) - len(df)
+                print(f"   Filtered out {n_removed} points ({n_removed/len(self.deephyper_results)*100:.1f}%) - invalid values and outliers")
+        
         fig, ax = plt.subplots(figsize=(9, 7), tight_layout=True)
         
         # Check if pareto_efficient column exists
-        if "pareto_efficient" in self.deephyper_results.columns:
+        if "pareto_efficient" in df.columns:
             # Plot non-Pareto efficient points
-            non_pareto = self.deephyper_results[~self.deephyper_results["pareto_efficient"]]
+            non_pareto = df[~df["pareto_efficient"]]
             if len(non_pareto) > 0:
                 _ = ax.plot(
                     -non_pareto["objective_0"],
@@ -907,7 +975,7 @@ class DeepHyperOptimizer(BaseOptimizer):
                 )
             
             # Plot Pareto efficient points
-            pareto = self.deephyper_results[self.deephyper_results["pareto_efficient"]]
+            pareto = df[df["pareto_efficient"]]
             if len(pareto) > 0:
                 _ = ax.plot(
                     -pareto["objective_0"],
@@ -921,8 +989,8 @@ class DeepHyperOptimizer(BaseOptimizer):
         else:
             # Plot all points if pareto_efficient column doesn't exist
             _ = ax.plot(
-                -self.deephyper_results["objective_0"],
-                -self.deephyper_results["objective_1"],
+                -df["objective_0"],
+                -df["objective_1"],
                 "o",
                 color="blue",
                 alpha=0.7,
@@ -936,9 +1004,10 @@ class DeepHyperOptimizer(BaseOptimizer):
         _ = ax.set_ylabel(f"Objective 1 ({objective_names[1]})" if objective_names else "Objective 1", fontsize=12)
         _ = ax.set_title("Pareto Front: Multi-Objective Optimization", fontsize=14, fontweight="bold")
         
-        # Save figure
+        # Save figure with model_name
         if save_path is None:
-            save_path = os.path.join(self.save_dir, "pareto_front.png")
+            model_name = getattr(self.simulation_runner, 'model_name', 'model')
+            save_path = os.path.join(self.save_dir, f"pareto_front_{model_name}.png")
         
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
         if self.verbose:

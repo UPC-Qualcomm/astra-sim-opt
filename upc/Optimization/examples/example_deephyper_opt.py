@@ -175,9 +175,11 @@ def main():
         print("GENERATING PLOTS")
         print("="*70)
         
-        # Plot Pareto front
-        print("\n1. Plotting Pareto front...")
-        pareto_path = optimizer.plot_results(objective_names=("Execution Time (s)", "Total Memory (GB)"))
+        # Plot Pareto front (with outlier removal by default)
+        print("\n1. Plotting Pareto front (with outlier removal)...")
+        pareto_path = optimizer.plot_results(
+            objective_names=("Execution Time (s)", "Network Total BW (GB/s)")
+        )
         
         # Plot hypervolume indicator
         print("\n2. Plotting hypervolume indicator...")
@@ -192,6 +194,7 @@ def main():
                 print(f"   - Pareto Front: {pareto_path}")
             if hv_path:
                 print(f"   - Hypervolume: {hv_path}")
+                print(f"   - Final HVI: {hvi:.4f}")
     else:
         print("\n❌ Optimization failed")
 
