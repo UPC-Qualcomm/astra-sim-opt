@@ -512,9 +512,29 @@ def plot_pareto_front(
     
     # Check if multi-objective
     if "objective_0" not in df.columns or "objective_1" not in df.columns:
-        print("❌ Not a multi-objective optimization results file")
-        print("   Expected columns: objective_0, objective_1")
-        return []
+        # Try to parse from exec_time_seconds (random optimizer format)
+        if "exec_time_seconds" in df.columns:
+            print("   Parsing objectives from exec_time_seconds column...")
+            try:
+                # Parse tuple strings like "(10000000000, 10000000000)"
+                import ast
+                def parse_tuple(s):
+                    try:
+                        return ast.literal_eval(s)
+                    except:
+                        return (None, None)
+                
+                df[["objective_0", "objective_1"]] = df["exec_time_seconds"].apply(
+                    lambda x: pd.Series(parse_tuple(x))
+                )
+                print(f"   ✓ Parsed objectives from exec_time_seconds")
+            except Exception as e:
+                print(f"   ❌ Failed to parse exec_time_seconds: {e}")
+                return []
+        else:
+            print("❌ Not a multi-objective optimization results file")
+            print("   Expected columns: objective_0, objective_1 or exec_time_seconds")
+            return []
     
     # Remove failure markers first (always filter out -1e10 values)
     df_before = len(df)

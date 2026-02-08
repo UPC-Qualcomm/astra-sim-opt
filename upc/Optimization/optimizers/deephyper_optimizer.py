@@ -17,7 +17,7 @@ from ..core import BaseOptimizer
 from ..helper import evaluate_config_worker, workload_generator
 
 try:
-    from deephyper.hpo import HpProblem, CBO
+    from deephyper.hpo import HpProblem, CBO, RandomSearch
     from deephyper.evaluator import Evaluator
     DEEPHYPER_AVAILABLE = True
 except ImportError:
@@ -106,6 +106,8 @@ class DeepHyperOptimizer(BaseOptimizer):
         budget: int = 30,
         init_samples: int = 20,
         n_workers: int = 1,
+        # Search type selection
+        search_type: str = "cbo",  # "cbo" or "random"
         # Core CBO parameters
         random_state: Optional[int] = None,
         log_dir: Optional[str] = None,
@@ -114,15 +116,15 @@ class DeepHyperOptimizer(BaseOptimizer):
         checkpoint_history_to_csv: bool = True,
         solution_selection: Optional[str] = None,
         checkpoint_restart: bool = False,
-        # Surrogate model parameters
+        # Surrogate model parameters (CBO only)
         surrogate_model: str = "ET",
         surrogate_model_kwargs: Optional[Dict] = None,
-        # Acquisition function parameters
+        # Acquisition function parameters (CBO only)
         acq_func: str = "UCB",
         acq_func_kwargs: Optional[Dict] = None ,
         acq_optimizer: str = "mixedga",
         acq_optimizer_kwargs: Optional[Dict] = None,
-        # Multi-point strategy
+        # Multi-point strategy (CBO only)
         multi_point_strategy: str = "cl_max",
         # Initial points parameters
         n_initial_points: Optional[int] = None,
@@ -153,6 +155,9 @@ class DeepHyperOptimizer(BaseOptimizer):
             init_samples: Number of initial random samples (overrides n_initial_points)
             n_workers: Number of parallel workers
             
+            # Search type
+            search_type: Type of search ("cbo" for Bayesian Optimization, "random" for Random Search)
+            
             # Core CBO parameters
             random_state: Random seed for reproducibility
             log_dir: Directory for DeepHyper logs (None = temp dir)
@@ -162,17 +167,17 @@ class DeepHyperOptimizer(BaseOptimizer):
             solution_selection: How to select best solution ("argmax_obs", "argmax_est")
             checkpoint_restart: Restart from checkpoint
             
-            # Surrogate model parameters
+            # Surrogate model parameters (CBO only)
             surrogate_model: Surrogate model ("RF", "ET", "GP", "DUMMY")
             surrogate_model_kwargs: Additional surrogate model arguments
             
-            # Acquisition function parameters
+            # Acquisition function parameters (CBO only)
             acq_func: Acquisition function ("UCB", "EI", "PI", "gp_hedge", "UCBd")
             acq_func_kwargs: Additional acquisition function arguments
             acq_optimizer: Acquisition optimizer ("mixedga", "sampling", "lbfgs", "auto")
             acq_optimizer_kwargs: Acquisition optimizer arguments (e.g., {"max_total_failures": -1})
             
-            # Multi-point strategy
+            # Multi-point strategy (CBO only)
             multi_point_strategy: Strategy for parallel evaluations ("cl_max", "cl_min", "cl_mean", "qUCB")
             
             # Initial points parameters
@@ -215,6 +220,10 @@ class DeepHyperOptimizer(BaseOptimizer):
         # Framework parameters
         self.n_workers = max(1, n_workers)
         self.evaluator_method = evaluator_method
+        self.search_type = search_type.lower()
+        
+        if self.search_type not in ["cbo", "random"]:
+            raise ValueError(f"search_type must be 'cbo' or 'random', got '{search_type}'")
         
         # Core CBO parameters
         self.random_state = random_state
@@ -223,17 +232,17 @@ class DeepHyperOptimizer(BaseOptimizer):
         self.solution_selection = solution_selection
         self.checkpoint_restart = checkpoint_restart
         
-        # Surrogate model parameters
+        # Surrogate model parameters (CBO only)
         self.surrogate_model = surrogate_model
         self.surrogate_model_kwargs = surrogate_model_kwargs or {}
         
-        # Acquisition function parameters
+        # Acquisition function parameters (CBO only)
         self.acq_func = acq_func
         self.acq_func_kwargs = acq_func_kwargs or {}
         self.acq_optimizer = acq_optimizer
         self.acq_optimizer_kwargs = acq_optimizer_kwargs or {"max_total_failures": -1}
         
-        # Multi-point strategy
+        # Multi-point strategy (CBO only)
         self.multi_point_strategy = multi_point_strategy
         
         # Initial points parameters
@@ -241,12 +250,22 @@ class DeepHyperOptimizer(BaseOptimizer):
         if initial_points is None and hasattr(search_space, 'design_space') and search_space.design_space:
             # Sample initial points from pre-computed valid configurations
             import random
-            n_init = min(init_samples if n_initial_points is None else n_initial_points, len(search_space.design_space))
-            self.initial_points = random.sample(search_space.design_space, n_init)
-            # Set n_initial_points to match actual initial_points to avoid DeepHyper sampling more
-            self.n_initial_points = len(self.initial_points)
-            if self.verbose:
-                print(f"✓ Sampled {n_init} initial points from valid configurations")
+            # For RandomSearch, we need to ensure ALL samples come from valid design space
+            # So we set initial_points to the entire design space if using random search
+            if search_type.lower() == "random":
+                # For random search, use all valid configurations
+                self.initial_points = list(search_space.design_space)
+                self.n_initial_points = len(self.initial_points)
+                if self.verbose:
+                    print(f"✓ Using all {len(self.initial_points)} valid configurations for RandomSearch")
+            else:
+                # For CBO, only sample initial points (CBO will use custom sampling for the rest)
+                n_init = min(init_samples if n_initial_points is None else n_initial_points, len(search_space.design_space))
+                self.initial_points = random.sample(search_space.design_space, n_init)
+                # Set n_initial_points to match actual initial_points to avoid DeepHyper sampling more
+                self.n_initial_points = len(self.initial_points)
+                if self.verbose:
+                    print(f"✓ Sampled {n_init} initial points from valid configurations")
         else:
             self.initial_points = initial_points
             self.n_initial_points = n_initial_points if n_initial_points is not None else init_samples
@@ -316,10 +335,18 @@ class DeepHyperOptimizer(BaseOptimizer):
             if self.verbose:
                 print(f"✓ Created evaluator with {self.n_workers} workers ({self.evaluator_method} method)")
             
-            with self.time_stats.timer("cbo_creation"):
-                self.cbo = self._create_cbo()
+            with self.time_stats.timer("search_creation"):
+                if self.search_type == "cbo":
+                    self.search = self._create_cbo()
+                    search_name = "CBO optimizer"
+                else:  # random
+                    self.search = self._create_random_search()
+                    search_name = "RandomSearch optimizer"
             if self.verbose:
-                print("✓ Created CBO optimizer\n")
+                print(f"✓ Created {search_name}\n")
+            
+            # Keep backward compatibility
+            self.cbo = self.search
             
             return True
             
@@ -691,6 +718,66 @@ class DeepHyperOptimizer(BaseOptimizer):
         
         return CBO(**cbo_args)
     
+    def _create_random_search(self) -> RandomSearch:
+        """Create DeepHyper RandomSearch instance.
+        
+        Note: RandomSearch doesn't support multi-objective scalarization parameters.
+        For multi-objective optimization with random search, the objective function
+        should handle scalarization internally.
+        
+        Important: RandomSearch samples from the ConfigSpace, which may generate
+        invalid combinations even if we restrict individual parameter values.
+        To ensure only valid configurations are evaluated, we:
+        1. Set initial_points to all valid configurations (done in __init__)
+        2. Override the _ask method to sample from initial_points only
+        """
+        random_args = {
+            # Required
+            "problem": self.hp_problem,
+            # Core parameters
+            "random_state": self.random_state,
+            "log_dir": self.log_dir,
+            "verbose": 1 if self.verbose else 0,
+            "stopper": self.stopper,
+            "checkpoint_history_to_csv": self.checkpoint_history_to_csv,
+            "solution_selection": self.solution_selection,
+        }
+        
+        # Apply additional overrides from cbo_kwargs (reused for random search)
+        # Filter out CBO-specific parameters
+        if self.cbo_kwargs:
+            valid_params = {"problem", "random_state", "log_dir", "verbose", "stopper", 
+                          "checkpoint_history_to_csv", "solution_selection"}
+            filtered_kwargs = {k: v for k, v in self.cbo_kwargs.items() if k in valid_params}
+            random_args.update(filtered_kwargs)
+        
+        search = RandomSearch(**random_args)
+        
+        # Override _ask to sample only from valid configurations
+        if self.initial_points:
+            import random
+            valid_configs = list(self.initial_points)  # Copy the list
+            random.shuffle(valid_configs)  # Shuffle for randomness
+            config_iter = iter(valid_configs * 100)  # Repeat list to handle large budgets
+            
+            original_ask = search._ask
+            
+            def custom_ask(n: int = 1):
+                """Sample from valid configurations only."""
+                samples = []
+                for _ in range(n):
+                    try:
+                        samples.append(next(config_iter))
+                    except StopIteration:
+                        # Fallback to original if we somehow run out
+                        samples.extend(original_ask(n - len(samples)))
+                        break
+                return samples
+            
+            search._ask = custom_ask
+        
+        return search
+    
     def _finalize_and_save_results(self, enrichment_verbosity: bool = True) -> bool:
         """Finalize results by enriching with config files and saving to CSV.
         
@@ -737,7 +824,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         return None, None
     
     def run(self) -> Tuple[Optional[Dict], pd.DataFrame]:
-        """Run Bayesian Optimization using DeepHyper CBO."""
+        """Run optimization using DeepHyper (CBO or RandomSearch)."""
         self.start_time = time.time()
         self.time_stats.start_total()
         
@@ -746,11 +833,12 @@ class DeepHyperOptimizer(BaseOptimizer):
                 return None, pd.DataFrame()
         
         try:
+            search_label = "CBO" if self.search_type == "cbo" else "RANDOM SEARCH"
             if self.verbose:
-                print("-"*70 + "\nRUNNING OPTIMIZATION\n" + "-"*70 + "\n")
+                print("-"*70 + f"\nRUNNING {search_label}\n" + "-"*70 + "\n")
             
-            with self.time_stats.timer("cbo_search"):
-                self.deephyper_results = self.cbo.search(
+            with self.time_stats.timer("search"):
+                self.deephyper_results = self.search.search(
                     evaluator=self.evaluator,
                     max_evals=self.budget
                 )
@@ -765,7 +853,7 @@ class DeepHyperOptimizer(BaseOptimizer):
                 self._cleanup_files()
             
             if self.verbose:
-                print("\n" + "-"*70 + "\nOPTIMIZATION COMPLETE\n" + "-"*70)
+                print("\n" + "-"*70 + f"\n{search_label} COMPLETE\n" + "-"*70)
                 self.print_summary()
             
             self.time_stats.end_total()
@@ -940,14 +1028,20 @@ class DeepHyperOptimizer(BaseOptimizer):
     
     def __str__(self) -> str:
         """Human-readable string."""
+        search_name = "CBO" if self.search_type == "cbo" else "RandomSearch"
         info = [
-            "DeepHyperOptimizer",
+            f"DeepHyperOptimizer ({search_name})",
             f"Budget: {self.budget} evaluations",
-            f"Initialization: {self.init_samples} samples",
             f"Workers: {self.n_workers}",
-            f"Acquisition: {self.acq_func}",
-            f"Evaluated: {len(self.configs)} configs",
         ]
+        
+        if self.search_type == "cbo":
+            info.extend([
+                f"Initialization: {self.init_samples} samples",
+                f"Acquisition: {self.acq_func}",
+            ])
+        
+        info.append(f"Evaluated: {len(self.configs)} configs")
         
         if self.best_config:
             info.append(f"Best score: {self.best_score:.2f}")
