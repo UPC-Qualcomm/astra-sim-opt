@@ -169,7 +169,7 @@ def create_hover_text(df, param_cols):
         
         # Add execution time if available
         if "exec_time" in row and pd.notna(row["exec_time"]):
-            text_parts.append(f"  Exec Time: {row['exec_time']:,.0f} cycles")
+            text_parts.append(f"  Exec Time: {row['exec_time']/1e9:,.5f} s")
         
         # Add Pareto status
         if "pareto_efficient" in row:
@@ -213,29 +213,6 @@ def create_hover_text(df, param_cols):
                     text_parts.append(f"  {key}: {val}")
             except:
                 text_parts.append(f"  {str(row['network_config'])[:100]}...")
-        
-        # Add memory config (parsed if it's JSON)
-        if "memory_config" in row and pd.notna(row["memory_config"]):
-            text_parts.append("<br><b>Memory Config:</b>")
-            try:
-                import json
-                config = json.loads(row["memory_config"])
-                for key, val in config.items():
-                    text_parts.append(f"  {key}: {val}")
-            except:
-                text_parts.append(f"  {str(row['memory_config'])[:100]}...")
-        
-        # Add metadata (m: columns)
-        metadata_cols = [c for c in row.index if c.startswith("m:")]
-        if metadata_cols:
-            text_parts.append("<br><b>Timing Metadata:</b>")
-            for col in metadata_cols:
-                if pd.notna(row[col]):
-                    col_name = col.replace('m:', '').replace('_', ' ').title()
-                    if isinstance(row[col], float):
-                        text_parts.append(f"  {col_name}: {row[col]:.4f}s")
-                    else:
-                        text_parts.append(f"  {col_name}: {row[col]}")
         
         # Add any other fields not covered above
         other_cols = [c for c in row.index if c not in exclude_cols and not c.startswith('m:') and not c.startswith('p:')]
@@ -368,12 +345,11 @@ def plot_pareto_front_interactive(
     
     # Get parameter columns for hover text
     param_cols = [col for col in df.columns if col.startswith("p:")]
-    param_names = [col[2:] for col in param_cols]
     
     # Create hover text
     if show_labels and param_cols:
-        pareto_hover = create_hover_text(pareto_df, param_names)
-        non_pareto_hover = create_hover_text(non_pareto_df, param_names)
+        pareto_hover = create_hover_text(pareto_df, param_cols)
+        non_pareto_hover = create_hover_text(non_pareto_df, param_cols)
     else:
         pareto_hover = None
         non_pareto_hover = None
@@ -433,8 +409,8 @@ def plot_pareto_front_interactive(
         ),
         plot_bgcolor="white",
         hovermode="closest",
-        width=900,
-        height=700,
+        width=1800,
+        height=900,
         legend=dict(
             x=1.02,
             y=1,
@@ -444,7 +420,13 @@ def plot_pareto_front_interactive(
             bordercolor="rgba(0, 0, 0, 0.2)",
             borderwidth=1
         ),
-        font=dict(size=12)
+        font=dict(size=12),
+        hoverlabel=dict(
+            font_size=11,
+            font_family="monospace",
+            align="left",
+            namelength=-1
+        )
     )
     
     # Add statistics annotation
@@ -453,15 +435,15 @@ def plot_pareto_front_interactive(
         f"<b>Statistics:</b><br>"
         f"Total evaluations: {len(df_valid)}<br>"
         f"Pareto-efficient: {len(pareto_df)} ({len(pareto_df)/len(df_valid)*100:.1f}%)<br>"
-        f"Obj 0 range: [{-df_valid['objective_0'].max():.2e}, {-df_valid['objective_0'].min():.2e}]<br>"
-        f"Obj 1 range: [{-df_valid['objective_1'].max():.2e}, {-df_valid['objective_1'].min():.2e}]"
+        f"{obj0_name} range: [{-df_valid['objective_0'].max():.2e}, {-df_valid['objective_0'].min():.2e}]<br>"
+        f"{obj1_name} range: [{-df_valid['objective_1'].max():.2e}, {-df_valid['objective_1'].min():.2e}]"
     )
     
     fig.add_annotation(
         text=stats_text,
         xref="paper", yref="paper",
-        x=0.02, y=0.98,
-        xanchor="left", yanchor="top",
+        x=0.98, y=0.98,
+        xanchor="right", yanchor="top",
         showarrow=False,
         bgcolor="rgba(255, 255, 255, 0.9)",
         bordercolor="rgba(0, 0, 0, 0.2)",
@@ -497,8 +479,12 @@ def plot_pareto_front(
     output_file=None,
     plot_format="both",
     show_labels=True,
-    remove_outliers=True,
-    iqr_multiplier=1.5
+    remove_outliers=False,
+    iqr_multiplier=1.5,
+    obj0_min=None,
+    obj0_max=None,
+    obj1_min=None,
+    obj1_max=None
 ):
     """Main function to plot Pareto front in specified format(s).
     
@@ -509,8 +495,12 @@ def plot_pareto_front(
         output_file: Output file path (auto-generated if None)
         plot_format: 'interactive', 'static', or 'both' (default: both)
         show_labels: Whether to show configuration details on hover (interactive only)
-        remove_outliers: Whether to remove outliers using IQR method
-        iqr_multiplier: IQR multiplier for outlier detection
+        remove_outliers: Whether to remove outliers using IQR method (default: False)
+        iqr_multiplier: IQR multiplier for outlier detection (default: 1.5)
+        obj0_min: Manual minimum value for objective 0 (optional)
+        obj0_max: Manual maximum value for objective 0 (optional)
+        obj1_min: Manual minimum value for objective 1 (optional)
+        obj1_max: Manual maximum value for objective 1 (optional)
     
     Returns:
         List of paths to saved plots
@@ -526,13 +516,35 @@ def plot_pareto_front(
         print("   Expected columns: objective_0, objective_1")
         return []
     
-    # Remove outliers if requested
+    # Remove failure markers first (always filter out -1e10 values)
+    df_before = len(df)
+    df = df[(df["objective_0"].notna()) & (df["objective_1"].notna())]
+    n_failures = df_before - len(df)
+    if n_failures > 0:
+        print(f"   Removed {n_failures} failed evaluations ({n_failures/df_before*100:.1f}%)")
+    
+    # Apply manual range filtering if specified
+    if obj0_min is not None or obj0_max is not None or obj1_min is not None or obj1_max is not None:
+        df_before_manual = len(df)
+        if obj0_min is not None:
+            df = df[df["objective_0"] >= obj0_min]
+        if obj0_max is not None:
+            df = df[df["objective_0"] <= obj0_max]
+        if obj1_min is not None:
+            df = df[df["objective_1"] >= obj1_min]
+        if obj1_max is not None:
+            df = df[df["objective_1"] <= obj1_max]
+        n_manual = df_before_manual - len(df)
+        if n_manual > 0:
+            print(f"   Manual filter removed {n_manual} points ({n_manual/df_before_manual*100:.1f}%)")
+    
+    # Apply IQR outlier removal if requested
     if remove_outliers:
-        df_before = len(df)
+        df_before_iqr = len(df)
         df = remove_outliers_iqr(df, ["objective_0", "objective_1"], iqr_multiplier)
-        n_removed = df_before - len(df)
-        if n_removed > 0:
-            print(f"   Filtered out {n_removed} points ({n_removed/df_before*100:.1f}%) - invalid values and outliers")
+        n_iqr = df_before_iqr - len(df)
+        if n_iqr > 0:
+            print(f"   IQR filter removed {n_iqr} outliers ({n_iqr/df_before_iqr*100:.1f}%)")
     
     if len(df) == 0:
         print("❌ No valid data points after filtering")
@@ -604,20 +616,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Generate both interactive and static plots (default)
+  # Generate both interactive and static plots (default - no filtering)
   python plot_pareto_front.py results.csv
-  
-  # Generate only interactive HTML
-  python plot_pareto_front.py results.csv --format interactive
-  
-  # Generate only static PNG
-  python plot_pareto_front.py results.csv --format static
   
   # With custom axis labels
   python plot_pareto_front.py results.csv --obj0-name "Time (s)" --obj1-name "Memory (GB)"
   
-  # Disable outlier removal
-  python plot_pareto_front.py results.csv --no-outlier-removal
+  # Apply IQR statistical outlier removal
+  python plot_pareto_front.py results.csv --use-iqr
+  
+  # Manual filtering by value range (note: use = sign for negative values)
+  python plot_pareto_front.py results.csv --obj0-min=-1e10 --obj0-max=-1e8
+  
+  # Combine manual and IQR filtering
+  python plot_pareto_front.py results.csv --obj0-min=-5e9 --use-iqr
         """
     )
     
@@ -657,16 +669,40 @@ Examples:
     )
     
     parser.add_argument(
-        "--no-outlier-removal",
+        "--use-iqr",
         action="store_true",
-        help="Disable automatic outlier removal"
+        help="Apply IQR statistical outlier removal (default: disabled)"
     )
     
     parser.add_argument(
         "--iqr-multiplier",
         type=float,
         default=1.5,
-        help="IQR multiplier for outlier detection (default: 1.5)"
+        help="IQR multiplier for outlier detection (default: 1.5, only used with --use-iqr)"
+    )
+    
+    parser.add_argument(
+        "--obj0-min",
+        type=float,
+        help="Manual minimum value for objective 0 (use = for negative values: --obj0-min=-1e9)"
+    )
+    
+    parser.add_argument(
+        "--obj0-max",
+        type=float,
+        help="Manual maximum value for objective 0 (use = for negative values: --obj0-max=-1e6)"
+    )
+    
+    parser.add_argument(
+        "--obj1-min",
+        type=float,
+        help="Manual minimum value for objective 1 (use = for negative values: --obj1-min=-1e9)"
+    )
+    
+    parser.add_argument(
+        "--obj1-max",
+        type=float,
+        help="Manual maximum value for objective 1 (use = for negative values: --obj1-max=-1e6)"
     )
     
     args = parser.parse_args()
@@ -690,8 +726,12 @@ Examples:
         output_file=args.output,
         plot_format=args.format,
         show_labels=not args.no_labels,
-        remove_outliers=not args.no_outlier_removal,
-        iqr_multiplier=args.iqr_multiplier
+        remove_outliers=args.use_iqr,
+        iqr_multiplier=args.iqr_multiplier,
+        obj0_min=args.obj0_min,
+        obj0_max=args.obj0_max,
+        obj1_min=args.obj1_min,
+        obj1_max=args.obj1_max
     )
     
     if saved_files:
