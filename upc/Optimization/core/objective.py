@@ -23,7 +23,7 @@ Example:
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Callable
 
-PENALTY = 10_000_000_000
+PENALTY = float('inf')
 
 class ObjectiveFunction(ABC):
     """

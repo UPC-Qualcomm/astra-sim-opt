@@ -21,7 +21,7 @@ from ..core import BaseOptimizer
 from ..core.base_optimizer import format_score
 from ..helper import config_to_tuple, evaluate_config_worker
 
-PENALTY_THRESHOLD = 1e9
+PENALTY_THRESHOLD = float('inf')
 
 
 class RandomOptimizer(BaseOptimizer):

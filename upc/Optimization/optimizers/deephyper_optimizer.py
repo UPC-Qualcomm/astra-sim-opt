@@ -513,7 +513,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         # Detect if multi-objective by checking for objective_0 column
         is_multi_objective = 'objective_0' in self.deephyper_results.columns
         
-        PENALTY_THRESHOLD = 1e9
+        PENALTY_THRESHOLD = float('inf')
         n_failed = 0
         n_success = 0
         n_infeasible = 0
