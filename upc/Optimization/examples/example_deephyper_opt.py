@@ -37,13 +37,14 @@ def main():
     
     # Configuration
     MODEL_NUM = 19 # GPT_40B (Model enum value)
-    MODEL_NAME = "GPT_40B_g2_sync_obj_time_network_56_layer"  # Descriptive name for results folder and plots
+    MODEL_NAME = "GPT_40B_analytical_sync_obj_time_network_56_layer"  # Descriptive name for results folder and plots
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
     BUDGET = 300
     INIT_SAMPLES = 50
     N_WORKERS = 8
-    
+    Objective_0_Name = "Execution Time (s)"
+    Objective_1_Name = "Network Total BW (GB/s)"
     
 
     print("="*70)
@@ -100,7 +101,7 @@ def main():
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_DEEPHYPER",
         verbose=True,
-        net_sim_config=net_sim_config 
+        #net_sim_config=net_sim_config 
     )
     print(f"   Using: {sim_runner}")
     
@@ -175,23 +176,46 @@ def main():
         print("GENERATING PLOTS")
         print("="*70)
         
-        # Plot Pareto front (with outlier removal by default)
+        # Plot Pareto front using external script
         print("\n1. Plotting Pareto front (with outlier removal)...")
-        pareto_path = optimizer.plot_results(
-            objective_names=("Execution Time (s)", "Network Total BW (GB/s)")
-        )
+        try:
+            from plot_pareto_front import plot_pareto_front
+            
+            # Get the CSV file path
+            csv_path = os.path.join(optimizer.save_dir, optimizer.results_filename)
+            model_name = getattr(optimizer.simulation_runner, 'model_name', 'model')
+            output_base = os.path.join(optimizer.save_dir, f"pareto_front_{model_name}")
+            
+            # Generate both HTML and PNG plots
+            pareto_plots = plot_pareto_front(
+                results_file=csv_path,
+                obj0_name=Objective_0_Name,
+                obj1_name=Objective_1_Name,
+                output_file=output_base,
+                plot_format="both",
+                show_labels=True,
+                remove_outliers=True,
+                iqr_multiplier=1.5
+            )
+        except Exception as e:
+            print(f"⚠️  Error plotting Pareto front: {e}")
+            pareto_plots = None
         
         # Plot hypervolume indicator
         print("\n2. Plotting hypervolume indicator...")
         hv_path, hvi = optimizer.plot_hypervolume()
         
-        if pareto_path or hv_path:
+        if pareto_plots or hv_path:
             print("\n" + "="*70)
             print("VISUALIZATION COMPLETE")
             print("="*70)
             print("\n📈 Generated plots:")
-            if pareto_path:
-                print(f"   - Pareto Front: {pareto_path}")
+            if pareto_plots:
+                for plot_path in pareto_plots:
+                    if plot_path.endswith('.html'):
+                        print(f"   - Pareto Front (Interactive): {plot_path}")
+                    elif plot_path.endswith('.png'):
+                        print(f"   - Pareto Front (Static): {plot_path}")
             if hv_path:
                 print(f"   - Hypervolume: {hv_path}")
                 print(f"   - Final HVI: {hvi:.4f}")
