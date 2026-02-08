@@ -20,74 +20,7 @@ from Optimization import (
     CustomObjective
 )
 from Optimization.core.base_optimizer import format_score
-
-PENALTY = 10_000_000_000
-
-def obj_latency_network(exec_time, is_oom, metadata, config):
-    """
-    Multi-objective function optimizing both execution time and network bandwidth.
-    
-    Objective 0: Execution time (minimize) - Lower is better
-    Objective 1: Total network bandwidth (minimize) - Lower is better
-    
-    Normalization: Network bandwidth is divided by 1000 to bring it closer to exec_time scale
-    
-    Returns:
-        tuple: (exec_time, normalized_network_bw) for minimization
-    """
-    npu_count = config.get('npu_count', 1)
-    intra_node_bw = config.get('intra-node-bw', 0)  # GB/s
-    inter_node_bw = config.get('inter-node-bw', 0)  # GB/s
-    npus_per_node = 8  
-    
-    num_nodes = max(1, (npu_count + npus_per_node - 1) // npus_per_node)
-    
-    # Calculate total network bandwidth
-    if num_nodes == 1:
-        # Single node: only intra-node bandwidth matters
-        total_network_bw = intra_node_bw #* (npu_count - 1)  # Connections between NPUs
-    else:
-        # Multiple nodes: both intra-node and inter-node bandwidth
-        intra_bw_total = intra_node_bw# * npus_per_node * num_nodes  # Intra-node links
-        inter_bw_total = inter_node_bw# * (num_nodes - 1)  # Inter-node links
-        total_network_bw = intra_bw_total + inter_bw_total
-    
-    # Normalize network bandwidth to similar scale as exec_time
-    # Typical total_network_bw: 1000-30000 GB/s, exec_time: 1-1000s
-    normalized_network_bw = total_network_bw #/ 100.0
-    
-    # Return tuple for multi-objective (both minimization)
-    if is_oom:
-        normalized_network_bw = PENALTY  # Penalize OOM configurations
-        exec_time = PENALTY  # Penalize OOM configurations
-    return exec_time, normalized_network_bw
-
-def obj_latency_memory(exec_time, is_oom, metadata, config):
-    """
-    Multi-objective function optimizing both execution time and memory usage.
-    
-    Objective 0: Execution time (minimize) - Lower is better
-    Objective 1: Total memory usage (minimize) - Lower is better
-    
-    Normalization: Memory usage is divided by 100 to bring it closer to exec_time scale
-    
-    Returns:
-        tuple: (exec_time, normalized_memory_usage) for minimization
-    """
-    npu_count = config.get('npu_count', 1)
-    local_mem_size = config.get('local-mem-size', 0)  # GB
-    
-    total_memory_usage = local_mem_size * npu_count  # Total memory usage across all NPUs
-    
-    # Normalize memory usage to similar scale as exec_time
-    # Typical total_memory_usage: 100-10000 GB, exec_time: 1-1000s
-    normalized_memory_usage = total_memory_usage / 100.0
-    
-    # Return tuple for multi-objective (both minimization)
-    if is_oom:
-        normalized_memory_usage = PENALTY  # Penalize OOM configurations
-        exec_time = PENALTY  # Penalize OOM configurations
-    return exec_time, normalized_memory_usage
+from custom_objectives import obj_latency_network, obj_latency_memory
 
 
 def main():

@@ -13,8 +13,8 @@ def output_log_parser(log_file):
         slowest_npu = None
         is_any_oom = None
         if matches_exec and matches_oom:
-            # Extract all execution times and convert to seconds (1GHz frequency)
-            exec_times = [int(cycles) / 1e9 for sys_id, cycles in matches_exec]
+            # Extract all execution times
+            exec_times = [int(cycles) for sys_id, cycles in matches_exec]
             
             # Return max execution time and 1 if any system is OOM
             slowest_npu = max(exec_times)

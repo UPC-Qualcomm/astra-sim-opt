@@ -749,9 +749,14 @@ void Workload::report() {
         auto logger = LoggerFactory::get_logger("workload");
         logger->info("sys[{}] peak memory usage: {:.2f} {}", sys->id,
                      peak_mem_usage, unit);
+        
+        // Get raw bytes for OOM comparison
+        uint64_t peak_mem_bytes = this->local_mem_usage_tracker->getPeakMemUsage();
+        long long configured_mem_bytes = this->sys->memory->memory_size;
+        
         logger->info(
             "sys[{}] is OOM: {}",
-            sys->id, (this->sys->memory->memory_size < (peak_mem_usage * 1024 * 1024 * 1024)) ? 1 : 0);
+            sys->id, (configured_mem_bytes < static_cast<long long>(peak_mem_bytes)) ? 1 : 0);
         this->local_mem_usage_tracker.reset();
     }
 }

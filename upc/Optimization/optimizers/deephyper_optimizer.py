@@ -691,6 +691,46 @@ class DeepHyperOptimizer(BaseOptimizer):
         
         return CBO(**cbo_args)
     
+    def _finalize_and_save_results(self, enrichment_verbosity: bool = True) -> bool:
+        """Finalize results by enriching with config files and saving to CSV.
+        
+        Args:
+            enrichment_verbosity: Whether to print enrichment progress messages
+            
+        Returns:
+            True if results were saved successfully, False otherwise
+        """
+        if self.deephyper_results is None or len(self.deephyper_results) == 0:
+            if self.verbose:
+                self._log("No results to save (optimization interrupted too early)", "warning")
+            return False
+        
+        try:
+            # Enrich results with config file information
+            if enrichment_verbosity and self.verbose:
+                print("\n" + "-"*70 + "\nENRICHING RESULTS WITH CONFIG FILES\n" + "-"*70)
+            self._enrich_results_with_config_files()
+            
+            # Save to CSV
+            dh_results_path = os.path.join(self.save_dir, self.results_filename)
+            self.deephyper_results.to_csv(dh_results_path, index=False)
+            
+            if self.verbose:
+                print(f"✓ Results saved to: {dh_results_path}")
+                print(f"  {len(self.deephyper_results)} evaluations saved")
+            
+            # Collect results for BaseOptimizer tracking
+            if enrichment_verbosity and self.verbose:
+                print("\n" + "-"*70 + "\nCOLLECTING RESULTS\n" + "-"*70)
+            self._collect_results_from_deephyper()
+            
+            return True
+            
+        except Exception as e:
+            if self.verbose:
+                self._log(f"Warning: Could not save results: {e}", "warning")
+            return False
+    
     def optimize_step(self) -> Tuple[Optional[Dict], Optional[float]]:
         """Not supported for DeepHyper (uses batch search instead)."""
         self._log("optimize_step() not supported", "warning")
@@ -715,17 +755,9 @@ class DeepHyperOptimizer(BaseOptimizer):
                     max_evals=self.budget
                 )
             
-
-            if self.verbose:
-                print("\n" + "-"*70 + "\nENRICHING RESULTS WITH CONFIG FILES\n" + "-"*70)
-            
-            # Enrich results with config file information
-            self._enrich_results_with_config_files()
-            
-            if self.verbose:
-                print("\n" + "-"*70 + "\nCOLLECTING RESULTS\n" + "-"*70)
-            
-            self._collect_results_from_deephyper()
+            # Finalize and save results
+            with self.time_stats.timer("save_results"):
+                self._finalize_and_save_results(enrichment_verbosity=True)
             
             if self.keep_top_k >= 0:
                 if self.verbose:
@@ -736,22 +768,16 @@ class DeepHyperOptimizer(BaseOptimizer):
                 print("\n" + "-"*70 + "\nOPTIMIZATION COMPLETE\n" + "-"*70)
                 self.print_summary()
             
-            with self.time_stats.timer("save_results"):
-                # Save only DeepHyper's native results (has job tracking, Pareto info, etc.)
-                # Skip BaseOptimizer's save_results() to avoid duplicate CSV files
-                dh_results_path = os.path.join(self.save_dir, self.results_filename)
-                self.deephyper_results.to_csv(dh_results_path, index=False)
-                
-                if self.verbose:
-                    print(f"✓ Results saved to: {dh_results_path}")
-            
             self.time_stats.end_total()
             return self.best_config, self.get_history()
             
         except KeyboardInterrupt:
             self._log("\n\nOptimization interrupted by user", "warning")
             self._log("Saving intermediate results...", "info")
-            self.save_results()
+            
+            # Finalize and save any completed results
+            self._finalize_and_save_results(enrichment_verbosity=False)
+            
             self.time_stats.end_total()
             return self.best_config, self.get_history()
         
