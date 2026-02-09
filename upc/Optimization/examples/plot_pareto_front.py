@@ -163,13 +163,25 @@ def create_hover_text(df, param_cols):
         # Add objectives
         text_parts.append("<br><b>Objectives:</b>")
         if "objective_0" in row:
-            text_parts.append(f"  Obj 0: {row['objective_0']:.6e}")
+            obj0 = row['objective_0']
+            if isinstance(obj0, (int, float)) and not isinstance(obj0, bool):
+                text_parts.append(f"  Obj 0: {obj0:.6e}")
+            else:
+                text_parts.append(f"  Obj 0: {obj0}")
         if "objective_1" in row:
-            text_parts.append(f"  Obj 1: {row['objective_1']:.6e}")
+            obj1 = row['objective_1']
+            if isinstance(obj1, (int, float)) and not isinstance(obj1, bool):
+                text_parts.append(f"  Obj 1: {obj1:.6e}")
+            else:
+                text_parts.append(f"  Obj 1: {obj1}")
         
         # Add execution time if available
         if "exec_time" in row and pd.notna(row["exec_time"]):
-            text_parts.append(f"  Exec Time: {row['exec_time']/1e9:,.5f} s")
+            exec_time = row["exec_time"]
+            if isinstance(exec_time, (int, float)) and not isinstance(exec_time, bool):
+                text_parts.append(f"  Exec Time: {exec_time/1e9:,.5f} s")
+            else:
+                text_parts.append(f"  Exec Time: {exec_time}")
         
         # Add Pareto status
         if "pareto_efficient" in row:
@@ -536,12 +548,28 @@ def plot_pareto_front(
             print("   Expected columns: objective_0, objective_1 or exec_time_seconds")
             return []
     
-    # Remove failure markers first (always filter out -1e10 values)
+    # Remove failure markers first (always filter out -1e10 values and string "F")
     df_before = len(df)
-    df = df[(df["objective_0"].notna()) & (df["objective_1"].notna())]
+    df = df[
+        (df["objective_0"].notna()) & 
+        (df["objective_1"].notna()) &
+        (df["objective_0"] != "F") &
+        (df["objective_1"] != "F")
+    ]
     n_failures = df_before - len(df)
     if n_failures > 0:
         print(f"   Removed {n_failures} failed evaluations ({n_failures/df_before*100:.1f}%)")
+    
+    # Convert objective columns to numeric (coerce errors to NaN)
+    df["objective_0"] = pd.to_numeric(df["objective_0"], errors='coerce')
+    df["objective_1"] = pd.to_numeric(df["objective_1"], errors='coerce')
+    
+    # Remove any rows where conversion failed
+    df_before_numeric = len(df)
+    df = df[(df["objective_0"].notna()) & (df["objective_1"].notna())]
+    n_non_numeric = df_before_numeric - len(df)
+    if n_non_numeric > 0:
+        print(f"   Removed {n_non_numeric} non-numeric evaluations")
     
     # Apply manual range filtering if specified
     if obj0_min is not None or obj0_max is not None or obj1_min is not None or obj1_max is not None:

@@ -32,7 +32,7 @@ def main():
     
     # Configuration
     MODEL_NUM = 19  # GPT_40B (Model enum value)
-    MODEL_NAME = "GPT_40B_analytical_sync_obj_time_network_56_layer_50_50_random"
+    MODEL_NAME = "GPT_40B_g2_sync_obj_time_network_56_layer_50_50_random"
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
     BUDGET = 300
@@ -87,24 +87,23 @@ def main():
     }
     
     # 3. Setup simulation runner
-    print("\n3. Creating simulation runner...")
-    
-    objective = create_objective(
-        objective_type='time_and_network_bw'
-    )
-    
+    print("\n3. Creating simulation runner...")   
     sim_runner = SimulationRunner(
         model_num=MODEL_NUM,
         model_name=MODEL_NAME,
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_DEEPHYPER_RANDOM",
         verbose=True,
-        #net_sim_config=net_sim_config,
+        net_sim_config=net_sim_config,
     )
     print(f"   Using: {sim_runner}")
     
     # 4. Create objective function
     print("\n4. Creating objective function...")
+    
+    objective = create_objective(
+        objective_type='time_and_network_bw'
+    )
     objective = CustomObjective(
         obj_latency_network,
         "MOO_time_network_total_bw",
