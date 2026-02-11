@@ -34,7 +34,7 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
     clusters = optimizer_state.get('clusters')
     
     # Create cache key BEFORE enriching config (so it matches the DataFrame params)
-    config_key = tuple(sorted(config.items()))
+    config_key = tuple(config.items())
     
     if clusters and 'cluster' in config:
         config = enrich_config_with_clusters(config, clusters)
@@ -109,7 +109,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         # Search type selection
         search_type: str = "cbo",  # "cbo" or "random"
         # Core CBO parameters
-        random_state: Optional[int] = None,
+        random_state: Optional[int] = 42,
         log_dir: Optional[str] = None,
         verbose: bool = True,
         stopper=None,
@@ -249,23 +249,22 @@ class DeepHyperOptimizer(BaseOptimizer):
         # If initial_points not provided and we have constraints, sample from valid configs
         if initial_points is None and hasattr(search_space, 'design_space') and search_space.design_space:
             # Sample initial points from pre-computed valid configurations
-            import random
-            # For RandomSearch, we need to ensure ALL samples come from valid design space
-            # So we set initial_points to the entire design space if using random search
-            if search_type.lower() == "random":
-                # For random search, use all valid configurations
-                self.initial_points = list(search_space.design_space)
-                self.n_initial_points = len(self.initial_points)
-                if self.verbose:
-                    print(f"✓ Using all {len(self.initial_points)} valid configurations for RandomSearch")
-            else:
-                # For CBO, only sample initial points (CBO will use custom sampling for the rest)
-                n_init = min(init_samples if n_initial_points is None else n_initial_points, len(search_space.design_space))
-                self.initial_points = random.sample(search_space.design_space, n_init)
-                # Set n_initial_points to match actual initial_points to avoid DeepHyper sampling more
-                self.n_initial_points = len(self.initial_points)
-                if self.verbose:
-                    print(f"✓ Sampled {n_init} initial points from valid configurations")
+            import random as py_random
+            # Seed Python's random module for reproducibility
+            if random_state is not None:
+                py_random.seed(random_state)
+            
+            # Sample initial points for both CBO and RandomSearch
+            # RandomSearch will continue sampling from design space via overridden _ask method
+            n_init = min(init_samples if n_initial_points is None else n_initial_points, len(search_space.design_space))
+            # For random search with init_samples=0, we still sample at least 1 to avoid empty list
+            if search_type.lower() == "random" and n_init == 0:
+                n_init = 1
+            
+            self.initial_points = py_random.sample(search_space.design_space, n_init)
+            self.n_initial_points = len(self.initial_points)
+            if self.verbose:
+                print(f"✓ Sampled {n_init} initial points from valid configurations")
         else:
             self.initial_points = initial_points
             self.n_initial_points = n_initial_points if n_initial_points is not None else init_samples
@@ -360,7 +359,7 @@ class DeepHyperOptimizer(BaseOptimizer):
     def _create_hp_problem(self) -> HpProblem:
         """Convert SearchSpace to DeepHyper HpProblem with constraint function."""
         problem = HpProblem(**self.problem_kwargs)
-        
+        problem.set_seed(self.random_state)
         if self.search_space.design_space is None or len(self.search_space.design_space) == 0:
             raise ValueError("Search space design_space is empty or not built.")
         
@@ -381,12 +380,11 @@ class DeepHyperOptimizer(BaseOptimizer):
         # Sort parameter values for consistency
         # TODO: Report a bug to DeepHyper about this behavior
         # Note: we do the sorting because DeepHyper sorts parameters alphabetically but they don't sort values as key value pairs.
-        for name in param_names:
-            param_values_map[name] = sorted(param_values_map[name], key=lambda x: (x is None, x))
+        #for name in param_names:
+        #    param_values_map[name] = sorted(param_values_map[name], key=lambda x: (x is None, x))
         
         # Add hyperparameters in alphabetical order (DeepHyper sorts parameters alphabetically)
-        sorted_param_names = sorted(param_names)
-        for param_name in sorted_param_names:
+        for param_name in param_names:
             unique_values = param_values_map[param_name]
             if unique_values:
                 problem.add_hyperparameter(unique_values, param_name, default_value=unique_values[0])
@@ -414,8 +412,16 @@ class DeepHyperOptimizer(BaseOptimizer):
             return pd.Series(is_valid, index=s.index)
         
         def custom_sampling_fn(n_samples: int):
-            """Sample directly from valid configurations to avoid constraint violations."""
+            """Sample directly from valid configurations to avoid constraint violations.
+            
+            This function is used by:
+            1. CBO's acquisition optimizer (mixedga) for constraint-satisfying sampling
+            2. RandomSearch's overridden _ask() method for uniform random sampling
+            """
             import random
+            # Seed for reproducibility if random_state is set
+            if self.random_state is not None:
+                random.seed(self.random_state)  # Add n_samples to avoid same seed each call
             sampled = []
             for _ in range(n_samples):
                 # Randomly select a valid configuration
@@ -426,6 +432,9 @@ class DeepHyperOptimizer(BaseOptimizer):
         # Set constraint and sampling functions
         problem.set_constraint_fn(constraint_fn)
         problem.set_sampling_fn(custom_sampling_fn)
+        
+        # Store custom_sampling_fn for reuse in RandomSearch
+        self._custom_sampling_fn = custom_sampling_fn
         
         if self.verbose:
             total_combinations = 1
@@ -490,7 +499,7 @@ class DeepHyperOptimizer(BaseOptimizer):
             
             try:
                 # Retrieve exec_time and config files from cache
-                config_key = tuple(sorted(config.items()))
+                config_key = tuple(config.items())
                 if self.verbose and idx < 3:
                     print(f"  Looking up config_key for row {idx}: {config_key}")
                     print(f"  Cache has {len(self.extra_data_cache)} entries")
@@ -754,25 +763,14 @@ class DeepHyperOptimizer(BaseOptimizer):
         search = RandomSearch(**random_args)
         
         # Override _ask to sample only from valid configurations
-        if self.initial_points:
-            import random
-            valid_configs = list(self.initial_points)  # Copy the list
-            random.shuffle(valid_configs)  # Shuffle for randomness
-            config_iter = iter(valid_configs * 100)  # Repeat list to handle large budgets
-            
+        # Reuse the same custom_sampling_fn that CBO uses (stored during _create_hp_problem)
+        # This ensures RandomSearch and CBO sample from the same valid design space
+        if hasattr(self, '_custom_sampling_fn'):
             original_ask = search._ask
             
             def custom_ask(n: int = 1):
-                """Sample from valid configurations only."""
-                samples = []
-                for _ in range(n):
-                    try:
-                        samples.append(next(config_iter))
-                    except StopIteration:
-                        # Fallback to original if we somehow run out
-                        samples.extend(original_ask(n - len(samples)))
-                        break
-                return samples
+                """Sample from valid configurations using the same logic as CBO."""
+                return self._custom_sampling_fn(n)
             
             search._ask = custom_ask
         
