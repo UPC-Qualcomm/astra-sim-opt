@@ -60,7 +60,7 @@ def get_timings_df(csv_trace_file, output_file_name):
     extended_data.to_csv(output_file_name)
 
     
-    os.remove(csv_trace_file)
+    #os.remove(csv_trace_file)
 
 def build_compute_interval_tree(nodes):
     tree = IntervalTree()
@@ -152,7 +152,7 @@ def get_exposed(df, sys_id, node_op_type="comm"):
             ]
         )
 
-def run_command(command, cwd=None):
+def run_command(command, cwd=None, return_pid=False):
     
     # Find the specific number pattern in the command string
     match = re.search(r'(\d+_\d+_\d+_\d+_\d+)', command)
@@ -162,12 +162,23 @@ def run_command(command, cwd=None):
 
     print("run simulation command:", command)
     start_time = time.time()
-    result = subprocess.run(command, shell=True, cwd=cwd)
     
-    end_time = time.time()
-    print(f"Total time{identifier}: {end_time - start_time:.2f} seconds")
-        
-    return result.returncode == 0
+    if return_pid:
+        # Use Popen to get PID for early termination
+        # Create a new process group so we can kill the entire group including children
+        # Return process object so caller can manage waiting
+        process = subprocess.Popen(
+            command, 
+            shell=True, 
+            cwd=cwd,
+            preexec_fn=os.setsid  # Create new process group
+        )
+        return process, identifier, start_time
+    else:
+        result = subprocess.run(command, shell=True, cwd=cwd)
+        end_time = time.time()
+        print(f"Total time{identifier}: {end_time - start_time:.2f} seconds")
+        return result.returncode == 0
 
 
 def list_workloads(root):
@@ -179,7 +190,35 @@ def list_workloads(root):
     return filtered
 
 
-def run_astrasim(workload_path, system, network, memory, output_dir, network_log, sim_type, suffix=None):
+def post_process_simulation(log_path, keep_trace=False):
+    """
+    Post-process simulation results after completion.
+    
+    Args:
+        log_path: Base path for simulation output files (without extension)
+        keep_trace: If True, keep the raw trace CSV file after processing
+    
+    Returns:
+        True if post-processing succeeded, False otherwise
+    """
+    err_file = f'{log_path}.err'
+    if os.path.exists(err_file) and os.path.getsize(err_file) == 0:
+        try:
+            get_timings_df(f"{log_path}_trace.csv", f"{log_path}_trace_matched_timing.csv")
+            if not keep_trace:
+                os.remove(f"{log_path}_trace.csv")
+        except Exception as e:
+            print(f"    ⚠️  Error processing trace: {e}")
+            return False
+        try:
+            os.remove(err_file)
+        except:
+            pass
+        return True
+    return False
+
+
+def run_astrasim(workload_path, system, network, memory, output_dir, network_log, sim_type, suffix=None, return_pid=False, keep_trace=False):
     #astrasim_root = os.environ.get("ASTRA_SIM")
     #if astrasim_root is None:
     #    raise RuntimeError("ASTRA_SIM is not set.")
@@ -242,16 +281,20 @@ def run_astrasim(workload_path, system, network, memory, output_dir, network_log
         f"--network-log={network_log_file} "
     )
     
-    success = run_command(cmd)
-    if success:
-        err_file = f'{log}.err'
-        if os.path.exists(err_file) and os.path.getsize(err_file) == 0:
-            try:
-                get_timings_df(f"{log}_trace.csv", f"{log}_trace_matched_timing.csv")
-            except Exception as e:
-                print(f"    ⚠️  Error run_astrasim: {e} : {cmd}")
-                # Continue even if trace processing fails - the simulation itself succeeded
-    return "" if success else cmd
+    if return_pid:
+        process, identifier, start_time = run_command(cmd, return_pid=True)
+        pid = process.pid
+        # Return process object and metadata immediately without waiting
+        # Caller is responsible for calling process.wait() and post-processing
+        return process, pid, log, keep_trace
+    else:
+        success = run_command(cmd)
+        pid = None
+    
+        if success:
+            post_process_simulation(log, keep_trace)
+    
+        return "" if success else cmd
 
 
 if __name__ == "__main__":
@@ -303,7 +346,7 @@ if __name__ == "__main__":
         sim_type=args.sim_type,
     )
 
-    with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.70)) as pool:
+    with multiprocessing.Pool(int(10)) as pool:
         failed_cmds = pool.map(func, design_space)
         print("\n\nrunfails:")
         for cmd in failed_cmds:

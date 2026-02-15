@@ -25,6 +25,7 @@ See examples/ directory for full documentation.
 # Core modules
 from .core.search_space_builder import SearchSpaceBuilder, create_search_space
 from .core.simulation_runner import SimulationRunner
+from .core.simulation_tracker import SimulationTracker
 from .core.base_optimizer import BaseOptimizer
 from .helper import config_to_tuple, tuple_to_config
 
@@ -86,6 +87,7 @@ if BO_AVAILABLE and DEEPHYPER_AVAILABLE:
         'SearchSpaceBuilder',
         'create_search_space',
         'SimulationRunner',
+        'SimulationTracker',
         'BaseOptimizer',
         # Helpers
         'config_to_tuple',
@@ -128,6 +130,7 @@ elif BO_AVAILABLE:
         'SearchSpaceBuilder',
         'create_search_space',
         'SimulationRunner',
+        'SimulationTracker',
         'BaseOptimizer',
         # Helpers
         'config_to_tuple',
@@ -169,6 +172,7 @@ elif DEEPHYPER_AVAILABLE:
         'SearchSpaceBuilder',
         'create_search_space',
         'SimulationRunner',
+        'SimulationTracker',
         'BaseOptimizer',
         # Helpers
         'config_to_tuple',
@@ -196,6 +200,7 @@ else:
         'SearchSpaceBuilder',
         'create_search_space',
         'SimulationRunner',
+        'SimulationTracker',
         'BaseOptimizer',
         # Helpers
         'config_to_tuple',

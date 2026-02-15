@@ -36,13 +36,13 @@ def main():
     """Run DeepHyper Bayesian Optimization example."""
     
     # Configuration
-    MODEL_NUM = 19 # GPT_40B (Model enum value)
-    MODEL_NAME = "GPT_40B_analytical_sync_obj_time_network_56_layer"  # Descriptive name for results folder and plots
-    NUM_NPUS = 64
+    MODEL_NUM = 5 # GPT_40B (Model enum value)
+    MODEL_NAME = "GPT_1300_analytical_test_op"  # Descriptive name for results folder and plots
+    NUM_NPUS = 16
     NETWORK_NAME = "FoldedClos"
-    BUDGET = 300
-    INIT_SAMPLES = 50
-    N_WORKERS = 8
+    BUDGET = 50
+    INIT_SAMPLES = 20
+    N_WORKERS = 4
     Objective_0_Name = "Execution Time (s)"
     Objective_1_Name = "Network Total BW (GB/s)"
     
@@ -54,7 +54,8 @@ def main():
     print(f"NPUs: {NUM_NPUS}")
     print(f"Network: {NETWORK_NAME}")
     print(f"Budget: {BUDGET} evaluations")
-    print(f"Workers: {N_WORKERS} (parallel evaluation)\n")
+    print(f"Workers: {N_WORKERS} (parallel evaluation)")
+    print(f"Tracker: Enabled (kill at 1.5x threshold)\n")
     
     # 1. Setup search space
     print("1. Creating search space...")
@@ -101,7 +102,7 @@ def main():
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_DEEPHYPER",
         verbose=True,
-        #net_sim_config=net_sim_config 
+        net_sim_config=net_sim_config 
     )
     print(f"   Using: {sim_runner}")
     
@@ -141,11 +142,17 @@ def main():
         evaluator_method="process",        
         acq_optimizer_kwargs={"max_total_failures": -1, "acq_optimizer_freq": 2},
         moo_scalarization_strategy="AugChebyshev",
-        moo_scalarization_weight=[0.25, 0.75],
+        moo_scalarization_weight=[0.5, 0.5],
         # Use DeepHyper's built-in scaler for normalization
         #objective_scaler="minmax"  # Options: "minmax", "standardize", "identity"
+        # Tracker for early termination (enabled by default)
+        enable_tracker=True,
+        tracker_kill_multiplier=1.5,
+        tracker_initial_threshold=1e15  
     )
     print(f"   Using: {optimizer}")
+    if optimizer.tracker:
+        print(f"   Tracker: {optimizer.tracker}")
     
     # 6. Run optimization
     print("\n" + "="*70)
@@ -167,6 +174,21 @@ def main():
         print(f"   {config_str}")
         print(f"   Score: {format_score(optimizer.best_score)}")
         print(f"\n📊 History saved with {len(history)} evaluations")
+        
+        # Show tracker statistics
+        if optimizer.tracker:
+            status = optimizer.tracker.get_status()
+            print(f"\n⚡ TRACKER STATISTICS:")
+            print(f"   Final threshold: {status['threshold']:.2e} cycles")
+            print(f"   Kill threshold: {status['kill_threshold']:.2e} cycles")
+            print(f"   Total checks: {status.get('total_checked', 0)}")
+            print(f"   Total killed: {status.get('total_killed', 0)}")
+            killed_count = history['was_killed'].sum() if 'was_killed' in history.columns else 0
+            kill_percentage = (killed_count / len(history) * 100) if len(history) > 0 else 0
+            print(f"   Simulations killed: {killed_count}/{len(history)} ({kill_percentage:.1f}%)")
+            if killed_count > 0:
+                print(f"   ✅ Saved time by terminating {killed_count} slow simulation(s) early")
+        
         print(f"\n💡 TIP: Check deephyper_results.csv for detailed DeepHyper output")
     
     
@@ -184,7 +206,7 @@ def main():
             # Get the CSV file path
             csv_path = os.path.join(optimizer.save_dir, optimizer.results_filename)
             model_name = getattr(optimizer.simulation_runner, 'model_name', 'model')
-            output_base = os.path.join(optimizer.save_dir, f"pareto_front_{model_name}")
+            output_base = os.path.join(optimizer.save_dir, f"./experiments/pareto_front_{model_name}")
             
             # Generate both HTML and PNG plots
             pareto_plots = plot_pareto_front(

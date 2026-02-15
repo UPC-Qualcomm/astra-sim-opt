@@ -14,6 +14,7 @@ import yaml
 # Add parent directory to path for imports
 sys.path.append(os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..core import BaseOptimizer
+from ..core.simulation_tracker import SimulationTracker
 from ..helper import evaluate_config_worker, workload_generator
 
 try:
@@ -46,6 +47,11 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
         
         if exec_time is None:
             return "F"
+        
+        # Update tracker threshold if exec_time improved
+        tracker = optimizer_state.get('tracker')
+        if tracker and exec_time:
+            tracker.update_threshold(exec_time)
         
         # Cache exec_time and config files for enrichment
         if 'extra_data_cache' in optimizer_state:
@@ -141,6 +147,10 @@ class DeepHyperOptimizer(BaseOptimizer):
         profile_time: bool = False,
         evaluator_method: str = "process",
         results_filename: Optional[str] = None,
+        # Simulation tracking
+        enable_tracker: bool = True,
+        tracker_kill_multiplier: float = 1.5,
+        tracker_initial_threshold: float = 1e15,
         # Additional kwargs
         problem_kwargs: Optional[Dict] = None,
         cbo_kwargs: Optional[Dict] = None
@@ -196,6 +206,11 @@ class DeepHyperOptimizer(BaseOptimizer):
             keep_top_k: Keep top K results files (-1 = all, 0 = none)
             profile_time: Track detailed timing statistics
             evaluator_method: Parallel evaluation method ("process" or "thread")
+            
+            # Simulation tracking
+            enable_tracker: Enable early termination of slow simulations (default True)
+            tracker_kill_multiplier: Kill simulations exceeding threshold * multiplier (default 1.5)
+            tracker_initial_threshold: Initial threshold in cycles (default 1e15)
             
             # Additional overrides
             problem_kwargs: Additional HpProblem arguments (advanced)
@@ -254,17 +269,19 @@ class DeepHyperOptimizer(BaseOptimizer):
             if random_state is not None:
                 py_random.seed(random_state)
             
-            # Sample initial points for both CBO and RandomSearch
-            # RandomSearch will continue sampling from design space via overridden _ask method
-            n_init = min(init_samples if n_initial_points is None else n_initial_points, len(search_space.design_space))
-            # For random search with init_samples=0, we still sample at least 1 to avoid empty list
-            if search_type.lower() == "random" and n_init == 0:
-                n_init = 1
-            
-            self.initial_points = py_random.sample(search_space.design_space, n_init)
-            self.n_initial_points = len(self.initial_points)
-            if self.verbose:
-                print(f"✓ Sampled {n_init} initial points from valid configurations")
+            # For RandomSearch, don't provide initial_points - let it sample randomly
+            if search_type.lower() == "random":
+                self.initial_points = None
+                self.n_initial_points = 0
+                if self.verbose:
+                    print(f"✓ Random search will sample from {len(search_space.design_space)} valid configurations")
+            else:
+                # Sample initial points for CBO
+                n_init = min(init_samples if n_initial_points is None else n_initial_points, len(search_space.design_space))
+                self.initial_points = py_random.sample(search_space.design_space, n_init)
+                self.n_initial_points = len(self.initial_points)
+                if self.verbose:
+                    print(f"✓ Sampled {n_init} initial points from valid configurations")
         else:
             self.initial_points = initial_points
             self.n_initial_points = n_initial_points if n_initial_points is not None else init_samples
@@ -305,6 +322,21 @@ class DeepHyperOptimizer(BaseOptimizer):
         self._manager = Manager()
         self.extra_data_cache = self._manager.dict()
         # Note: self.file_paths is already initialized as [] in BaseOptimizer
+        
+        # Initialize simulation tracker for early termination
+        self.enable_tracker = enable_tracker
+        if enable_tracker:
+            self.tracker = SimulationTracker(
+                initial_threshold=tracker_initial_threshold,
+                kill_multiplier=tracker_kill_multiplier,
+                verbose=verbose
+            )
+            # Set tracker in simulation runner
+            self.simulation_runner.tracker = self.tracker
+            if self.verbose:
+                print(f"✓ Simulation tracker enabled (kill at {tracker_kill_multiplier}x threshold)")
+        else:
+            self.tracker = None
     
     def initialize(self) -> bool:
         """Initialize DeepHyper components (HpProblem, Evaluator, CBO)."""
@@ -417,17 +449,22 @@ class DeepHyperOptimizer(BaseOptimizer):
             This function is used by:
             1. CBO's acquisition optimizer (mixedga) for constraint-satisfying sampling
             2. RandomSearch's overridden _ask() method for uniform random sampling
+            
+            Uses numpy's RandomState for reproducibility with thread-safety.
             """
-            import random
-            # Seed for reproducibility if random_state is set
-            if self.random_state is not None:
-                random.seed(self.random_state)  # Add n_samples to avoid same seed each call
+            # Use numpy for reproducible random sampling
+            # Each call advances the state, giving different samples while maintaining reproducibility
             sampled = []
             for _ in range(n_samples):
-                # Randomly select a valid configuration
-                config = random.choice(valid_configs)
+                # Randomly select a valid configuration using numpy
+                idx = np.random.randint(0, len(valid_configs))
+                config = valid_configs[idx]
                 sampled.append(config)
             return sampled
+        
+        # Seed numpy's global random state for reproducibility
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
         
         # Set constraint and sampling functions
         problem.set_constraint_fn(constraint_fn)
@@ -451,7 +488,8 @@ class DeepHyperOptimizer(BaseOptimizer):
             'simulation_runner': self.simulation_runner,
             'objective': self.objective,
             'clusters': getattr(self.search_space, 'clusters', None),
-            'extra_data_cache': self.extra_data_cache
+            'extra_data_cache': self.extra_data_cache,
+            'tracker': self.tracker if self.enable_tracker else None
         }
         
         eval_func = partial(_deephyper_evaluate_wrapper, optimizer_state=optimizer_state)

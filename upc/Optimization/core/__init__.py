@@ -12,6 +12,7 @@ from .sampler import (
 )
 from .base_optimizer import BaseOptimizer
 from .simulation_runner import SimulationRunner
+from .simulation_tracker import SimulationTracker
 from .time_statistics import TimeStatistics
 from .categorical_encoder import get_numerical, get_str
 from .objective import (
@@ -32,6 +33,7 @@ __all__ = [
     'GridSampler',
     'BaseOptimizer',
     'SimulationRunner',
+    'SimulationTracker',
     'TimeStatistics',
     'get_numerical',
     'get_str',
