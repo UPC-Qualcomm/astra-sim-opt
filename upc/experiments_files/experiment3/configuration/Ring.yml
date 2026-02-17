@@ -1,0 +1,6 @@
+topology: [ Ring ]
+npus_count: [ 16 ]
+bandwidth: [ 25.0 ]  # GB/s
+latency: [ 500.0 ]  # ns
+packet_size: 9000  # in bytes
+header_size: 36   # in bytes
