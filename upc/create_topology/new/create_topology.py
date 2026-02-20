@@ -3,14 +3,19 @@ Topology classes for HPC Interconnects
 Supports: Dragonfly, Folded-Clos, Jellyfish
 
 Extended with intra-server/intra-node topology support:
-- Server: Physical machine connected to main topology switch via ToR
+- Server: Physical machine connected to main topology switch
 - Node: Subdivision within server, each with its own NVSwitch/NIC
 - NPU: Processing units within each node
 
+The topology switches themselves serve as the ToR:
+- Dragonfly: All switches are ToRs
+- Jellyfish: All switches are ToRs  
+- FoldedClos: Edge switches are ToRs
+
 Intra-node topology types:
-- 'switch': NPUs connect to NVSwitch(es), NVSwitch connects to ToR
-- 'ring': NPUs have switches in a ring, NIC connects to ToR
-- 'fully_connected': NPUs have fully connected switches, NIC connects to ToR
+- 'switch': NPUs connect to NVSwitch(es), NVSwitch connects to main switch (ToR)
+- 'ring': NPUs have switches in a ring, NIC connects to main switch (ToR)
+- 'fully_connected': NPUs have fully connected switches, NIC connects to main switch (ToR)
 """
 
 import json, sys
@@ -29,16 +34,19 @@ class IntraNodeTopologyMixin:
     - Node: Subdivision within server (nodes_per_server)
     - NPU: Processing units within node (npus_per_node)
     
+    The main topology switches serve directly as ToRs (no separate ToR level).
+    
     Structure for 'switch' topology:
-        NPUs <-> NVSwitch(es) <-> ToR <-> main_switch
+        NPUs <-> NVSwitch(es) <-> main_switch
         
     Structure for 'ring'/'fully_connected' topology:
-        NPUs <-> NPU-switches <-> NIC <-> ToR <-> main_switch
+        NPUs <-> NPU-switches <-> NIC <-> main_switch
     """
     
     def init_intra_node_config(self, nodes_per_server=1, npus_per_node=1, 
                                 intra_node_topology=None, num_nvswitches=1, 
-                                intra_node_bw=None, inter_node_bw=None):
+                                intra_node_bw=None, inter_node_bw=None,
+                                intra_node_latency=None, inter_node_latency=None):
         """Initialize intra-server/intra-node configuration parameters."""
         self.nodes_per_server = nodes_per_server
         self.npus_per_node = npus_per_node
@@ -46,9 +54,11 @@ class IntraNodeTopologyMixin:
         self.num_nvswitches = num_nvswitches  # Only used for 'switch' topology
         self.intra_node_bw = intra_node_bw  # Bandwidth within node (NPU to NVSwitch)
         self.inter_node_bw = inter_node_bw  # Bandwidth to ToR
+        self.intra_node_latency = intra_node_latency if intra_node_latency is not None else 0.0
+        self.inter_node_latency = inter_node_latency if inter_node_latency is not None else 0.0
         
         # Tracking for topology elements
-        self.tor_switches = []  # List of ToR switch names (one per server)
+        self.tor_switches = []  # List of main switches serving as ToRs
         self.nvswitch_ids = []  # List of NVSwitch names (for 'switch' topology)
         self.npu_switches = []  # List of NPU switch names (for ring/fully_connected)
         self.nic_switches = []  # List of NIC switch names (for ring/fully_connected)
@@ -57,10 +67,11 @@ class IntraNodeTopologyMixin:
         self.server_nodes = {}  # Maps server_id -> list of node_ids
         self.node_npus = {}  # Maps node_id -> list of NPU names
         self.npu_to_intra_switches = {}  # Maps NPU -> list of intra-node switch names
-        self.server_to_tor = {}  # Maps server_id -> ToR switch name
+        self.server_to_tor = {}  # Maps server_id -> main switch name (which IS the ToR)
         
     def build_server_topology(self, server_id, main_switch, links, link_bandwidths, 
-                               link_id_start, switch_id_start, npu_id_start, node_id_start):
+                               link_id_start, switch_id_start, npu_id_start, node_id_start,
+                               link_latencies=None):
         """
         Build complete server topology including all nodes and NPUs.
         
@@ -73,6 +84,7 @@ class IntraNodeTopologyMixin:
             switch_id_start: Starting switch ID for new switches
             npu_id_start: Starting NPU ID
             node_id_start: Starting node ID
+            link_latencies: Dictionary to add latencies to (optional)
             
         Returns:
             (next_link_id, next_switch_id, next_npu_id, next_node_id, tor_switch, npus_list)
@@ -88,6 +100,8 @@ class IntraNodeTopologyMixin:
         # Calculate bandwidths
         intra_bw = self.intra_node_bw if self.intra_node_bw else 1.0
         inter_bw = self.inter_node_bw if self.inter_node_bw else 1.0
+        intra_latency = self.intra_node_latency if self.intra_node_latency else 0.0
+        inter_latency = self.inter_node_latency if self.inter_node_latency else 0.0
         
         # For switch topology with multiple NVSwitches, multiply bandwidth
         if self.intra_node_topology == 'switch':
@@ -106,18 +120,22 @@ class IntraNodeTopologyMixin:
                     
                     links[link_id] = (npu, main_switch)
                     link_bandwidths[link_id] = inter_bw
+                    if link_latencies is not None:
+                        link_latencies[link_id] = inter_latency
                     link_id += 1
                     links[link_id] = (main_switch, npu)
                     link_bandwidths[link_id] = inter_bw
+                    if link_latencies is not None:
+                        link_latencies[link_id] = inter_latency
                     link_id += 1
                     
             return link_id, switch_id, npu_id, node_id, None, all_npus
         
-        # Create ToR switch for this server
-        tor_switch = f"s{switch_id}"
-        switch_id += 1
-        self.tor_switches.append(tor_switch)
-        self.server_to_tor[server_id] = tor_switch
+        # The main_switch itself serves as the ToR (no separate ToR switch)
+        # Track this for backwards compatibility
+        if main_switch not in self.tor_switches:
+            self.tor_switches.append(main_switch)
+        self.server_to_tor[server_id] = main_switch
         
         # Build each node within the server
         for n in range(self.nodes_per_server):
@@ -131,45 +149,42 @@ class IntraNodeTopologyMixin:
             self.server_nodes[server_id].append(node_id)
             
             # Build intra-node topology for this node
+            # Connect directly to main_switch (which IS the ToR)
             if self.intra_node_topology == 'switch':
                 link_id, switch_id = self._build_node_switch_topology(
-                    node_id, npus, tor_switch, links, link_bandwidths,
-                    link_id, switch_id, effective_intra_bw, inter_bw
+                    node_id, npus, main_switch, links, link_bandwidths,
+                    link_id, switch_id, effective_intra_bw, inter_bw,
+                    link_latencies=link_latencies, intra_latency=intra_latency, inter_latency=inter_latency
                 )
             elif self.intra_node_topology == 'ring':
                 link_id, switch_id = self._build_node_ring_topology(
-                    node_id, npus, tor_switch, links, link_bandwidths,
-                    link_id, switch_id, effective_intra_bw, inter_bw
+                    node_id, npus, main_switch, links, link_bandwidths,
+                    link_id, switch_id, effective_intra_bw, inter_bw,
+                    link_latencies=link_latencies, intra_latency=intra_latency, inter_latency=inter_latency
                 )
             elif self.intra_node_topology == 'fully_connected':
                 link_id, switch_id = self._build_node_fully_connected_topology(
-                    node_id, npus, tor_switch, links, link_bandwidths,
-                    link_id, switch_id, effective_intra_bw, inter_bw
+                    node_id, npus, main_switch, links, link_bandwidths,
+                    link_id, switch_id, effective_intra_bw, inter_bw,
+                    link_latencies=link_latencies, intra_latency=intra_latency, inter_latency=inter_latency
                 )
             
             node_id += 1
         
-        # Connect ToR to main switch
-        links[link_id] = (tor_switch, main_switch)
-        link_bandwidths[link_id] = inter_bw
-        link_id += 1
-        links[link_id] = (main_switch, tor_switch)
-        link_bandwidths[link_id] = inter_bw
-        link_id += 1
-        
-        return link_id, switch_id, npu_id, node_id, tor_switch, all_npus
+        return link_id, switch_id, npu_id, node_id, main_switch, all_npus
     
     def _build_node_switch_topology(self, node_id, npus, tor_switch, 
                                      links, link_bandwidths, link_id, switch_id, 
-                                     intra_bw, inter_bw):
+                                     intra_bw, inter_bw,
+                                     link_latencies=None, intra_latency=0.0, inter_latency=0.0):
         """
         Build switch (NVSwitch) topology for a single node.
-        NPUs connect to NVSwitch(es), NVSwitch(es) connect to ToR.
+        NPUs connect to NVSwitch(es), NVSwitch(es) connect to main switch (ToR).
         """
         # Create NVSwitch(es) for this node
         node_nvswitches = []
         for i in range(self.num_nvswitches):
-            nvswitch = f"s{switch_id}"
+            nvswitch = f"v{switch_id}"
             switch_id += 1
             node_nvswitches.append(nvswitch)
             self.nvswitch_ids.append(nvswitch)
@@ -181,38 +196,47 @@ class IntraNodeTopologyMixin:
             for nvswitch in node_nvswitches:
                 links[link_id] = (npu, nvswitch)
                 link_bandwidths[link_id] = intra_bw / self.num_nvswitches
+                if link_latencies is not None:
+                    link_latencies[link_id] = intra_latency
                 link_id += 1
                 links[link_id] = (nvswitch, npu)
                 link_bandwidths[link_id] = intra_bw / self.num_nvswitches
+                if link_latencies is not None:
+                    link_latencies[link_id] = intra_latency
                 link_id += 1
         
-        # Connect NVSwitch(es) to ToR
+        # Connect NVSwitch(es) to main switch (ToR)
         for nvswitch in node_nvswitches:
             links[link_id] = (nvswitch, tor_switch)
             link_bandwidths[link_id] = inter_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = inter_latency
             link_id += 1
             links[link_id] = (tor_switch, nvswitch)
             link_bandwidths[link_id] = inter_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = inter_latency
             link_id += 1
         
         return link_id, switch_id
     
     def _build_node_ring_topology(self, node_id, npus, tor_switch,
                                    links, link_bandwidths, link_id, switch_id,
-                                   intra_bw, inter_bw):
+                                   intra_bw, inter_bw,
+                                   link_latencies=None, intra_latency=0.0, inter_latency=0.0):
         """
         Build ring topology for a single node.
-        Each NPU has a switch, switches in a ring, NIC connects to ToR.
+        Each NPU has a switch, switches in a ring, NIC connects to main switch (ToR).
         """
         # Create NIC switch for this node (connects to ToR)
-        nic_switch = f"s{switch_id}"
+        nic_switch = f"n{switch_id}"
         switch_id += 1
         self.nic_switches.append(nic_switch)
         
         # Create a switch for each NPU
         node_npu_switches = []
         for i, npu in enumerate(npus):
-            npu_sw = f"s{switch_id}"
+            npu_sw = f"p{switch_id}"
             switch_id += 1
             node_npu_switches.append(npu_sw)
             self.npu_switches.append(npu_sw)
@@ -222,17 +246,25 @@ class IntraNodeTopologyMixin:
             # Connect NPU to its switch
             links[link_id] = (npu, npu_sw)
             link_bandwidths[link_id] = intra_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = intra_latency
             link_id += 1
             links[link_id] = (npu_sw, npu)
             link_bandwidths[link_id] = intra_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = intra_latency
             link_id += 1
             
             # Connect NPU switch to NIC
             links[link_id] = (npu_sw, nic_switch)
             link_bandwidths[link_id] = inter_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = inter_latency
             link_id += 1
             links[link_id] = (nic_switch, npu_sw)
             link_bandwidths[link_id] = inter_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = inter_latency
             link_id += 1
         
         # Connect switches in a ring
@@ -241,37 +273,46 @@ class IntraNodeTopologyMixin:
             next_i = (i + 1) % n
             links[link_id] = (node_npu_switches[i], node_npu_switches[next_i])
             link_bandwidths[link_id] = intra_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = intra_latency
             link_id += 1
             links[link_id] = (node_npu_switches[next_i], node_npu_switches[i])
             link_bandwidths[link_id] = intra_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = intra_latency
             link_id += 1
         
-        # Connect NIC to ToR
+        # Connect NIC to main switch (ToR)
         links[link_id] = (nic_switch, tor_switch)
         link_bandwidths[link_id] = inter_bw
+        if link_latencies is not None:
+            link_latencies[link_id] = inter_latency
         link_id += 1
         links[link_id] = (tor_switch, nic_switch)
         link_bandwidths[link_id] = inter_bw
+        if link_latencies is not None:
+            link_latencies[link_id] = inter_latency
         link_id += 1
         
         return link_id, switch_id
     
     def _build_node_fully_connected_topology(self, node_id, npus, tor_switch,
                                               links, link_bandwidths, link_id, switch_id,
-                                              intra_bw, inter_bw):
+                                              intra_bw, inter_bw,
+                                              link_latencies=None, intra_latency=0.0, inter_latency=0.0):
         """
         Build fully connected topology for a single node.
-        Each NPU has a switch, all switches fully connected, NIC connects to ToR.
+        Each NPU has a switch, all switches fully connected, NIC connects to main switch (ToR).
         """
         # Create NIC switch for this node (connects to ToR)
-        nic_switch = f"s{switch_id}"
+        nic_switch = f"n{switch_id}"
         switch_id += 1
         self.nic_switches.append(nic_switch)
         
         # Create a switch for each NPU
         node_npu_switches = []
         for i, npu in enumerate(npus):
-            npu_sw = f"s{switch_id}"
+            npu_sw = f"p{switch_id}"
             switch_id += 1
             node_npu_switches.append(npu_sw)
             self.npu_switches.append(npu_sw)
@@ -281,17 +322,25 @@ class IntraNodeTopologyMixin:
             # Connect NPU to its switch
             links[link_id] = (npu, npu_sw)
             link_bandwidths[link_id] = intra_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = intra_latency
             link_id += 1
             links[link_id] = (npu_sw, npu)
             link_bandwidths[link_id] = intra_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = intra_latency
             link_id += 1
             
             # Connect NPU switch to NIC
             links[link_id] = (npu_sw, nic_switch)
             link_bandwidths[link_id] = inter_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = inter_latency
             link_id += 1
             links[link_id] = (nic_switch, npu_sw)
             link_bandwidths[link_id] = inter_bw
+            if link_latencies is not None:
+                link_latencies[link_id] = inter_latency
             link_id += 1
         
         # Fully connect all switches
@@ -300,17 +349,25 @@ class IntraNodeTopologyMixin:
             for j in range(i + 1, n):
                 links[link_id] = (node_npu_switches[i], node_npu_switches[j])
                 link_bandwidths[link_id] = intra_bw
+                if link_latencies is not None:
+                    link_latencies[link_id] = intra_latency
                 link_id += 1
                 links[link_id] = (node_npu_switches[j], node_npu_switches[i])
                 link_bandwidths[link_id] = intra_bw
+                if link_latencies is not None:
+                    link_latencies[link_id] = intra_latency
                 link_id += 1
         
-        # Connect NIC to ToR
+        # Connect NIC to main switch (ToR)
         links[link_id] = (nic_switch, tor_switch)
         link_bandwidths[link_id] = inter_bw
+        if link_latencies is not None:
+            link_latencies[link_id] = inter_latency
         link_id += 1
         links[link_id] = (tor_switch, nic_switch)
         link_bandwidths[link_id] = inter_bw
+        if link_latencies is not None:
+            link_latencies[link_id] = inter_latency
         link_id += 1
         
         return link_id, switch_id
@@ -335,7 +392,7 @@ class IntraNodeTopologyMixin:
         """
         Generate paths between two NPUs in the same node using intra-node topology.
         Returns a list of paths (each path is a list of node names).
-        Does NOT use ToR - stays within intra-node topology.
+        Stays within intra-node topology.
         """
         if self.intra_node_topology is None or self.npus_per_node == 1:
             # Direct connection
@@ -375,7 +432,7 @@ class IntraNodeTopologyMixin:
 
 
 class CustomizedDragonfly(IntraNodeTopologyMixin):
-    def __init__(self, G, A, h=1, concentration=1, bandwidth_config=None,
+    def __init__(self, G, A, h=1, concentration=1, bandwidth_config=None, latency_config=None,
                  nodes_per_server=1, npus_per_node=1, intra_node_topology=None, num_nvswitches=1):
         self.name = "dragonfly"
         self.num_groups = G  # number of groups
@@ -405,17 +462,27 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         self.bandwidth_config = bandwidth_config if bandwidth_config else {}
         self.link_bandwidths = {}
         
+        # Latency Configuration
+        # Expected keys: 'host_switch' (or 'inter_node'), 'intra_group', 'inter_group', 'intra_node'
+        self.latency_config = latency_config if latency_config else {}
+        self.link_latencies = {}
+        
         # Initialize intra-node configuration from mixin
         intra_node_bw = self.bandwidth_config.get('intra_node', 1.0)
         inter_node_bw = self.bandwidth_config.get('host_switch', 
                          self.bandwidth_config.get('inter_node', 1.0))
+        intra_node_latency = self.latency_config.get('intra_node', 0.0)
+        inter_node_latency = self.latency_config.get('host_switch',
+                              self.latency_config.get('inter_node', 0.0))
         self.init_intra_node_config(
             nodes_per_server=nodes_per_server,
             npus_per_node=npus_per_node,
             intra_node_topology=intra_node_topology,
             num_nvswitches=num_nvswitches,
             intra_node_bw=intra_node_bw,
-            inter_node_bw=inter_node_bw
+            inter_node_bw=inter_node_bw,
+            intra_node_latency=intra_node_latency,
+            inter_node_latency=inter_node_latency
         ) 
    
     def NumServers(self):
@@ -531,14 +598,14 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         for src in range(self.total_num_switches):
             for dst in range(src, self.total_num_switches):
                 if self.adjacency_matrix[src][dst] != 0:
-                    str_builder += ("({},s{},s{});".format(count,src+1, dst+1))
-                    links.append( ("s{}".format(src+1), "s{}".format(dst+1) ) )
+                    str_builder += ("({},t{},t{});".format(count,src+1, dst+1))
+                    links.append( ("t{}".format(src+1), "t{}".format(dst+1) ) )
                     count += 1
         host_num = 1
         for switch_num in range(1, self.total_num_switches + 1):
             for _ in range(self.concentration_factor):
-                str_builder += ("({},h{},s{});".format(count, host_num, switch_num))
-                links.append( ("h{}".format(host_num), "s{}".format(switch_num)) )
+                str_builder += ("({},h{},t{});".format(count, host_num, switch_num))
+                links.append( ("h{}".format(host_num), "t{}".format(switch_num)) )
                 host_num += 1
                 count += 1
         return links, str_builder, count
@@ -570,7 +637,7 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         npu_num = 1
         
         for switch_num in range(1, self.total_num_switches + 1):
-            main_switch = f"s{switch_num}"
+            main_switch = f"t{switch_num}"
             
             for _ in range(self.concentration_factor):
                 # Build the full server topology: Server -> Nodes -> NPUs
@@ -582,7 +649,8 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
                     link_id_start=link_id,
                     switch_id_start=switch_id,
                     npu_id_start=npu_num,
-                    node_id_start=node_num
+                    node_id_start=node_num,
+                    link_latencies=self.link_latencies
                 )
                 link_id, switch_id, npu_num, node_num, tor_switch, server_npus = result
                 
@@ -613,6 +681,8 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         
         intra_bw = self.bandwidth_config.get('intra_group', 1.0)
         inter_bw = self.bandwidth_config.get('inter_group', 1.0)
+        intra_lat = self.latency_config.get('intra_group', 0.0)
+        inter_lat = self.latency_config.get('inter_group', 0.0)
         
         # Convert interpod_links to set for faster lookup
         interpod_set = set(self.interpod_links)
@@ -621,13 +691,15 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         for src in range(self.total_num_switches):
             for dst in range(src, self.total_num_switches):
                 if self.adjacency_matrix[src][dst] != 0:
-                    self.links[link_id] = ("s{}".format(src+1), "s{}".format(dst+1))
+                    self.links[link_id] = ("t{}".format(src+1), "t{}".format(dst+1))
                     
-                    # Determine bandwidth
+                    # Determine bandwidth and latency
                     if (src, dst) in interpod_set or (dst, src) in interpod_set:
                         self.link_bandwidths[link_id] = inter_bw
+                        self.link_latencies[link_id] = inter_lat
                     else:
                         self.link_bandwidths[link_id] = intra_bw
+                        self.link_latencies[link_id] = intra_lat
                         
                     link_id += 1
         
@@ -635,6 +707,7 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         for i in range(link_id - 1):
             self.links[i+link_id] = (self.links[i + 1][1], self.links[i + 1][0])
             self.link_bandwidths[i+link_id] = self.link_bandwidths[i+1]
+            self.link_latencies[i+link_id] = self.link_latencies[i+1]
    
     def addFlowsToFlowDict(self,flow_id,flowLinks):
         self.F[str(flow_id)] = []
@@ -647,8 +720,8 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
                 self.F[str(flow_id)] = []
 
     def addFlows(self, i, j): # for ECMP routing
-        src = "s"+str(i+1)
-        dst = "s"+str(j+1)
+        src = "t"+str(i+1)
+        dst = "t"+str(j+1)
         path_lists = self.paths[src][dst]
         path_list_len = len(path_lists)
         for path_list in path_lists:
@@ -661,8 +734,8 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         self.writeAdjacencyMatrixToLinks()
         G = nx.DiGraph(self.links.values())
         for link in self.interpod_links:
-            G.add_edge("s{}".format(link[0]+1),"s{}".format(link[1]+1),weight=2)
-            G.add_edge("s{}".format(link[1]+1),"s{}".format(link[0]+1),weight=2)
+            G.add_edge("t{}".format(link[0]+1),"t{}".format(link[1]+1),weight=2)
+            G.add_edge("t{}".format(link[1]+1),"t{}".format(link[0]+1),weight=2)
         paths = nx.shortest_path(G, weight='weight')
         return paths
 
@@ -675,8 +748,8 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         self.reverseL = dict( (v[0]+"-"+v[1],k)for k,v in self.links.items() )
         for i in range(len(tm)):
             for j in range(i+1, len(tm[i])):
-                src = "s"+str(i+1)
-                dst = "s"+str(j+1)
+                src = "t"+str(i+1)
+                dst = "t"+str(j+1)
                 if tm[i][j] != 0:
                     forwardPathList = paths[src][dst]
                     forwardFlowLinks = [(x,y) for x,y in zip(forwardPathList, forwardPathList[1:])]
@@ -697,16 +770,16 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         self.writeAdjacencyMatrixToLinks()
         G = nx.DiGraph(self.links.values())
         # for link in self.interpod_links:
-        #     G.add_edge("s{}".format(link[0]+1),"s{}".format(link[1]+1))
+        #     G.add_edge("t{}".format(link[0]+1),"t{}".format(link[1]+1))
         self.paths = {} # paths = defaultdict(lambda: defaultdict(list))
         # count = 0
         # all-to-all routing paths
         for i in range(1, int(self.total_num_switches+1)):
-            src = "s{}".format(i)
+            src = "t{}".format(i)
             self.paths[src] = {}
             for j in range(1, int(self.total_num_switches+1)):
                 if i != j:
-                    dst = "s{}".format(j)
+                    dst = "t{}".format(j)
                     self.paths[src][dst] = list(nx.all_shortest_paths(G,source=src,target=dst, weight="weight"))
                     # if len(self.paths[src][dst]) > 1: count += 1
        
@@ -725,7 +798,7 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
 
 
 class Jellyfish(IntraNodeTopologyMixin):
-    def __init__(self, num_switches, degree, seed=0, num_hosts_per_switch=1, bandwidth_config=None,
+    def __init__(self, num_switches, degree, seed=0, num_hosts_per_switch=1, bandwidth_config=None, latency_config=None,
                  nodes_per_server=1, npus_per_node=1, intra_node_topology=None, num_nvswitches=1):
         self.name = "jellyfish"
         self.num_switches = num_switches
@@ -736,7 +809,7 @@ class Jellyfish(IntraNodeTopologyMixin):
         random.seed(self.seed)
         self.adjacency_matrix = None
         self.links = None
-        self.nodes = ['s'+str(i) for i in range(1, num_switches+1)]
+        self.nodes = ['t'+str(i) for i in range(1, num_switches+1)]
         
         # Server/Node/NPU configuration (3-level hierarchy)
         self.nodes_per_server = nodes_per_server
@@ -758,17 +831,27 @@ class Jellyfish(IntraNodeTopologyMixin):
         self.bandwidth_config = bandwidth_config if bandwidth_config else {}
         self.link_bandwidths = {}
         
+        # Latency Configuration
+        # Expected keys: 'host_switch' (or 'inter_node'), 'switch_switch', 'intra_node'
+        self.latency_config = latency_config if latency_config else {}
+        self.link_latencies = {}
+        
         # Initialize intra-node configuration from mixin
         intra_node_bw = self.bandwidth_config.get('intra_node', 1.0)
         inter_node_bw = self.bandwidth_config.get('host_switch',
                          self.bandwidth_config.get('inter_node', 1.0))
+        intra_node_latency = self.latency_config.get('intra_node', 0.0)
+        inter_node_latency = self.latency_config.get('host_switch',
+                              self.latency_config.get('inter_node', 0.0))
         self.init_intra_node_config(
             nodes_per_server=nodes_per_server,
             npus_per_node=npus_per_node,
             intra_node_topology=intra_node_topology,
             num_nvswitches=num_nvswitches,
             intra_node_bw=intra_node_bw,
-            inter_node_bw=inter_node_bw
+            inter_node_bw=inter_node_bw,
+            intra_node_latency=intra_node_latency,
+            inter_node_latency=inter_node_latency
         )
 
     def NumServers(self):
@@ -793,18 +876,21 @@ class Jellyfish(IntraNodeTopologyMixin):
         self.link_weight = {}
         
         switch_bw = self.bandwidth_config.get('switch_switch', 1.0)
+        switch_lat = self.latency_config.get('switch_switch', 0.0)
         
         linkID = 1
         for src in range(len(self.adjacency_matrix)):
             for dst in range(src+1, len(self.adjacency_matrix[src])):
                 link_count = self.adjacency_matrix[src][dst]
                 while link_count > 0:
-                    self.links[linkID] = ("s" + str(src+1), "s" + str(dst+1))
+                    self.links[linkID] = ("t" + str(src+1), "t" + str(dst+1))
                     self.link_bandwidths[linkID] = switch_bw
+                    self.link_latencies[linkID] = switch_lat
                     linkID += 1
                     
-                    self.links[linkID] = ("s" + str(dst+1), "s" + str(src+1))
+                    self.links[linkID] = ("t" + str(dst+1), "t" + str(src+1))
                     self.link_bandwidths[linkID] = switch_bw
+                    self.link_latencies[linkID] = switch_lat
                     linkID += 1
                     
                     link_count -= 1
@@ -902,7 +988,7 @@ class Jellyfish(IntraNodeTopologyMixin):
         npu_num = 1
         
         for switch_num in range(1, self.num_switches + 1):
-            main_switch = f"s{switch_num}"
+            main_switch = f"t{switch_num}"
             
             for _ in range(self.num_hosts_per_switch):
                 # Build the full server topology: Server -> Nodes -> NPUs
@@ -914,7 +1000,8 @@ class Jellyfish(IntraNodeTopologyMixin):
                     link_id_start=link_id,
                     switch_id_start=switch_id,
                     npu_id_start=npu_num,
-                    node_id_start=node_num
+                    node_id_start=node_num,
+                    link_latencies=self.link_latencies
                 )
                 link_id, switch_id, npu_num, node_num, tor_switch, server_npus = result
                 
@@ -949,8 +1036,8 @@ class Jellyfish(IntraNodeTopologyMixin):
                 self.F[flow_id] = []
 
     def addFlows(self, i, j): # for ECMP routing
-        src = "s"+str(i+1)
-        dst = "s"+str(j+1)
+        src = "t"+str(i+1)
+        dst = "t"+str(j+1)
         path_lists = self.paths[src][dst]
         path_list_len = len(path_lists)
         for path_list in path_lists:
@@ -975,8 +1062,8 @@ class Jellyfish(IntraNodeTopologyMixin):
         self.reverseL = dict( (v[0]+"-"+v[1],k)for k,v in self.links.items() )
         for i in range(len(tm)):
             for j in range(i+1, len(tm[i])):
-                src = "s" + str(i+1)
-                dst = "s" + str(j+1)
+                src = "t" + str(i+1)
+                dst = "t" + str(j+1)
                 if tm[i][j] != 0:
                     forwardPathList = self.paths[src][dst]
                     forwardFlowLinks = [(x,y) for x,y in zip(forwardPathList, forwardPathList[1:])]
@@ -1001,11 +1088,11 @@ class Jellyfish(IntraNodeTopologyMixin):
         # paths = (nx.shortest_path(G))
         self.paths = {}
         for i in range(1, int(self.num_switches+1)):
-            src = "s{}".format(i)
+            src = "t{}".format(i)
             self.paths[src] = {}
             for j in range(1, int(self.num_switches+1)):
                 if i != j:
-                    dst = "s{}".format(j)
+                    dst = "t{}".format(j)
                     self.paths[src][dst] = list(nx.all_shortest_paths(G,source=src,target=dst))
         self.tm = tm
         self.F = {}
@@ -1022,7 +1109,7 @@ class Jellyfish(IntraNodeTopologyMixin):
 
 
 class FoldedClos(IntraNodeTopologyMixin):
-    def __init__(self, K, link_capacity=1, N=3, bandwidth_config=None,
+    def __init__(self, K, link_capacity=1, N=3, bandwidth_config=None, latency_config=None,
                  nodes_per_server=1, npus_per_node=1, intra_node_topology=None, num_nvswitches=1):
         self.name = "folded_clos"
         self.K = K
@@ -1035,7 +1122,7 @@ class FoldedClos(IntraNodeTopologyMixin):
         self.link_capacity = link_capacity
         self.adjacency_matrix = [[0] * self.totalNumSwitches for _ in range(self.totalNumSwitches)]
         self.num_switches = sum([K**n for n in range(N)])
-        self.switches = ['s'+str(i) for i in range(1, self.totalNumSwitches+1)]
+        self.switches = [self._switch_name(i) for i in range(1, self.totalNumSwitches+1)]
         
         # Server/Node/NPU configuration (3-level hierarchy)
         self.nodes_per_server = nodes_per_server
@@ -1062,23 +1149,52 @@ class FoldedClos(IntraNodeTopologyMixin):
         self.hosts = ['h'+str(i) for i in range(1, int(self.numHosts)+1)]
         self.nodes = self.hosts + self.switches
         
+        # Track FoldedClos switch layers
+        self.edge_switches = []   # Edge switches (these ARE the ToRs)
+        self.agg_switches = []    # Aggregation switches
+        self.core_switches = []   # Core switches
+        
         # Bandwidth Configuration
         # Expected keys: 'host_edge' (or 'inter_node'), 'edge_agg', 'agg_core', 'intra_node'
         self.bandwidth_config = bandwidth_config if bandwidth_config else {}
         self.link_bandwidths = {}
         
+        # Latency Configuration
+        # Expected keys: 'host_edge' (or 'inter_node'), 'edge_agg', 'agg_core', 'intra_node'
+        self.latency_config = latency_config if latency_config else {}
+        self.link_latencies = {}
+        
         # Initialize intra-node configuration from mixin
         intra_node_bw = self.bandwidth_config.get('intra_node', 1.0)
         inter_node_bw = self.bandwidth_config.get('host_edge',
                          self.bandwidth_config.get('inter_node', 1.0))
+        intra_node_latency = self.latency_config.get('intra_node', 0.0)
+        inter_node_latency = self.latency_config.get('host_edge',
+                              self.latency_config.get('inter_node', 0.0))
         self.init_intra_node_config(
             nodes_per_server=nodes_per_server,
             npus_per_node=npus_per_node,
             intra_node_topology=intra_node_topology,
             num_nvswitches=num_nvswitches,
             intra_node_bw=intra_node_bw,
-            inter_node_bw=inter_node_bw
+            inter_node_bw=inter_node_bw,
+            intra_node_latency=intra_node_latency,
+            inter_node_latency=inter_node_latency
         )
+
+    def _switch_name(self, idx):
+        """Map switch index to prefixed name based on layer type.
+        
+        Edge/ToR switches → 't', Aggregation switches → 'a', Core switches → 'c'.
+        """
+        core_start = int(self.numSwitchesPerPod * self.K + 1)
+        if idx >= core_start:
+            return f'c{idx}'
+        pos_in_pod = (idx - 1) % int(self.numSwitchesPerPod)
+        if pos_in_pod < self.numSwitchesPerPod // 2:
+            return f't{idx}'  # edge/ToR
+        else:
+            return f'a{idx}'  # aggregation
 
     def NumServers(self):
         return int(self.numHosts)
@@ -1105,6 +1221,11 @@ class FoldedClos(IntraNodeTopologyMixin):
         bw_edge_agg = self.bandwidth_config.get('edge_agg', 1.0)
         bw_agg_core = self.bandwidth_config.get('agg_core', 1.0)
         
+        lat_host_edge = self.latency_config.get('host_edge',
+                         self.latency_config.get('inter_node', 0.0))
+        lat_edge_agg = self.latency_config.get('edge_agg', 0.0)
+        lat_agg_core = self.latency_config.get('agg_core', 0.0)
+        
         # Track NPU and node information
         self.all_npus = []
         self.node_to_npus = {}
@@ -1118,7 +1239,12 @@ class FoldedClos(IntraNodeTopologyMixin):
         npu_num = 1
         node_num = 1
         server_num = 1
-        switch_id = self.totalNumSwitches + 1  # For new switches (ToR, NVSwitch, etc.)
+        switch_id = self.totalNumSwitches + 1  # For new switches (NVSwitch, etc.)
+        
+        # Populate core switches list
+        core_start = int(self.numSwitchesPerPod * self.K + 1)
+        core_end = int(core_start + self.numCoreSwitches)
+        self.core_switches = [f'c{i}' for i in range(core_start, core_end)]
         
         for pod in range(self.K):
             coreSwitchStart = int(self.numSwitchesPerPod * self.K + 1)
@@ -1126,10 +1252,20 @@ class FoldedClos(IntraNodeTopologyMixin):
             EdgeSwitchEnd = int((pod + 1/2) * self.numSwitchesPerPod)
             aggSwitchStart = int(EdgeSwitchEnd + 1)
             aggSwitchEnd = int(EdgeSwitchEnd + self.numSwitchesPerPod // 2)
+            
+            # Track edge and aggregation switches
+            for eS in range(EdgeSwitchStart, EdgeSwitchEnd + 1):
+                sw_name = f't{eS}'
+                if sw_name not in self.edge_switches:
+                    self.edge_switches.append(sw_name)
+            for aS in range(aggSwitchStart, aggSwitchEnd + 1):
+                sw_name = f'a{aS}'
+                if sw_name not in self.agg_switches:
+                    self.agg_switches.append(sw_name)
 
             # Connect servers (with nodes/NPUs) to edge switches
             for eS in range(EdgeSwitchStart, EdgeSwitchEnd + 1):
-                edge_switch = f"s{eS}"
+                edge_switch = f"t{eS}"
                 servers_per_edge = int(self.numSwitchPorts // 2)
                 
                 for s in range(servers_per_edge):
@@ -1142,7 +1278,8 @@ class FoldedClos(IntraNodeTopologyMixin):
                         link_id_start=linkID,
                         switch_id_start=switch_id,
                         npu_id_start=npu_num,
-                        node_id_start=node_num
+                        node_id_start=node_num,
+                        link_latencies=self.link_latencies
                     )
                     linkID, switch_id, npu_num, node_num, tor_switch, server_npus = result
                     
@@ -1167,14 +1304,16 @@ class FoldedClos(IntraNodeTopologyMixin):
             # Connect edge switches to aggregation switches
             for aS in range(aggSwitchStart, aggSwitchEnd + 1):
                 for eS in range(EdgeSwitchStart, EdgeSwitchEnd + 1):
-                    self.links[linkID] = (f's{aS}', f's{eS}')
+                    self.links[linkID] = (f'a{aS}', f't{eS}')
                     self.link_bandwidths[linkID] = bw_edge_agg
+                    self.link_latencies[linkID] = lat_edge_agg
                     linkID += 1
                     
                 # Connect aggregation switches to core switches
                 for cS in range(self.numSwitchPorts // 2):
-                    self.links[linkID] = (f's{coreSwitchStart + cS}', f's{aS}')
+                    self.links[linkID] = (f'c{coreSwitchStart + cS}', f'a{aS}')
                     self.link_bandwidths[linkID] = bw_agg_core
+                    self.link_latencies[linkID] = lat_agg_core
                     linkID += 1
                 coreSwitchStart += self.numSwitchPorts // 2
         
@@ -1184,6 +1323,7 @@ class FoldedClos(IntraNodeTopologyMixin):
             src, dst = self.links[i + 1]
             self.links[i + linkID] = (dst, src)
             self.link_bandwidths[i + linkID] = self.link_bandwidths[i + 1]
+            self.link_latencies[i + linkID] = self.link_latencies[i + 1]
             
         self.num_links = linkID
 
@@ -1205,7 +1345,7 @@ class FoldedClos(IntraNodeTopologyMixin):
             paths = GenerateUniformRouting(links, 4)
         """
 
-        assert (self.numCoreSwitches.is_integer() and self.numHosts.is_integer()),"K is not appropriate!"
+        assert (float(self.numCoreSwitches).is_integer() and float(self.numHosts).is_integer()),"K is not appropriate!"
         # start_time = time.time()
         G = nx.Graph()
         G.add_edges_from(self.links.values())
@@ -1225,7 +1365,7 @@ class FoldedClos(IntraNodeTopologyMixin):
                     eSrcID = podID * self.numSwitchesPerPod + esrc
                     eDstID = podID * self.numSwitchesPerPod + edst
                     aID    = podID * self.numSwitchesPerPod + self.numSwitchesPerPod // 2 + eOutPort
-                    paths["h" + str(int(hSrcID))]["h" + str(int(hDstID))] = ['h' + str(int(hSrcID)),'s' + str(int(eSrcID)),'s' + str(int(aID)),'s' + str(int(eDstID)),'h' + str(int(hDstID))]
+                    paths["h" + str(int(hSrcID))]["h" + str(int(hDstID))] = ['h' + str(int(hSrcID)),'t' + str(int(eSrcID)),'a' + str(int(aID)),'t' + str(int(eDstID)),'h' + str(int(hDstID))]
         # Inter-Pod routing
         # If source is the ith host in mth edge switch within pod k1, and destination is the jth host in nth edge switch within pod k2,
         # the routing will transverse ath aggregation switch in pod k1, a = (j + m) mod (k/2),
@@ -1245,7 +1385,7 @@ class FoldedClos(IntraNodeTopologyMixin):
                     aOutPort = int((hdst - 1 + eOutPort - 1) % (self.numSwitchesPerPod // 2 - tapering_num) + 1)
                     coreID = int(self.numSwitchesPerPod * self.K + (eOutPort - 1) * self.numSwitchPorts // 2 + aOutPort)
 
-                    paths["h" + str(hSrcID)]["h" + str(hDstID)] = ['h' + str(hSrcID),'s' + str(eSrcID),'s' + str(aSrcID),'s' + str(coreID),'s' + str(aDstID),'s' + str(eDstID),'h' + str(hDstID)]        
+                    paths["h" + str(hSrcID)]["h" + str(hDstID)] = ['h' + str(hSrcID),'t' + str(eSrcID),'a' + str(aSrcID),'c' + str(coreID),'a' + str(aDstID),'t' + str(eDstID),'h' + str(hDstID)]        
         # print("Time to generate all clos paths:", str(time.time() - start_time))
         return paths
 

@@ -4,7 +4,7 @@ import matplotlib.patches as mpatches
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=900, link_bandwidths=None, output_dir="./"):
+def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=900, link_bandwidths=None, link_latencies=None, output_dir="./"):
     """
     Writes topology data to two files:
     1. A custom .txt file with a simple, quote-less format.
@@ -18,6 +18,7 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
         base_filename (str): The base name for the output files.
         bandwidth (int): The default bandwidth for each link if not specified in link_bandwidths.
         link_bandwidths (dict): Optional dictionary mapping link IDs to bandwidth values.
+        link_latencies (dict): Optional dictionary mapping link IDs to latency values.
     """
     # --- 1. Filter paths to keep only host-to-host routes ---
     host_to_host_paths = {}
@@ -38,7 +39,10 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
         bw = bandwidth
         if link_bandwidths and link_id in link_bandwidths:
             bw = link_bandwidths[link_id]
-        txt_content.append(f"({node1}, {node2}, {bw})")
+        lat = 0.0
+        if link_latencies and link_id in link_latencies:
+            lat = link_latencies[link_id]
+        txt_content.append(f"({node1}, {node2}, {bw}, {lat})")
     
     # Add a separator for readability
     txt_content.append("\n# Paths\n")
@@ -63,7 +67,10 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
         bw = bandwidth
         if link_bandwidths and link_id in link_bandwidths:
             bw = link_bandwidths[link_id]
-        edges.append([n1, n2, bw])
+        lat = 0.0
+        if link_latencies and link_id in link_latencies:
+            lat = link_latencies[link_id]
+        edges.append([n1, n2, bw, lat])
 
     json_data = {
         "numEdges": len(links),
@@ -77,7 +84,7 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
     print(f"Successfully wrote JSON topology to {json_filename}")
 
 
-def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth="900GiB/s", latency="0.000ms", link_bandwidths=None, bw_unit="GB/s", output_dir="./"):
+def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth="900GiB/s", latency="0.000ms", link_bandwidths=None, link_latencies=None, bw_unit="GB/s", lat_unit="ms", output_dir="./"):
     """
     Maps node names to sequential IDs and writes a topology file in the NS3 format,
     including pre-computed routes.
@@ -89,9 +96,11 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
         paths (dict): Dictionary of paths with string node names.
         filename (str): The name of the output file.
         bandwidth (str): Default bandwidth for all links.
-        latency (str): Link latency.
+        latency (str): Default link latency.
         link_bandwidths (dict): Optional dictionary mapping link IDs to bandwidth values.
+        link_latencies (dict): Optional dictionary mapping link IDs to latency values.
         bw_unit (str): Unit string to append to bandwidth values (e.g., "GB/s").
+        lat_unit (str): Unit string to append to latency values (e.g., "ms").
     """
     def get_num(name):
         """Extracts the integer part of a node name for sorting."""
@@ -105,20 +114,26 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
         all_node_names.add(n2)
 
     host_names = sorted([name for name in all_node_names if name.startswith('h')], key=get_num)
-    switch_names = sorted([name for name in all_node_names if name.startswith('s')], key=get_num)
+    switch_names = sorted([name for name in all_node_names if not name.startswith('h')], key=get_num)
 
     num_hosts = len(host_names)
     num_switches = len(switch_names)
     num_nodes = num_hosts + num_switches
     
-    # Calculate unique links and map bandwidths
+    # Calculate unique links and map bandwidths and latencies
     unique_links = set()
     pair_to_bw = {}
+    pair_to_lat = {}
     
     if link_bandwidths:
         for lid, (n1, n2) in links.items():
             pair = tuple(sorted((n1, n2)))
             pair_to_bw[pair] = link_bandwidths[lid]
+    
+    if link_latencies:
+        for lid, (n1, n2) in links.items():
+            pair = tuple(sorted((n1, n2)))
+            pair_to_lat[pair] = link_latencies[lid]
 
     for n1, n2 in links.values():
         # Store links in a canonical order (smaller name first) to handle duplicates
@@ -140,7 +155,7 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
         switch_ids.append(new_id)
 
     # 3. Process links using the new IDs
-    processed_links_with_bw = []
+    processed_links_with_bw_lat = []
     for n1_str, n2_str in unique_links:
         id1 = name_to_id_map[n1_str]
         id2 = name_to_id_map[n2_str]
@@ -155,7 +170,15 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
             else:
                 bw_val = str(val)
         
-        processed_links_with_bw.append((tuple(sorted((id1, id2))), bw_val))
+        lat_val = latency
+        if pair_key in pair_to_lat:
+            val = pair_to_lat[pair_key]
+            if isinstance(val, (int, float)):
+                lat_val = f"{val}{lat_unit}"
+            else:
+                lat_val = str(val)
+        
+        processed_links_with_bw_lat.append((tuple(sorted((id1, id2))), bw_val, lat_val))
 
     # 4. Write to file
     import os
@@ -169,8 +192,8 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
             f.write(f"{switch_id}\n")
             
         # Links
-        for (id1, id2), bw in sorted(processed_links_with_bw, key=lambda x: x[0]):
-            f.write(f"{id1} {id2} {bw} {latency} 0\n")
+        for (id1, id2), bw, lat in sorted(processed_links_with_bw_lat, key=lambda x: x[0]):
+            f.write(f"{id1} {id2} {bw} {lat} 0\n")
 
         # 5. Write paths
         f.write("\nROUTES\n")
@@ -249,14 +272,16 @@ def make_node_names_zero_indexed(links, paths):
 def classify_node(node_name, topology):
     """
     Classify a node into categories for proper positioning and coloring.
-    Returns: 'npu', 'nvswitch', 'npu_switch', 'nic', 'tor', 'main_switch'
+    Returns: 'npu', 'nvswitch', 'npu_switch', 'nic', 'edge_switch', 'agg_switch', 'core_switch', 'main_switch'
     
     Hierarchy levels:
     - npu: Processing units (bottom)
     - nvswitch/npu_switch: Intra-node switches connecting NPUs
-    - nic: NIC switch connecting node to ToR (for ring/fully_connected)
-    - tor: Top-of-Rack switch for a server
-    - main_switch: Main topology switches (top)
+    - nic: NIC switch connecting node to main switch (for ring/fully_connected)
+    - edge_switch: Edge/ToR switches (FoldedClos only)
+    - agg_switch: Aggregation switches (FoldedClos only)
+    - core_switch: Core switches (FoldedClos only)
+    - main_switch: For Dragonfly/Jellyfish (all switches are ToRs)
     """
     if node_name.startswith('h'):
         return 'npu'
@@ -269,24 +294,29 @@ def classify_node(node_name, topology):
     if hasattr(topology, 'npu_switches') and node_name in topology.npu_switches:
         return 'npu_switch'
     
-    # Check NIC switches (for ring/fully_connected - connects to ToR)
+    # Check NIC switches (for ring/fully_connected - connects to main switch)
     if hasattr(topology, 'nic_switches') and node_name in topology.nic_switches:
         return 'nic'
     
-    # Check ToR switches
-    if hasattr(topology, 'tor_switches') and node_name in topology.tor_switches:
-        return 'tor'
+    # FoldedClos: distinguish edge, aggregation, and core switches
+    if hasattr(topology, 'core_switches') and node_name in topology.core_switches:
+        return 'core_switch'
+    if hasattr(topology, 'agg_switches') and node_name in topology.agg_switches:
+        return 'agg_switch'
+    if hasattr(topology, 'edge_switches') and node_name in topology.edge_switches:
+        return 'edge_switch'
     
     return 'main_switch'
 
 def create_hierarchical_layout(G, topology, width=10, height=8):
     """
-    Create a hierarchical tree-like layout with:
-    - NPUs at the bottom (level 0)
-    - NVSwitches/NPU-switches above NPUs (level 1)
-    - NIC switches above intra-node switches (level 2) - for ring/fully_connected
-    - ToR switches above NICs (level 3)
-    - Main switches at the top (level 4)
+    Create a hierarchical tree-like layout.
+    
+    For Dragonfly/Jellyfish (4 levels):
+    - NPUs (level 0) -> NVSwitches (level 1) -> NICs (level 2) -> Switches (level 3)
+    
+    For FoldedClos (6 levels):
+    - NPUs (level 0) -> NVSwitches (level 1) -> NICs (level 2) -> Edge/ToR (level 3) -> Agg (level 4) -> Core (level 5)
     """
     pos = {}
     
@@ -294,34 +324,53 @@ def create_hierarchical_layout(G, topology, width=10, height=8):
     npus = [n for n in G.nodes() if classify_node(n, topology) == 'npu']
     nvswitches = [n for n in G.nodes() if classify_node(n, topology) in ('nvswitch', 'npu_switch')]
     nics = [n for n in G.nodes() if classify_node(n, topology) == 'nic']
-    tors = [n for n in G.nodes() if classify_node(n, topology) == 'tor']
+    edge_switches = [n for n in G.nodes() if classify_node(n, topology) == 'edge_switch']
+    agg_switches = [n for n in G.nodes() if classify_node(n, topology) == 'agg_switch']
+    core_switches = [n for n in G.nodes() if classify_node(n, topology) == 'core_switch']
     main_switches = [n for n in G.nodes() if classify_node(n, topology) == 'main_switch']
     
-    # Define y-levels (bottom to top) - 5 levels now
-    y_levels = {
-        'npu': 0,
-        'nvswitch': 1,
-        'nic': 2,
-        'tor': 3,
-        'main_switch': 4
-    }
+    # Determine number of levels based on topology type
+    is_folded_clos = len(edge_switches) > 0 or len(agg_switches) > 0 or len(core_switches) > 0
+    
+    if is_folded_clos:
+        num_levels = 6
+        y_levels = {
+            'npu': 0,
+            'nvswitch': 1,
+            'nic': 2,
+            'edge_switch': 3,
+            'agg_switch': 4,
+            'core_switch': 5
+        }
+    else:
+        num_levels = 4
+        y_levels = {
+            'npu': 0,
+            'nvswitch': 1,
+            'nic': 2,
+            'main_switch': 3
+        }
     
     # Position each category
     def position_nodes(nodes, y_level):
         n = len(nodes)
         if n == 0:
             return
-        # Sort nodes for consistent ordering
         sorted_nodes = sorted(nodes, key=lambda x: (x[0], int(x[1:]) if x[1:].isdigit() else 0))
         for i, node in enumerate(sorted_nodes):
             x = (i + 0.5) * width / n - width/2
-            pos[node] = (x, y_level * height / 5)
+            pos[node] = (x, y_level * height / num_levels)
     
     position_nodes(npus, y_levels['npu'])
     position_nodes(nvswitches, y_levels['nvswitch'])
     position_nodes(nics, y_levels['nic'])
-    position_nodes(tors, y_levels['tor'])
-    position_nodes(main_switches, y_levels['main_switch'])
+    
+    if is_folded_clos:
+        position_nodes(edge_switches, y_levels['edge_switch'])
+        position_nodes(agg_switches, y_levels['agg_switch'])
+        position_nodes(core_switches, y_levels['core_switch'])
+    else:
+        position_nodes(main_switches, y_levels['main_switch'])
     
     return pos
 
@@ -369,9 +418,11 @@ def visualize_topology(topology, title="Network Topology", figsize=(14, 10), sho
         'npu': '#4CAF50',         # Green
         'nvswitch': '#FF9800',    # Orange
         'npu_switch': '#FF9800',  # Orange (same as NVSwitch)
-        'nic': '#E91E63',         # Pink (NIC connecting to ToR)
-        'tor': '#2196F3',         # Blue
-        'main_switch': '#9C27B0'  # Purple
+        'nic': '#E91E63',         # Pink (NIC connecting to main switch)
+        'edge_switch': '#2196F3', # Blue (Edge/ToR - FoldedClos)
+        'agg_switch': '#9C27B0',  # Purple (Aggregation - FoldedClos)
+        'core_switch': '#F44336', # Red (Core - FoldedClos)
+        'main_switch': '#9C27B0'  # Purple (Dragonfly/Jellyfish switches)
     }
     
     node_colors = [color_map.get(classify_node(n, topology), '#757575') for n in G.nodes()]
@@ -401,14 +452,24 @@ def visualize_topology(topology, title="Network Topology", figsize=(14, 10), sho
         nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=7, ax=ax,
                                       label_pos=0.3)
     
-    # Add legend
+    # Build legend based on which node types are present
+    is_folded_clos = any(classify_node(n, topology) in ('edge_switch', 'agg_switch', 'core_switch') for n in G.nodes())
+    
     legend_elements = [
         mpatches.Patch(color='#4CAF50', label='NPU'),
         mpatches.Patch(color='#FF9800', label='NVSwitch/NPU-Switch'),
         mpatches.Patch(color='#E91E63', label='NIC Switch'),
-        mpatches.Patch(color='#2196F3', label='ToR Switch'),
-        mpatches.Patch(color='#9C27B0', label='Main Switch')
     ]
+    if is_folded_clos:
+        legend_elements.extend([
+            mpatches.Patch(color='#2196F3', label='Edge Switch (ToR)'),
+            mpatches.Patch(color='#9C27B0', label='Aggregation Switch'),
+            mpatches.Patch(color='#F44336', label='Core Switch'),
+        ])
+    else:
+        legend_elements.append(
+            mpatches.Patch(color='#9C27B0', label='Switch (ToR)')
+        )
     ax.legend(handles=legend_elements, loc='upper right')
     
     ax.set_title(title, fontsize=14, fontweight='bold')
@@ -420,7 +481,7 @@ def visualize_topology(topology, title="Network Topology", figsize=(14, 10), sho
 def visualize_single_node(topology, node_idx=1, figsize=(10, 8)):
     """
     Visualize just one node's internal structure.
-    Shows NPUs -> NVSwitch(es) -> ToR hierarchy.
+    Shows NPUs -> NVSwitch(es) -> Main Switch (ToR) hierarchy.
     node_idx is 1-based.
     """
     # Build the topology
@@ -432,7 +493,9 @@ def visualize_single_node(topology, node_idx=1, figsize=(10, 8)):
         return
     
     npus = set(topology.node_npus[node_idx])
-    tor = topology.tor_switches[node_idx - 1] if (node_idx - 1) < len(topology.tor_switches) else None
+    
+    # Get the main switch for this node (which IS the ToR)
+    main_sw = topology.node_to_switch.get(node_idx) if hasattr(topology, 'node_to_switch') else None
     
     # Get NVSwitches connected to these NPUs
     nvswitches = set()
@@ -440,8 +503,8 @@ def visualize_single_node(topology, node_idx=1, figsize=(10, 8)):
         if npu in topology.npu_to_intra_switches:
             nvswitches.update(topology.npu_to_intra_switches[npu])
     
-    # Include ToR in relevant nodes
-    relevant_nodes = npus | nvswitches | ({tor} if tor else set())
+    # Include main switch in relevant nodes
+    relevant_nodes = npus | nvswitches | ({main_sw} if main_sw else set())
     
     G = nx.DiGraph()
     for link_id, (src, dst) in topology.links.items():
@@ -462,19 +525,27 @@ def visualize_single_node(topology, node_idx=1, figsize=(10, 8)):
     for i, nv in enumerate(nv_list):
         pos[nv] = ((i + 0.5) * 2 - len(nv_list), 1.5)
     
-    # ToR at top
-    if tor:
-        pos[tor] = (0, 3)
+    # Main switch (ToR) at top
+    if main_sw:
+        pos[main_sw] = (0, 3)
     
-    # Colors
-    node_colors = []
-    for n in G.nodes():
-        if n in npus:
-            node_colors.append('#4CAF50')
-        elif n in nvswitches:
-            node_colors.append('#FF9800')
-        else:
-            node_colors.append('#2196F3')
+    # Colors - use classify_node for proper FoldedClos coloring
+    color_map = {
+        'npu': '#4CAF50',
+        'nvswitch': '#FF9800',
+        'npu_switch': '#FF9800',
+        'nic': '#E91E63',
+        'edge_switch': '#2196F3',
+        'agg_switch': '#9C27B0',
+        'core_switch': '#F44336',
+        'main_switch': '#9C27B0'
+    }
+    node_colors = [color_map.get(classify_node(n, topology), '#757575') for n in G.nodes()]
+    
+    # Determine switch label
+    sw_type = classify_node(main_sw, topology) if main_sw else 'main_switch'
+    sw_label = 'Edge Switch (ToR)' if sw_type == 'edge_switch' else 'Switch (ToR)'
+    sw_color = color_map.get(sw_type, '#9C27B0')
     
     fig, ax = plt.subplots(figsize=figsize)
     
@@ -499,11 +570,11 @@ def visualize_single_node(topology, node_idx=1, figsize=(10, 8)):
     legend_elements = [
         mpatches.Patch(color='#4CAF50', label='NPU'),
         mpatches.Patch(color='#FF9800', label='NVSwitch'),
-        mpatches.Patch(color='#2196F3', label='ToR Switch')
+        mpatches.Patch(color=sw_color, label=sw_label)
     ]
     ax.legend(handles=legend_elements, loc='upper right')
     
-    ax.set_title(f"Single Node View (Node {node_idx})\nNPUs -> NVSwitch -> ToR", 
+    ax.set_title(f"Single Node View (Node {node_idx})\nNPUs -> NVSwitch -> {sw_label}", 
                  fontsize=14, fontweight='bold')
     ax.axis('off')
     plt.tight_layout()
@@ -513,7 +584,7 @@ def visualize_single_node(topology, node_idx=1, figsize=(10, 8)):
 def visualize_single_server(topology, server_idx=1, figsize=(14, 10)):
     """
     Visualize a single server's structure showing all nodes and NPUs.
-    Shows the 3-level hierarchy: NPUs -> NVSwitches -> ToR
+    Shows the hierarchy: NPUs -> NVSwitches -> Main Switch (ToR)
     server_idx is 1-based.
     """
     # Build the topology
@@ -527,8 +598,8 @@ def visualize_single_server(topology, server_idx=1, figsize=(14, 10)):
     # Get all nodes in this server
     node_ids = topology.server_nodes[server_idx]
     
-    # Get ToR for this server
-    tor = topology.server_to_tor.get(server_idx) if hasattr(topology, 'server_to_tor') else None
+    # Get the main switch for this server (which IS the ToR)
+    main_sw = topology.server_to_switch.get(server_idx) if hasattr(topology, 'server_to_switch') else None
     
     # Collect all NPUs and NVSwitches for this server
     all_npus = set()
@@ -542,7 +613,7 @@ def visualize_single_server(topology, server_idx=1, figsize=(14, 10)):
                     all_nvswitches.update(topology.npu_to_intra_switches[npu])
     
     # All relevant nodes
-    relevant_nodes = all_npus | all_nvswitches | ({tor} if tor else set())
+    relevant_nodes = all_npus | all_nvswitches | ({main_sw} if main_sw else set())
     
     G = nx.DiGraph()
     for link_id, (src, dst) in topology.links.items():
@@ -574,19 +645,27 @@ def visualize_single_server(topology, server_idx=1, figsize=(14, 10)):
             nvs_x = node_center_x + (i - len(node_nvswitches)/2 + 0.5) * 1.0
             pos[nvs] = (nvs_x, 1.5)
     
-    # ToR at the top center
-    if tor:
-        pos[tor] = (0, 3)
+    # Main switch (ToR) at the top center
+    if main_sw:
+        pos[main_sw] = (0, 3)
     
-    # Colors
-    node_colors = []
-    for n in G.nodes():
-        if n in all_npus:
-            node_colors.append('#4CAF50')
-        elif n in all_nvswitches:
-            node_colors.append('#FF9800')
-        else:
-            node_colors.append('#2196F3')
+    # Colors - use classify_node for proper FoldedClos coloring
+    color_map = {
+        'npu': '#4CAF50',
+        'nvswitch': '#FF9800',
+        'npu_switch': '#FF9800',
+        'nic': '#E91E63',
+        'edge_switch': '#2196F3',
+        'agg_switch': '#9C27B0',
+        'core_switch': '#F44336',
+        'main_switch': '#9C27B0'
+    }
+    node_colors = [color_map.get(classify_node(n, topology), '#757575') for n in G.nodes()]
+    
+    # Determine switch label
+    sw_type = classify_node(main_sw, topology) if main_sw else 'main_switch'
+    sw_label = 'Edge Switch (ToR)' if sw_type == 'edge_switch' else 'Switch (ToR)'
+    sw_color = color_map.get(sw_type, '#9C27B0')
     
     fig, ax = plt.subplots(figsize=figsize)
     
@@ -611,7 +690,7 @@ def visualize_single_server(topology, server_idx=1, figsize=(14, 10)):
     legend_elements = [
         mpatches.Patch(color='#4CAF50', label='NPU'),
         mpatches.Patch(color='#FF9800', label='NVSwitch'),
-        mpatches.Patch(color='#2196F3', label='ToR Switch')
+        mpatches.Patch(color=sw_color, label=sw_label)
     ]
     ax.legend(handles=legend_elements, loc='upper right')
     
@@ -629,7 +708,7 @@ def visualize_single_server(topology, server_idx=1, figsize=(14, 10)):
                     ha='center', va='top', fontsize=10, style='italic')
     
     ax.set_title(f"Server {server_idx}: {num_nodes} Nodes, {len(all_npus)} NPUs\n"
-                 f"Hierarchy: NPUs -> NVSwitch -> ToR", 
+                 f"Hierarchy: NPUs -> NVSwitch -> {sw_label}", 
                  fontsize=14, fontweight='bold')
     ax.axis('off')
     ax.set_xlim(-7, 7)

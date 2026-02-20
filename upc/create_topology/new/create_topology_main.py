@@ -55,6 +55,10 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
     bw_config = config.get('bandwidth_config', {})
     bw_unit = config.get('bw_unit', 'GB/s')
     
+    # Extract latency config
+    lat_config = config.get('latency_config', {})
+    lat_unit = config.get('lat_unit', 'ms')
+    
     # Extract intra-node configuration
     nodes_per_server = config.get('nodes_per_server', 1)
     npus_per_node = config.get('npus_per_node', 1)
@@ -76,6 +80,7 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
         if intra_node_topology:
             print(f"         Intra-node topology: {intra_node_topology}")
         topo_obj = CustomizedDragonfly(G, A, h, conc, bandwidth_config=bw_config,
+                                        latency_config=lat_config,
                                         nodes_per_server=nodes_per_server,
                                         npus_per_node=npus_per_node,
                                         intra_node_topology=intra_node_topology,
@@ -95,6 +100,7 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
             print(f"         Intra-node topology: {intra_node_topology}")
         topo_obj = Jellyfish(switches, degree, num_hosts_per_switch=hosts_per_switch, 
                              bandwidth_config=bw_config,
+                             latency_config=lat_config,
                              nodes_per_server=nodes_per_server,
                              npus_per_node=npus_per_node,
                              intra_node_topology=intra_node_topology,
@@ -111,6 +117,7 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
         if intra_node_topology:
             print(f"         Intra-node topology: {intra_node_topology}")
         topo_obj = FoldedClos(K, 1, 1, bandwidth_config=bw_config,
+                              latency_config=lat_config,
                               nodes_per_server=nodes_per_server,
                               npus_per_node=npus_per_node,
                               intra_node_topology=intra_node_topology,
@@ -139,7 +146,17 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
     
     if paths_mode == "Uniform":
         # Generate standard uniform routing
-        final_paths = topo_obj.GenerateUniformRouting()
+        # GenerateUniformRouting returns paths[src][dst] = [hop1, hop2, ...]
+        # Wrap each path in a list to match the expected format: paths[src][dst] = [[hop1, hop2, ...]]
+        raw_uniform = topo_obj.GenerateUniformRouting()
+        for src, dests in raw_uniform.items():
+            if not src.startswith('h'):
+                continue
+            final_paths[src] = {}
+            for dst, path in dests.items():
+                if not dst.startswith('h') or src == dst:
+                    continue
+                final_paths[src][dst] = [path]
         
     elif paths_mode in ["ECMP", "Random"]:
         topo_obj.GenerateECMPFlowDict(topo_obj.adjacency_matrix)
@@ -167,8 +184,8 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
                     # Calculate which switch each node is attached to
                     s1_idx = node1 // conc
                     s2_idx = node2 // conc
-                    s1 = f's{s1_idx+1}'
-                    s2 = f's{s2_idx+1}'
+                    s1 = f't{s1_idx+1}'
+                    s2 = f't{s2_idx+1}'
                     
                     h2 = f'h{npu2+1}'
                     
@@ -229,8 +246,9 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
     # 4. Write Output Files
     print(f"Writing files to: {output_dir}")
     
-    # Get bandwidths from topology object
+    # Get bandwidths and latencies from topology object
     link_bandwidths = getattr(topo_obj, 'link_bandwidths', None)
+    link_latencies = getattr(topo_obj, 'link_latencies', None)
     
-    write_g2_topology_files(links, final_paths, base_filename=base_filename, bandwidth=2, link_bandwidths=link_bandwidths, output_dir=output_dir)
-    write_ns3_topology_file(links, final_paths, filename=base_filename, bandwidth=2, link_bandwidths=link_bandwidths, bw_unit=bw_unit, output_dir=output_dir)
+    write_g2_topology_files(links, final_paths, base_filename=base_filename, bandwidth=2, link_bandwidths=link_bandwidths, link_latencies=link_latencies, output_dir=output_dir)
+    write_ns3_topology_file(links, final_paths, filename=base_filename, bandwidth=2, link_bandwidths=link_bandwidths, link_latencies=link_latencies, bw_unit=bw_unit, lat_unit=lat_unit, output_dir=output_dir)
