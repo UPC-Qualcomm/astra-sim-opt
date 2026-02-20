@@ -1,4 +1,5 @@
 import random
+import os
 from create_topology import CustomizedDragonfly, Jellyfish, FoldedClos
 from utils import write_ns3_topology_file, write_g2_topology_files
 
@@ -10,6 +11,9 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
         topology (str): 'FoldedClos', 'Dragonfly', or 'Jellyfish'.
         paths_mode (str): 'ECMP', 'Uniform', 'Random', or None.
         config (dict): Configuration parameters for the topology.
+        g2_path (str): Output directory for G2 files.
+        ns3_path (str): Output directory for ns3 files.
+        file_suffix (str): Suffix to append to filenames.
 
     Formulas for Node Counts:
     - Dragonfly: 

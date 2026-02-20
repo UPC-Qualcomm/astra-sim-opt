@@ -19,6 +19,7 @@ build/astra_garnet/build/
 build/astra_garnet/result/
 build/astra_htsim/build/
 
+
 # Generated Chakra ET files
 *.eg
 *.et
@@ -49,6 +50,9 @@ upc/comparing_networks/workload/
 upc/Optimization/histogram/data/
 upc/Optimization/temp/config/
 upc/configuration/ns3/output/
+
+## Deadlock analysis
+upc/zz_analyze_error_analysis
 
 **/*/__pycache__
 

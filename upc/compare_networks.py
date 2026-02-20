@@ -128,7 +128,8 @@ def main(args):
             print(f"Error: El directorio de workload '{args.workload_dir}' no existe.")
             sys.exit(1)
         
-        base_name = os.path.basename(args.workload_dir)
+        base_name = args.workload_dir.split('workload/')[1] #os.path.basename(args.workload_dir)
+        print(base_name)
         workload_paths[base_name] = args.workload_dir
 
     else:
@@ -146,12 +147,18 @@ def main(args):
         # Crear directorio de salida único para esta ejecución
         run_start_time = datetime.now()
         timestamp = run_start_time.strftime("%Y%m%d_%H%M%S_%f")[:-3] + "ms"
-        if args.g2_network_config:
-            network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
-        elif args.ns3_network_config:
-            network_name = os.path.splitext(os.path.basename(args.ns3_network_config))[0].split('_')[0]
-        run_folder_name = f"run_{timestamp}"
+        # if args.g2_network_config:
+        #     network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
+        # elif args.ns3_network_config:
+        #     network_name = os.path.splitext(os.path.basename(args.ns3_network_config))[0].split('_')[0]
+        network_name = args.topology_name
+        # Include run_number in the folder name if provided
+        if args.run_number:
+            run_folder_name = f"run_{args.run_number:02d}_{timestamp}"
+        else:
+            run_folder_name = f"run_{timestamp}"
         base_run_dir = os.path.join("output/comparison_run", network_name, coll_name, run_folder_name)
+        print(base_run_dir)
         
         configs_dir = os.path.join(base_run_dir, "configs")
         os.makedirs(configs_dir, exist_ok=True)
@@ -163,6 +170,8 @@ def main(args):
             f.write("### AstraSim Experiment Configuration ###\n")
             f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Run Directory: {base_run_dir}\n")
+            if args.run_number:
+                f.write(f"Run Number: {args.run_number}\n")
             f.write("\n")
             f.write("### Workload Characteristics ###\n")
             f.write(f"Collective: {coll_name}\n")
@@ -183,6 +192,8 @@ def main(args):
             f.write(f"G2 Topology File Override: {args.g2_topology_file}\n")
             f.write(f"NS3 Topology File Override: {args.ns3_topology_file}\n")
             f.write(f"NS3 Precomputed Paths Override: {args.ns3_precomputed_paths}\n")
+            if args.ns3_ecmp_seed is not None:
+                f.write(f"NS3 ECMP Seed Override: {args.ns3_ecmp_seed}\n")
             f.write("\n")
             f.write(f"Python Executable: {args.python_exec}\n")
         print(f"Guardada la configuración de la ejecución en: {config_summary_path}")
@@ -250,6 +261,8 @@ def main(args):
                 ns3_overrides["TOPOLOGY_FILE"] = os.path.abspath(args.ns3_topology_file)
             if args.ns3_precomputed_paths is not None:
                 ns3_overrides["USE_PRECOMPUTED_ROUTES"] = args.ns3_precomputed_paths
+            if args.ns3_ecmp_seed is not None:
+                ns3_overrides["ECMP_SEED"] = args.ns3_ecmp_seed
 
             modify_config_file(args.ns3_network_config, ns3_conf_dest, ns3_overrides)
 
@@ -344,6 +357,15 @@ if __name__ == "__main__":
 
     # Otros
     parser.add_argument("--python-exec", type=str, default="../../../opt/venv/astra-sim/bin/python", help="Ruta al ejecutable de Python.")
+
+    # New: topology name to drive output folder naming (overrides network-config derived name)
+    parser.add_argument("--topology-name", type=str, default=None, help="Nombre de la topología (usado para nombrar la carpeta de salida).")
+    
+    # New: run number for multiple runs
+    parser.add_argument("--run-number", type=int, default=None, help="Número de ejecución (para múltiples ejecuciones).")
+    
+    # New: NS3 ECMP seed override
+    parser.add_argument("--ns3-ecmp-seed", type=int, default=None, help="Sobrescribe el valor de ECMP_SEED en la configuración de NS3.")
 
     parsed_args = parser.parse_args()
     main(parsed_args)

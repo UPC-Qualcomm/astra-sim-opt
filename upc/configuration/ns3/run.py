@@ -20,7 +20,7 @@ USE_DYNAMIC_PFC_THRESHOLD 1
 ECMP_SEED 25
 USE_PRECOMPUTED_ROUTES 0
 
-PACKET_PAYLOAD_SIZE 1500
+PACKET_PAYLOAD_SIZE 1000
 
 # 16-node ring topology
 TOPOLOGY_FILE {project_root}/upc/configuration/ns3/FoldedClos_16_topology.txt
@@ -81,33 +81,34 @@ PMAX_MAP {pmax_map}
 BUFFER_SIZE {buffer_size}
 """
 if __name__ == "__main__":
-    # Matching bw to topology file (2MB/s = 16Mbps = 0.016Gbps)
-    bw = 0.016
+    bw = 200
     
     # Buffer sizes to test
-    buffer_sizes = [1, 8]
+    buffer_sizes = [8]
 
     # Parameter space
     # Base CC methods
-    hp_params = list(itertools.product(['hp'], [0.95], [0])) # cc, utgt
-    hpccPint_params = list(itertools.product(['hpccPint'], [0.95], [0]))
-    dctcp_params = [('dctcp', 0.95, 0)]
+    hp_params = list(itertools.product(['hp'], [0.95], [0], [(400, 100)])) # cc, utgt
+    hpccPint_params = list(itertools.product(['hpccPint'], [0.95], [0], [(400, 100)]))
+    dctcp_params = [('dctcp', 0.95, 0, (400, 100))]
     # PFC / original RDMA (no QCN / DCQCN / HPCC / TIMELY / DCTCP / PINT)
-    pfc_params = [('pfc', 0.95, 0)]
+    pfc_params = [('pfc', 0.95, 0, (400, 100))]
     
     # DCQCN variations
-    dcqcn_variants = ['dcqcn_paper_vwin'] #['dcqcn', 'dcqcn_paper', 'dcqcn_vwin', 'dcqcn_paper_vwin']
-    dcqcn_params = list(itertools.product(dcqcn_variants, [0.95], [0]))
+    dcqcn_variants = ['dcqcn', 'dcqcn_paper', 'dcqcn_vwin', 'dcqcn_paper_vwin']
+    dcqcn_params = list(itertools.product(dcqcn_variants, [0.95], [0], [(400, 100)]))
 
     # TIMELY variations
     timely_variants = ['timely', 'timely_vwin']
-    timely_params = list(itertools.product(timely_variants, [0.95], [0]))
+    timely_params = list(itertools.product(timely_variants, [0.95], [0], [(400, 100),(100, 25)]))
 
     params = hp_params + hpccPint_params + dctcp_params + dcqcn_params + timely_params + pfc_params
+    params = hp_params + hpccPint_params + dctcp_params + dcqcn_params + timely_params + pfc_params 
     
     # Generate configs
     config_idx = 1
-    for (cc, u_tgt_float, mi) in params:
+    for (cc, u_tgt_float, mi, k_base) in params:
+        (kmax_base, kmin_base) = k_base
         for bfsz in buffer_sizes:
             utgt_int = int(u_tgt_float * 100)
             
@@ -197,8 +198,10 @@ if __name__ == "__main__":
                 continue
 
             # Buffer settings
-            kmax_val = int(400 * bw / 25) if int(400 * bw / 25) > 0 else 1
-            kmin_val = int(100 * bw / 25) if int(100 * bw / 25) > 0 else 1
+            kmax_val = int(kmax_base * bw / 25) if int(400 * bw / 25) > 0 else 1
+            kmin_val = int(kmin_base * bw / 25) if int(100 * bw / 25) > 0 else 1
+            kmax_val = int(kmax_base * bw / 25) if int(400 * bw / 25) > 0 else 1
+            kmin_val = int(kmin_base * bw / 25) if int(100 * bw / 25) > 0 else 1
             kmax_map = "2 %d %d %d %d" % (bw * 1000000000, kmax_val, bw * 4 * 1000000000, kmax_val * 4)
             kmin_map = "2 %d %d %d %d" % (bw * 1000000000, kmin_val, bw * 4 * 1000000000, kmin_val * 4)
             pmax_map = "2 %d %.2f %d %.2f" % (bw * 1000000000, 0.2, bw * 4 * 1000000000, 0.2)
