@@ -56,3 +56,12 @@ upc/configuration/ns3/output/
 
 our_examples/
 stg_generated_examples/
+
+upc/Optimization/examples/experiments
+upc/create_topology_old
+upc/Optimization_new
+upc/order_comparison
+upc/ml_model
+upc/aggregated_results
+upc/scaling_analysis
+upc/prediction_analysis
