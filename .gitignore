@@ -65,7 +65,11 @@ upc/Optimization/examples/experiments
 upc/create_topology_old
 upc/Optimization_new
 upc/order_comparison
-upc/ml_model
 upc/aggregated_results
 upc/scaling_analysis
 upc/prediction_analysis
+upc/ml_model/network*
+upc/ml_model/evaluation*
+upc/ml_model/oom_analysis
+upc/ml_model/output
+upc/ml_model/trained*
