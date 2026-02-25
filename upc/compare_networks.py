@@ -7,8 +7,6 @@ import shutil
 import argparse
 from datetime import datetime
 
-from comparing_networks.generate_workloads.compare_networks import generate_workloads
-
 
 # --- Lógica para modificar configuraciones y ejecutar simulaciones ---
 
@@ -67,7 +65,7 @@ def modify_config_file(src_path, dest_path, overrides):
         with open(dest_path, 'w') as f:
             f.writelines(new_lines)
 
-def run_simulation(sim_type, python_exec, workload_dir, system_config, network_config, ns3_config, memory_config, logical_topology_config, output_dir):
+def run_simulation(sim_type, python_exec, workload_dir, system_config, network_config, ns3_config, memory_config, logical_topology_config, output_dir, project_root):
     """Ejecuta una única simulación de Astra-Sim."""
     print(f"\n--- Ejecutando simulación para: {sim_type} ---")
     os.makedirs(output_dir, exist_ok=True)
@@ -82,14 +80,16 @@ def run_simulation(sim_type, python_exec, workload_dir, system_config, network_c
     ]
 
     if sim_type == "ns3":
-        cmd.insert(1, "run_astrasim_ns3.py")
+        run_script = os.path.join(project_root, "upc/run_astrasim_ns3.py")
+        cmd.insert(1, run_script)
         cmd.extend([
             "--system", system_config,
             "--network_config", ns3_config,
             "--logical_topology", logical_topology_config
         ])
     else:
-        cmd.insert(1, "run_astrasim.py")
+        run_script = os.path.join(project_root, "upc/run_astrasim.py")
+        cmd.insert(1, run_script)
         cmd.extend([
             "--system", system_config,
             "--network", network_config,
@@ -132,14 +132,6 @@ def main(args):
         print(base_name)
         workload_paths[base_name] = args.workload_dir
 
-    else:
-        # --- Fase 1 (Opción B): Generar Workloads ---
-        print("=== Fase 1: Generando Workloads ===")
-        base_workload_dir = "./comparing_networks/workload"
-        workload_paths = generate_workloads(
-            args.npus_count, args.comm_size, args.collectives, args.groups, base_workload_dir
-        )
-
     # --- 2. Preparar y Ejecutar Simulaciones para cada colectivo ---
     for coll_name, workload_dir in workload_paths.items():
         print(f"\n=== Fase 2: Ejecutando para el Colectivo='{coll_name}' ===")
@@ -157,7 +149,7 @@ def main(args):
             run_folder_name = f"run_{args.run_number:02d}_{timestamp}"
         else:
             run_folder_name = f"run_{timestamp}"
-        base_run_dir = os.path.join("output/comparison_run", network_name, coll_name, run_folder_name)
+        base_run_dir = os.path.join(args.base_output_dir, network_name, coll_name, run_folder_name)
         print(base_run_dir)
         
         configs_dir = os.path.join(base_run_dir, "configs")
@@ -235,7 +227,7 @@ def main(args):
         # Preparar configs analíticas si se han proporcionado
         analytical_sys_conf_dest, analytical_net_conf_dest = None, None
         if args.analytical_system_config and args.analytical_network_config:
-            sim_types.extend(["analytical_unaware", "analytical_aware"])
+            sim_types.extend(["analytical_unaware"])
             analytical_sys_conf_dest = os.path.join(configs_dir, f"analytical_{os.path.basename(args.analytical_system_config)}")
             shutil.copy(args.analytical_system_config, analytical_sys_conf_dest)
             analytical_net_conf_dest = os.path.join(configs_dir, f"analytical_{os.path.basename(args.analytical_network_config)}")
@@ -267,7 +259,7 @@ def main(args):
             modify_config_file(args.ns3_network_config, ns3_conf_dest, ns3_overrides)
 
         # Memory Config (solo copiar)
-        mem_conf_src = "./configuration/RemoteMemory.json"
+        mem_conf_src = os.path.join(project_root, "upc/configuration/RemoteMemory.json")
         mem_conf_dest = os.path.join(configs_dir, "RemoteMemory.json")
         shutil.copy(mem_conf_src, mem_conf_dest)
 
@@ -280,7 +272,7 @@ def main(args):
         # --- 4. Ejecutar las simulaciones ---
         
         # Configurar PYTHONPATH para G2
-        g2_path = os.path.abspath("../extern/network_backend/g2")
+        g2_path = os.path.join(project_root, "extern/network_backend/g2")
         original_pythonpath = os.environ.get('PYTHONPATH', '')
         os.environ['PYTHONPATH'] = f"{g2_path}:{original_pythonpath}"
 
@@ -310,7 +302,8 @@ def main(args):
                 ns3_config=ns3_conf_dest,
                 memory_config=mem_conf_dest,
                 logical_topology_config=lt_conf_dest,
-                output_dir=output_dir
+                output_dir=output_dir,
+                project_root=project_root
             )
         
         # Restaurar PYTHONPATH
@@ -366,6 +359,9 @@ if __name__ == "__main__":
     
     # New: NS3 ECMP seed override
     parser.add_argument("--ns3-ecmp-seed", type=int, default=None, help="Sobrescribe el valor de ECMP_SEED en la configuración de NS3.")
+    
+    # New: Base output directory
+    parser.add_argument("--base-output-dir", type=str, default="output/comparison_run", help="Directorio base para las salidas (por defecto: output/comparison_run).")
 
     parsed_args = parser.parse_args()
     main(parsed_args)
