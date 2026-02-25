@@ -543,7 +543,7 @@ class FoldedClos():
         self.numSwitchesPerPod = K
         self.numNodesPerPod = K**2 / 4
         self.numSwitchPorts = K
-        self.totalNumSwitches = self.numSwitchesPerPod * self.K + self.numCoreSwitches
+        self.totalNumSwitches = int(self.numSwitchesPerPod * self.K + self.numCoreSwitches)
         
         # NPU Configuration
         self.npus_per_node = npus_per_node
@@ -797,10 +797,10 @@ class FoldedClos():
         self.paths = {}
         
         # Generate paths for all NPU pairs
-        for i in range(1, int(self.numHosts+1)):
+        for i in range(1, int(self.total_num_hosts+1)):
             src = self.hosts[i-1]
             self.paths[src] = {}
-            for j in range(1, int(self.numHosts+1)):
+            for j in range(1, int(self.total_num_hosts+1)):
                 if i != j:
                     dst = self.hosts[j-1]
                     self.paths[src][dst] = list(nx.all_shortest_paths(G, source=src, target=dst, weight="weight"))
