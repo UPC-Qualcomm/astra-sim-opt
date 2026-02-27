@@ -8,7 +8,14 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
 
     Args:
         topology (str): 'FoldedClos', 'Dragonfly', or 'Jellyfish'.
-        paths_mode (str): 'ECMP', 'Uniform', or None.
+        paths_mode (str): 'ECMP', 'Uniform', 'Random', 'LinksOnly', or None.
+            - 'ECMP': All equal-cost shortest paths per src-dst pair.
+            - 'Uniform': One deterministic uniform path per src-dst pair.
+            - 'Random': One randomly chosen ECMP path per src-dst pair.
+            - 'LinksOnly': Only nodes and links are written; no paths.
+                           Routes are computed on-the-fly by the network simulator
+                           (e.g., via NetworkX ECMP in network.py).
+            - None: No output written.
         config (dict): Configuration parameters for the topology.
 
     Formulas for Node Counts:
@@ -143,8 +150,14 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
 
     # 3. Generate Routing Paths
     final_paths = {}
-    
-    if paths_mode == "Uniform":
+
+    if paths_mode == "LinksOnly":
+        # No paths pre-computed — the network simulator will generate ECMP paths
+        # on-the-fly (e.g., using NetworkX in network.py).
+        print("LinksOnly mode: writing nodes and links only (no paths).")
+        # fall through to write with empty final_paths
+
+    elif paths_mode == "Uniform":
         # Generate standard uniform routing
         # GenerateUniformRouting returns paths[src][dst] = [hop1, hop2, ...]
         # Wrap each path in a list to match the expected format: paths[src][dst] = [[hop1, hop2, ...]]
