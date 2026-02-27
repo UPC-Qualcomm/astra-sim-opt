@@ -110,7 +110,7 @@ class Model(Enum):
         elif model == Model.GPT_30B:
             return [50257, 6144, 6144, 24576, [2048], 32, 2048, 32, 48]
         elif model == Model.GPT_40B:
-            return [50257, 8192, 8192, 32768, [256], 32, 2048, 32, 32]
+            return [50257, 8192, 8192, 32768, [64], 32, 2048, 32, 8]
         elif model == Model.LLaMA_3_70B:
             return [30522, 30522, 8192, 32768, [2048], 32, 2048, 64, 80]
         elif model == Model.Model_100B:
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     )
     
     num_npus = 128
-    dp = {1, 2, 4, 8, 16, 32}
+    dp = {1, 2, 4, 8, 16}
     mp = {1, 2, 4, 8}
     pp = {1, 2, 4}
     weight_sharded = {False}

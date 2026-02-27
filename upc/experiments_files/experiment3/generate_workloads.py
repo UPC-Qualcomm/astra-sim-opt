@@ -3,6 +3,7 @@ import os
 import subprocess
 import multiprocessing
 import argparse
+import random
 from enum import Enum
 from tqdm import tqdm
 
@@ -27,6 +28,8 @@ def get_design_space(
     for ddp in dp:
         for mmp in mp:
             for ssharded in weight_sharded:
+                if ddp == 1 and ssharded:
+                    continue
                 for ppp in pp:
                     ssp = num_npus // (ddp * mmp * ppp)
                     if ssp < 1 or ssp > max_ssp or (num_npus != (ddp * mmp * ssp * ppp)):
@@ -46,6 +49,8 @@ def get_design_space_no_sp(
     for ddp in dp:
         for mmp in mp:
             for ssharded in weight_sharded:
+                if ddp == 1 and ssharded:
+                    continue
                 for ppp in pp:
                     if num_npus != (ddp * mmp * ppp):
                         continue
@@ -265,6 +270,12 @@ if __name__ == "__main__":
         default=max_sp,
         help="Maximum spatial parallelism"
     )
+    parser.add_argument(
+        "--num_samples",
+        type=int,
+        default=None,
+        help="Randomly sample this many design points (default: all)"
+    )
 
     # Additional custom arguments newly added in STG
     parser.add_argument(
@@ -326,6 +337,8 @@ if __name__ == "__main__":
 
     design_space = get_design_space(num_npus, dp, mp, pp, weight_sharded, max_sp)
     #design_space = get_design_space_no_sp(num_npus, dp, mp, pp, weight_sharded)
+    if args.num_samples is not None:
+        design_space = random.sample(design_space, min(args.num_samples, len(design_space)))
     func = partial(generate_instance, model=Model(int(model)), folder_name=folder_name, custom_args=custom_args)
 
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:
