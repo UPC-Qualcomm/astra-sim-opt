@@ -58,8 +58,7 @@ fi
 PYTHON_EXEC="${PYTHON_EXEC:-$ASTRA_SIM_ROOT/../../../opt/venv/astra-sim/bin/python}"
 BASE_OUTPUT_DIR="$ASTRA_SIM_ROOT/upc/output/comparison_run/${EXPERIMENT_NAME}"
 BASE_WORKLOAD_DIR="$ASTRA_SIM_ROOT/$WORKLOAD_DIR_REL"
-LOGICAL_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/ns3/${NPUS_COUNT}_nodes_logical.json"
-G2_NET_CONFIG="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/g2/FoldedClos_${NPUS_COUNT}_config.yml"
+
 G2_TOPOLOGY_BASE="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/g2/topologies/"
 NS3_TOPOLOGY_BASE="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/ns3/topologies/"
 
@@ -89,10 +88,12 @@ run_single_simulation() {
     TOPOLOGY_SHORT="${topo_name%%_*}"
 
     # Define config paths
+    LOGICAL_CONFIG="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/${sys_name}_logical_dims.json"
     ANALYTICAL_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/${sys_name}_sys.json"
     G2_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/${sys_name}_sys.json"
     NS3_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/${sys_name}_sys.json"
     ANALYTICAL_NET_CONFIG="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/${sys_name}.yml"
+    G2_NET_CONFIG="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/${sys_name}.yml"
 
     if [ "$sim_type" == "analytical" ]; then
         if [ "$MODE" == "ecmp" ]; then
@@ -114,15 +115,15 @@ run_single_simulation() {
 
     elif [ "$sim_type" == "g2" ]; then
         # Try to find G2 topology file with different extensions
-        G2_TOPOLOGY_FILE=""
-        for ext in json txt; do
-            candidate="${G2_TOPOLOGY_BASE}/G2_${topo_name}.${ext}"
-            if [ -f "$candidate" ]; then
-                G2_TOPOLOGY_FILE="$candidate"
-                break
-            fi
-        done
-        
+        # G2_TOPOLOGY_FILE=""
+        # for ext in json txt; do
+        #     candidate="${G2_TOPOLOGY_BASE}/G2_${topo_name}.${ext}"
+        #     if [ -f "$candidate" ]; then
+        #         G2_TOPOLOGY_FILE="$candidate"
+        #         break
+        #     fi
+        # done
+        G2_TOPOLOGY_FILE="${NS3_TOPOLOGY_BASE}/${topo_name}"
         if [ -z "$G2_TOPOLOGY_FILE" ]; then
             echo ">>> [G2] SKIPPED - Topology file not found: ${G2_TOPOLOGY_BASE}/G2_${topo_name}.{json,txt}"
             return 0
@@ -147,7 +148,7 @@ run_single_simulation() {
             --python-exec "$PYTHON_EXEC"
 
     elif [ "$sim_type" == "ns3" ]; then
-        NS3_TOPOLOGY_FILE="${NS3_TOPOLOGY_BASE}/ns3_${topo_name}"
+        NS3_TOPOLOGY_FILE="${NS3_TOPOLOGY_BASE}/${topo_name}"
         NS3_CONFIG_FILE="$ASTRA_SIM_ROOT/upc/experiments_files/${EXPERIMENT_NAME}/configuration/ns3/configs/FoldedClos_${NPUS_COUNT}_config${ns3_conf_idx}.txt"
 
         if [ ! -f "$NS3_CONFIG_FILE" ]; then
@@ -257,8 +258,8 @@ execute_job() {
 
 # Export functions and variables for xargs
 export -f run_single_simulation execute_job is_sim_enabled
-export ASTRA_SIM_ROOT NPUS_COUNT LOGICAL_CONFIG PYTHON_EXEC TIMEOUT BASE_OUTPUT_DIR
-export G2_NET_CONFIG G2_TOPOLOGY_BASE NS3_TOPOLOGY_BASE NUM_RUNS BASE_ECMP_SEED
+export ASTRA_SIM_ROOT NPUS_COUNT PYTHON_EXEC TIMEOUT BASE_OUTPUT_DIR
+export G2_TOPOLOGY_BASE NS3_TOPOLOGY_BASE NUM_RUNS BASE_ECMP_SEED
 export MODE EXPERIMENT_NAME
 export SYSTEM_CONFIG_NAMES_ARRAY TOPOLOGY_NAMES_ARRAY NS3_CONFIG_INDICES_ARRAY SIM_TYPES_ARRAY
 

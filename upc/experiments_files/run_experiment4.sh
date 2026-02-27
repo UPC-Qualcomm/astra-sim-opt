@@ -4,17 +4,17 @@
 
 export EXPERIMENT_NUM=4
 export MODE="ecmp"
-export NPUS_COUNT=128
-export TIMEOUT="10000m"
-export MAX_PARALLEL_JOBS=6
-export NUM_RUNS=2
+export NPUS_COUNT=16
+export TIMEOUT="1000m"
+export MAX_PARALLEL_JOBS=20
+export NUM_RUNS=5
 export BASE_ECMP_SEED=25
-export WORKLOAD_DIR_REL="upc/experiments_files/experiment4/workload/GPT13B"
+export WORKLOAD_DIR_REL="upc/experiments_files/experiment4/workload/Llama8B"
 
-export SYSTEM_CONFIG_NAMES="Ring"
-export TOPOLOGY_NAMES="FoldedClos_128_ECMP_sw"
-export NS3_CONFIG_INDICES="5"
-export SIM_TYPES="ns3"
+export SYSTEM_CONFIG_NAMES="FoldedClos"
+export TOPOLOGY_NAMES="FoldedClosECMP"
+export NS3_CONFIG_INDICES="3 5"
+export SIM_TYPES="all"
 
 
 # Get script directory

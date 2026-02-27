@@ -1,15 +1,15 @@
 #!/bin/bash
-# Quick launcher for Experiment 5 - ECMP Mode
+# Quick launcher for Experiment 6 - ECMP Mode
 # Template for a new experiment
 
-export EXPERIMENT_NUM=5
+export EXPERIMENT_NUM=6
 export MODE="ecmp"
 export NPUS_COUNT=128
-export TIMEOUT="1000m"
-export MAX_PARALLEL_JOBS=10
-export NUM_RUNS=5
+export TIMEOUT="10000m"
+export MAX_PARALLEL_JOBS=5
+export NUM_RUNS=1
 export BASE_ECMP_SEED=25
-export WORKLOAD_DIR_REL="upc/experiments_files/experiment5/workload/GPT13B"
+export WORKLOAD_DIR_REL="upc/experiments_files/experiment6/workload/GPT40B"
 
 export SYSTEM_CONFIG_NAMES="FoldedClos128"
 export TOPOLOGY_NAMES="FoldedClosECMP128"
