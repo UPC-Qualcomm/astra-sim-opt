@@ -4,13 +4,25 @@ import matplotlib.patches as mpatches
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=900, link_bandwidths=None, link_latencies=None, output_dir="./"):
+def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=900, link_bandwidths=None, link_latencies=None, output_dir="./", path_gen=None):
     """
     Writes topology data to two files:
     1. A custom .txt file with a simple, quote-less format.
     2. A standard, machine-readable .json file.
     
     The paths in both files are filtered to only include host-to-host routes.
+    Node names are renumbered using the same sequential scheme as the NS3 file
+    (hosts: 0..num_hosts-1, switches: num_hosts..num_nodes-1), but the original
+    type prefix is preserved (e.g., 'h0', 't128', 'v132', 'a140', 'c150').
+    This means the same number in the NS3 file and these files always refers to
+    the same node.
+
+    path_gen: optional callable that returns a generator yielding
+              (src_name, {dst_name: [list_of_paths]}) pairs in order.
+              When provided, 'paths' is ignored for the routes section.
+              For very large topologies the routes section is omitted from the
+              g2 files (use the NS3 file for routing); only topology edges are
+              written.
 
     Args:
         links (dict): A dictionary of links from the topology generator.
@@ -20,45 +32,88 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
         link_bandwidths (dict): Optional dictionary mapping link IDs to bandwidth values.
         link_latencies (dict): Optional dictionary mapping link IDs to latency values.
     """
-    # --- 1. Filter paths to keep only host-to-host routes ---
-    host_to_host_paths = {}
-    for src, dests in paths.items():
-        if src.startswith('h'):
-            host_dests = {
-                dest: path for dest, path in dests.items() 
-                if dest.startswith('h') and src != dest
-            }
-            if host_dests:
-                host_to_host_paths[src] = host_dests
+    def _get_num(name):
+        match = re.search(r'\d+', name)
+        return int(match.group()) if match else -1
+
+    def _get_prefix(name):
+        match = re.match(r'([a-zA-Z]+)', name)
+        return match.group(1) if match else ''
+
+    # --- 0. Build the sequential name -> labeled-name mapping (same ordering as NS3 writer) ---
+    all_node_names = set()
+    for _, (n1, n2) in links.items():
+        all_node_names.add(n1)
+        all_node_names.add(n2)
+
+    host_names   = sorted([n for n in all_node_names if n.startswith('h')], key=_get_num)
+    switch_names = sorted([n for n in all_node_names if not n.startswith('h')], key=_get_num)
+    num_hosts = len(host_names)
+
+    # Map each original name to  prefix + sequential_id  (matching NS3 numbering)
+    name_to_labeled = {}
+    for i, name in enumerate(host_names):
+        name_to_labeled[name] = f"{_get_prefix(name)}{i}"
+    for i, name in enumerate(switch_names):
+        name_to_labeled[name] = f"{_get_prefix(name)}{num_hosts + i}"
+
+    def relabel(name):
+        return name_to_labeled.get(name, name)
+
+    # --- 1. Build host-to-host paths (or note they will be streamed / skipped) ---
+    streaming = path_gen is not None
+
+    if not streaming:
+        host_to_host_paths = {}
+        for src, dests in (paths or {}).items():
+            if src.startswith('h'):
+                host_dests = {}
+                for dest, path_or_paths in dests.items():
+                    if dest.startswith('h') and src != dest:
+                        if path_or_paths and isinstance(path_or_paths[0], list):
+                            relabeled = [[relabel(hop) for hop in p] for p in path_or_paths]
+                        else:
+                            relabeled = [relabel(hop) for hop in path_or_paths]
+                        host_dests[relabel(dest)] = relabeled
+                if host_dests:
+                    host_to_host_paths[relabel(src)] = host_dests
 
     # --- 2. Create and write the custom .txt file ---
-    txt_content = []
-    
-    # Add the edges without quotes
-    for link_id, (node1, node2) in links.items():
-        bw = bandwidth
-        if link_bandwidths and link_id in link_bandwidths:
-            bw = link_bandwidths[link_id]
-        lat = 0.0
-        if link_latencies and link_id in link_latencies:
-            lat = link_latencies[link_id]
-        txt_content.append(f"({node1}, {node2}, {bw}, {lat})")
-    
-    # Add a separator for readability
-    txt_content.append("\n# Paths\n")
-
-    # Add the paths, handling multiple paths for each src-dest pair
-    for src, dests in host_to_host_paths.items():
-        for dest, list_of_paths in dests.items():
-            for path in list_of_paths:
-                # Join the path list into a string like "h1, s1, h2"
-                path_str = ", ".join(path)
-                txt_content.append(f"{src}: {dest}: [{path_str}]")
-
     import os
     txt_filename = os.path.join(output_dir, f"{base_filename}.txt")
     with open(txt_filename, "w") as f:
-        f.write("\n".join(txt_content))
+        # Edges
+        for link_id, (node1, node2) in links.items():
+            bw = bandwidth
+            if link_bandwidths and link_id in link_bandwidths:
+                bw = link_bandwidths[link_id]
+            lat = 0.0
+            if link_latencies and link_id in link_latencies:
+                lat = link_latencies[link_id]
+            f.write(f"({relabel(node1)}, {relabel(node2)}, {bw}, {lat})\n")
+
+        f.write("\n# Paths\n\n")
+
+        if streaming:
+            # Large topology: stream paths directly to file
+            for src_orig, dests in path_gen():
+                src_lbl = relabel(src_orig)
+                for dest_orig, path_or_paths in dests.items():
+                    dest_lbl = relabel(dest_orig)
+                    if path_or_paths and isinstance(path_or_paths[0], list):
+                        for path in path_or_paths:
+                            f.write(f"{src_lbl}: {dest_lbl}: [{', '.join(relabel(h) for h in path)}]\n")
+                    else:
+                        f.write(f"{src_lbl}: {dest_lbl}: [{', '.join(relabel(h) for h in path_or_paths)}]\n")
+        else:
+            for src, dests in host_to_host_paths.items():
+                for dest, path_or_paths in dests.items():
+                    if path_or_paths and isinstance(path_or_paths[0], list):
+                        for path in path_or_paths:
+                            f.write(f"{src}: {dest}: [{', '.join(path)}]\n")
+                    else:
+                        f.write(f"{src}: {dest}: [{', '.join(path_or_paths)}]\n")
+
     print(f"Successfully wrote custom text topology to {txt_filename}")
 
     # --- 3. Create and write the standard .json file ---
@@ -70,21 +125,48 @@ def write_g2_topology_files(links, paths, base_filename="topology", bandwidth=90
         lat = 0.0
         if link_latencies and link_id in link_latencies:
             lat = link_latencies[link_id]
-        edges.append([n1, n2, bw, lat])
-
-    json_data = {
-        "numEdges": len(links),
-        "edges": edges,
-        "paths": host_to_host_paths
-    }
+        edges.append([relabel(n1), relabel(n2), bw, lat])
 
     json_filename = os.path.join(output_dir, f"{base_filename}.json")
     with open(json_filename, "w") as f:
-        json.dump(json_data, f, indent=4)
+        # Write JSON incrementally to avoid building a 2+ GB dict in memory
+        f.write('{\n')
+        f.write(f'    "numEdges": {len(links)},\n')
+        f.write('    "edges": ')
+        json.dump(edges, f)
+        f.write(',\n')
+        f.write('    "paths": {')
+
+        first_src = True
+        if streaming:
+            for src_orig, dests in path_gen():
+                src_lbl = relabel(src_orig)
+                if not first_src:
+                    f.write(',')
+                f.write(f'\n        {json.dumps(src_lbl)}: {{')
+                first_dst = True
+                for dest_orig, path_or_paths in dests.items():
+                    dest_lbl = relabel(dest_orig)
+                    if not first_dst:
+                        f.write(',')
+                    norm = path_or_paths if (path_or_paths and isinstance(path_or_paths[0], list)) else [path_or_paths]
+                    relabeled = [[relabel(h) for h in p] for p in norm]
+                    f.write(f'\n            {json.dumps(dest_lbl)}: {json.dumps(relabeled)}')
+                    first_dst = False
+                f.write('\n        }')
+                first_src = False
+        else:
+            for src, dests in host_to_host_paths.items():
+                if not first_src:
+                    f.write(',')
+                f.write(f'\n        {json.dumps(src)}: {json.dumps(dests)}')
+                first_src = False
+
+        f.write('\n    }\n}\n')
     print(f"Successfully wrote JSON topology to {json_filename}")
 
 
-def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth="900GiB/s", latency="0.000ms", link_bandwidths=None, link_latencies=None, bw_unit="GB/s", lat_unit="ms", output_dir="./"):
+def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth="900GiB/s", latency="0.000ms", link_bandwidths=None, link_latencies=None, bw_unit="GB/s", lat_unit="ms", output_dir="./", path_gen=None):
     """
     Maps node names to sequential IDs and writes a topology file in the NS3 format,
     including pre-computed routes.
@@ -93,7 +175,8 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
 
     Args:
         links (dict): Dictionary of links with string node names (e.g., 'h1', 's1').
-        paths (dict): Dictionary of paths with string node names.
+        paths (dict): Dictionary of paths with string node names (ignored when path_gen
+                      is provided).
         filename (str): The name of the output file.
         bandwidth (str): Default bandwidth for all links.
         latency (str): Default link latency.
@@ -101,6 +184,9 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
         link_latencies (dict): Optional dictionary mapping link IDs to latency values.
         bw_unit (str): Unit string to append to bandwidth values (e.g., "GB/s").
         lat_unit (str): Unit string to append to latency values (e.g., "ms").
+        path_gen: optional callable returning a generator that yields
+                  (src_name, {dst_name: [list_of_paths]}) in source-sorted order.
+                  Use this for large topologies to avoid building a huge paths dict.
     """
     def get_num(name):
         """Extracts the integer part of a node name for sorting."""
@@ -195,32 +281,66 @@ def write_ns3_topology_file(links, paths, filename="ns3_topology.txt", bandwidth
         for (id1, id2), bw, lat in sorted(processed_links_with_bw_lat, key=lambda x: x[0]):
             f.write(f"{id1} {id2} {bw} {lat} 0\n")
 
-        # 5. Write paths
+        # 5. Write paths (ROUTES section)
         f.write("\nROUTES\n")
-        
-        # Filter for host-to-host paths
-        host_to_host_paths = {}
-        for src, dests in paths.items():
-            if src.startswith('h'):
-                host_dests = {
-                    dest: path_list for dest, path_list in dests.items() 
-                    if dest.startswith('h') and src != dest
-                }
-                if host_dests:
-                    host_to_host_paths[src] = host_dests
-        
-        # Convert names to IDs and write to file
-        for src_str, dests in sorted(host_to_host_paths.items(), key=lambda item: get_num(item[0])):
-            src_id = name_to_id_map[src_str]
-            for dest_str, list_of_paths in sorted(dests.items(), key=lambda item: get_num(item[0])):
-                dest_id = name_to_id_map[dest_str]
-                for path in list_of_paths:
-                    path_ids = [name_to_id_map[hop] for hop in path]
-                    path_ids_str = ", ".join(map(str, path_ids))
-                    f.write(f"{src_id}:{dest_id}:[{path_ids_str}]\n")
 
+        if path_gen is not None:
+            # Streaming mode: generator yields (src_name, {dst_name: [paths]}) in order.
+            # Sources are already in sequential order so no outer sort is needed.
+            for src_str, dests in path_gen():
+                if src_str not in name_to_id_map:
+                    continue
+                src_id = name_to_id_map[src_str]
+                for dest_str, list_of_paths in sorted(dests.items(), key=lambda item: get_num(item[0])):
+                    if dest_str not in name_to_id_map:
+                        continue
+                    dest_id = name_to_id_map[dest_str]
+                    for path in list_of_paths:
+                        path_ids = [name_to_id_map[hop] for hop in path if hop in name_to_id_map]
+                        f.write(f"{src_id}:{dest_id}:[{', '.join(map(str, path_ids))}]\n")
+        else:
+            # Original dict-based mode
+            host_to_host_paths = {}
+            for src, dests in (paths or {}).items():
+                if src.startswith('h'):
+                    host_dests = {
+                        dest: path_list for dest, path_list in dests.items()
+                        if dest.startswith('h') and src != dest
+                    }
+                    if host_dests:
+                        host_to_host_paths[src] = host_dests
+
+            for src_str, dests in sorted(host_to_host_paths.items(), key=lambda item: get_num(item[0])):
+                src_id = name_to_id_map[src_str]
+                for dest_str, list_of_paths in sorted(dests.items(), key=lambda item: get_num(item[0])):
+                    dest_id = name_to_id_map[dest_str]
+                    for path in list_of_paths:
+                        path_ids = [name_to_id_map[hop] for hop in path]
+                        path_ids_str = ", ".join(map(str, path_ids))
+                        f.write(f"{src_id}:{dest_id}:[{path_ids_str}]\n")
 
     print(f"Successfully wrote NS3 topology to {filepath}")
+
+    # 6. Write nodemap sidecar: plain_int_id -> prefixed_name  (e.g. "32" -> "t32")
+    # This lets the power model translate plain simulation IDs back to typed names.
+    # Prefix key:
+    #   h = NPU/host    v = NVSwitch       n = NIC switch (ring/fully_connected)
+    #   p = per-NPU switch                 t = edge/ToR switch
+    #   a = aggregation switch             c = core switch
+    def _get_prefix(name):
+        match = re.match(r'([a-zA-Z]+)', name)
+        return match.group(1) if match else ''
+
+    nodemap = {}
+    for name, num_id in name_to_id_map.items():
+        prefix = _get_prefix(name)
+        nodemap[str(num_id)] = f"{prefix}{num_id}"
+
+    nodemap_path = os.path.join(output_dir, f"{filename}_nodemap.json")
+    sorted_nodemap = {k: nodemap[k] for k in sorted(nodemap, key=lambda k: int(k))}
+    with open(nodemap_path, "w") as f:
+        json.dump(sorted_nodemap, f, indent=4)
+    print(f"Successfully wrote node map to {nodemap_path}")
 
 
 def make_node_names_zero_indexed(links, paths):

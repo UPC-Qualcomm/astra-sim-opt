@@ -2,6 +2,98 @@ import random
 from create_topology import CustomizedDragonfly, Jellyfish, FoldedClos
 from utils import write_ns3_topology_file, write_g2_topology_files
 
+# ---------------------------------------------------------------------------
+# For FoldedClos ECMP, when total NPUs exceed this threshold the code skips
+# GenerateECMPFlowDict (which calls nx.all_shortest_paths N_NPU² times on the
+# full graph) and instead computes paths only between the small set of edge
+# switches, expanding to NPU-level paths on-the-fly during file writing.
+# This reduces path computation from O(N_NPU²) to O(N_edge_switch²).
+# Example for K=16, 8 NPUs/node: 8192² ≈ 67M calls → 128² = 16K calls.
+_STREAMING_THRESHOLD = 4096
+# ---------------------------------------------------------------------------
+
+
+def _build_npu_path_meta(topo_obj):
+    """Return {h_name: (nvswitches, edge_switch, node_id)} for every NPU."""
+    npu_info = {}
+    for node_id, npus in topo_obj.node_npus.items():
+        es = topo_obj.node_to_switch.get(node_id)
+        if es is None:
+            continue
+        for h in npus:
+            nvs = topo_obj.npu_to_intra_switches.get(h, [])
+            npu_info[h] = (nvs, es, node_id)
+    return npu_info
+
+
+def _iter_foldedclos_paths(topo_obj, fabric_paths, intra_node_topology, npus_per_node):
+    """
+    Generator yielding (src_name, {dst_name: [paths]}) for each source NPU in
+    sequential order.
+
+    Expands pre-computed edge-switch-level fabric paths to full NPU-level paths
+    without storing all N_NPU² paths in memory at once.
+    Each NPU pair gets exactly ONE deterministic path.
+
+    Path structure for 'switch' intra-node topology:
+      same node  : intra-node paths (through NVSwitches, no ToR)
+      same edge  : h_src → NVSwitch_src → edge → NVSwitch_dst → h_dst
+      diff edge  : h_src → NVSwitch_src → edge_src → [fabric] → edge_dst → NVSwitch_dst → h_dst
+    """
+    total_npus = int(topo_obj.numHosts)
+    npu_info = _build_npu_path_meta(topo_obj)
+
+    for i in range(total_npus):
+        h_src = f'h{i + 1}'
+        if h_src not in npu_info:
+            continue
+        src_nvs, src_es, src_node = npu_info[h_src]
+
+        dests = {}
+        for j in range(total_npus):
+            if i == j:
+                continue
+            h_dst = f'h{j + 1}'
+            if h_dst not in npu_info:
+                continue
+            dst_nvs, dst_es, dst_node = npu_info[h_dst]
+
+            if src_node == dst_node and intra_node_topology and npus_per_node > 1:
+                # Same node: stay within intra-node topology
+                dests[h_dst] = topo_obj.generate_intra_node_paths(h_src, h_dst)
+            elif src_es == dst_es:
+                # Same edge switch, different nodes
+                snv = src_nvs[0] if src_nvs else None
+                dnv = dst_nvs[0] if dst_nvs else None
+                if snv and dnv:
+                    dests[h_dst] = [[h_src, snv, src_es, dnv, h_dst]]
+                elif snv:
+                    dests[h_dst] = [[h_src, snv, src_es, h_dst]]
+                elif dnv:
+                    dests[h_dst] = [[h_src, src_es, dnv, h_dst]]
+                else:
+                    dests[h_dst] = [[h_src, src_es, h_dst]]
+            else:
+                # Different edge switches: look up cached fabric path
+                fps = fabric_paths.get(src_es, {}).get(dst_es, [])
+                if not fps:
+                    dests[h_dst] = [[h_src, h_dst]]
+                    continue
+                fp = fps[0]  # deterministic single fabric path
+                snv = src_nvs[0] if src_nvs else None
+                dnv = dst_nvs[0] if dst_nvs else None
+                if snv and dnv:
+                    dests[h_dst] = [[h_src, snv] + fp + [dnv, h_dst]]
+                elif snv:
+                    dests[h_dst] = [[h_src, snv] + fp + [h_dst]]
+                elif dnv:
+                    dests[h_dst] = [[h_src] + fp + [dnv, h_dst]]
+                else:
+                    dests[h_dst] = [[h_src] + fp + [h_dst]]
+
+        yield h_src, dests
+
+
 def generate_topology_files(topology, paths_mode, config, output_dir="./", base_filename=None):
     """
     Generates topology and routing files for Astra-Sim.
@@ -159,13 +251,14 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
                 final_paths[src][dst] = [path]
         
     elif paths_mode in ["ECMP", "Random"]:
-        topo_obj.GenerateECMPFlowDict(topo_obj.adjacency_matrix)
-        raw_paths = topo_obj.paths
-        
         all_paths = {}
+        path_gen = None   # Set below for large-topology streaming mode
 
         if topology in ["Dragonfly", "Jellyfish"]:
-            # Post-processing to wrap switch paths with hosts/NPUs
+            # Dragonfly / Jellyfish: compute switch-level paths then wrap with NPUs
+            topo_obj.GenerateECMPFlowDict(topo_obj.adjacency_matrix)
+            raw_paths = topo_obj.paths
+
             conc = topo_obj.concentration_factor if topology == "Dragonfly" else topo_obj.num_hosts_per_switch
             total_npus = topo_obj.total_num_hosts
             npus_per_node = topo_obj.npus_per_node
@@ -176,79 +269,99 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
                 for npu2 in range(total_npus):
                     if npu1 == npu2: 
                         continue
-                    
-                    # Calculate which node each NPU belongs to
                     node1 = npu1 // npus_per_node
                     node2 = npu2 // npus_per_node
-                    
-                    # Calculate which switch each node is attached to
                     s1_idx = node1 // conc
                     s2_idx = node2 // conc
                     s1 = f't{s1_idx+1}'
                     s2 = f't{s2_idx+1}'
-                    
                     h2 = f'h{npu2+1}'
-                    
                     if node1 == node2:
-                        # Same node - use intra-node paths (NOT through ToR)
                         all_paths[h1][h2] = topo_obj.generate_intra_node_paths(h1, h2)
                     elif s1_idx == s2_idx:
-                        # Same switch, different nodes
                         all_paths[h1][h2] = [[h1, s1, h2]]
                     else:
-                        # Inter-switch: raw_paths[s1][s2] is a list of paths
                         switch_paths = raw_paths[s1][s2]
                         all_paths[h1][h2] = [[h1] + p + [h2] for p in switch_paths]
+
         else:
-            # FoldedClos - need to regenerate paths with intra-node handling
+            # ----------------------------------------------------------------
+            # FoldedClos path generation
+            # ----------------------------------------------------------------
             total_npus = int(topo_obj.numHosts)
             npus_per_node = topo_obj.npus_per_node
-            
-            for npu1 in range(total_npus):
-                h1 = f'h{npu1+1}'
-                all_paths[h1] = {}
-                for npu2 in range(total_npus):
-                    if npu1 == npu2:
-                        continue
-                    
-                    h2 = f'h{npu2+1}'
-                    
-                    # Calculate which node each NPU belongs to
-                    node1 = npu1 // npus_per_node
-                    node2 = npu2 // npus_per_node
-                    
-                    if node1 == node2 and intra_node_topology and npus_per_node > 1:
-                        # Same node - use intra-node paths (NOT through ToR)
-                        all_paths[h1][h2] = topo_obj.generate_intra_node_paths(h1, h2)
-                    else:
-                        # Inter-node: use standard paths from raw_paths
-                        if h1 in raw_paths and h2 in raw_paths.get(h1, {}):
-                            path_data = raw_paths[h1][h2]
-                            # Ensure it's a list of paths
-                            if path_data and isinstance(path_data[0], str):
-                                all_paths[h1][h2] = [path_data]
-                            else:
-                                all_paths[h1][h2] = path_data
-                        else:
-                            # Fallback - direct path
-                            all_paths[h1][h2] = [[h1, h2]]
 
-        # Apply path selection mode
-        if paths_mode == "Random":
-            for src, dests in all_paths.items():
-                final_paths[src] = {}
-                for dest, path_list in dests.items():
-                    if path_list:
-                        final_paths[src][dest] = [random.choice(path_list)]
-        else:  # ECMP
-            final_paths = all_paths
-            
+            if total_npus > _STREAMING_THRESHOLD and intra_node_topology:
+                # Fast streaming path for large topologies.
+                # Replaces O(N_NPU²) GenerateECMPFlowDict (nx.all_shortest_paths
+                # on 12K+ node graph) with O(N_edge_switch²) paths on the small
+                # fabric subgraph, then expands NPU paths on-the-fly while writing.
+                # One deterministic path per NPU pair is produced.
+                print(f"  Large topology ({total_npus:,} NPUs > threshold "
+                      f"{_STREAMING_THRESHOLD:,}): streaming path mode active.")
+                print(f"  (1 deterministic path/pair via fabric edge-switch routing)")
+                fabric_paths = topo_obj.compute_fabric_ecmp_paths(max_paths=1)
+
+                if paths_mode == "Random":
+                    # Random still picks 1 path; here we have exactly 1, so same result
+                    path_gen = lambda: _iter_foldedclos_paths(
+                        topo_obj, fabric_paths, intra_node_topology, npus_per_node)
+                else:  # ECMP
+                    path_gen = lambda: _iter_foldedclos_paths(
+                        topo_obj, fabric_paths, intra_node_topology, npus_per_node)
+
+                all_paths = None  # signal writers to use path_gen instead
+
+            else:
+                # Original approach: fine for small/medium topologies
+                topo_obj.GenerateECMPFlowDict(topo_obj.adjacency_matrix)
+                raw_paths = topo_obj.paths
+
+                for npu1 in range(total_npus):
+                    h1 = f'h{npu1+1}'
+                    all_paths[h1] = {}
+                    for npu2 in range(total_npus):
+                        if npu1 == npu2:
+                            continue
+                        h2 = f'h{npu2+1}'
+                        node1 = npu1 // npus_per_node
+                        node2 = npu2 // npus_per_node
+                        if node1 == node2 and intra_node_topology and npus_per_node > 1:
+                            all_paths[h1][h2] = topo_obj.generate_intra_node_paths(h1, h2)
+                        else:
+                            if h1 in raw_paths and h2 in raw_paths.get(h1, {}):
+                                path_data = raw_paths[h1][h2]
+                                if path_data and isinstance(path_data[0], str):
+                                    all_paths[h1][h2] = [path_data]
+                                else:
+                                    all_paths[h1][h2] = path_data
+                            else:
+                                all_paths[h1][h2] = [[h1, h2]]
+
+        # Apply path-selection mode (only for in-memory paths)
+        if all_paths is not None:
+            if paths_mode == "Random":
+                for src, dests in all_paths.items():
+                    final_paths[src] = {}
+                    for dest, path_list in dests.items():
+                        if path_list:
+                            final_paths[src][dest] = [random.choice(path_list)]
+            else:  # ECMP
+                final_paths = all_paths
+        else:
+            final_paths = None  # writers will use path_gen
+
     # 4. Write Output Files
     print(f"Writing files to: {output_dir}")
-    
+
     # Get bandwidths and latencies from topology object
     link_bandwidths = getattr(topo_obj, 'link_bandwidths', None)
     link_latencies = getattr(topo_obj, 'link_latencies', None)
-    
-    write_g2_topology_files(links, final_paths, base_filename=base_filename, bandwidth=2, link_bandwidths=link_bandwidths, link_latencies=link_latencies, output_dir=output_dir)
-    write_ns3_topology_file(links, final_paths, filename=base_filename, bandwidth=2, link_bandwidths=link_bandwidths, link_latencies=link_latencies, bw_unit=bw_unit, lat_unit=lat_unit, output_dir=output_dir)
+
+    write_g2_topology_files(links, final_paths, base_filename=base_filename, bandwidth=2,
+                            link_bandwidths=link_bandwidths, link_latencies=link_latencies,
+                            output_dir=output_dir, path_gen=path_gen)
+    write_ns3_topology_file(links, final_paths, filename=base_filename, bandwidth=2,
+                            link_bandwidths=link_bandwidths, link_latencies=link_latencies,
+                            bw_unit=bw_unit, lat_unit=lat_unit, output_dir=output_dir,
+                            path_gen=path_gen)

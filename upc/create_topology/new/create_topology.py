@@ -1438,6 +1438,56 @@ class FoldedClos(IntraNodeTopologyMixin):
         # print("Time to generate f dict:", str(time.time() - start_time))
         return self.F, self.sorted_traffic
 
+    def compute_fabric_ecmp_paths(self, max_paths=1):
+        """
+        Compute ECMP paths between all edge-switch pairs using only the fabric
+        subgraph (edge + agg + core switches, no NPUs or NVSwitches).
+
+        This is orders-of-magnitude faster than GenerateECMPFlowDict for large
+        topologies because:
+          - Fabric subgraph: O(K²) nodes  vs  full graph O(K³) nodes
+          - Only N_edge_switch² pairs     vs  N_NPU² pairs
+        For K=16: 320-node graph, 128²=16K pairs  vs  12K-node graph, 8192²=67M pairs.
+
+        Args:
+            max_paths: Maximum paths per edge-switch pair.
+                       1  → one deterministic shortest path (default, fast & compact).
+                       None → all shortest paths (can be very large for big K).
+
+        Returns:
+            dict: fabric_paths[src_edge][dst_edge] = list_of_paths
+                  Each path is a list of switch names [src_edge, ..., dst_edge].
+        """
+        fabric_nodes = set(self.edge_switches + self.agg_switches + self.core_switches)
+
+        G_fabric = nx.DiGraph()
+        for (src, dst) in self.links.values():
+            if src in fabric_nodes and dst in fabric_nodes:
+                G_fabric.add_edge(src, dst)
+
+        n_edge = len(self.edge_switches)
+        print(f"  Fabric subgraph: {G_fabric.number_of_nodes()} nodes, "
+              f"{G_fabric.number_of_edges()} edges")
+        print(f"  Computing paths between {n_edge} edge switches "
+              f"({n_edge * (n_edge - 1):,} directed pairs)...")
+
+        fabric_paths = {}
+        for src in self.edge_switches:
+            fabric_paths[src] = {}
+            for dst in self.edge_switches:
+                if src == dst:
+                    continue
+                try:
+                    if max_paths == 1:
+                        fabric_paths[src][dst] = [nx.shortest_path(G_fabric, src, dst)]
+                    else:
+                        paths = list(nx.all_shortest_paths(G_fabric, src, dst))
+                        fabric_paths[src][dst] = paths if max_paths is None else paths[:max_paths]
+                except (nx.NetworkXNoPath, nx.NodeNotFound):
+                    fabric_paths[src][dst] = []
+
+        return fabric_paths
+
     def GenerateECMPFlowDict(self, tm):
         print("*** Generating ECMP flow dict for folded clos K = {}".format(self.K))
         G = nx.DiGraph(self.links.values())
