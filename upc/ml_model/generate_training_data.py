@@ -126,7 +126,8 @@ def get_valid_parallelism_strategies(num_npus, num_stacks, max_dp=None, max_mp=N
     fsdp_values = [0, 1]  # weight_sharded
     
     for dp, mp, sp, pp, fsdp in product(dp_values, mp_values, sp_values, pp_values, fsdp_values):
-        if dp * mp * sp * pp == num_npus:
+        # Ensure dp*mp*sp*pp = num_npus AND pp <= num_stacks (layers constraint)
+        if dp * mp * sp * pp == num_npus and pp <= num_stacks:
             strategies.append({
                 'dp': dp,
                 'mp': mp,
@@ -298,8 +299,8 @@ def generate_model_configs(num_models=100, enforce_micro_batch_ratio=True):
     """Generate random model configurations with diversity."""
     configs = []
     
-    # Set seed for reproducibility of model generation
-    random.seed(42)
+    # Set seed for reproducibility of model generationd
+    #random.seed(random.randint(1, 10000))
     
     for i in range(num_models):
         config = generate_random_config(i + 1, enforce_micro_batch_ratio=enforce_micro_batch_ratio)

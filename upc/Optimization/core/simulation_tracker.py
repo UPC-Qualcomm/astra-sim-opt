@@ -78,31 +78,47 @@ class SimulationTracker:
                   f"kill_multiplier={kill_multiplier}")
     
     def _write_threshold(self, value: float):
-        """Write threshold to shared file."""
+        """Write threshold to shared file (atomic write to avoid race conditions)."""
         try:
             # Read existing data
             data = {'threshold': 1e15, 'total_checked': 0, 'total_killed': 0}
             if os.path.exists(self._threshold_file):
-                with open(self._threshold_file, 'r') as f:
-                    data = json.load(f)
-            
+                data = self._safe_read_json(self._threshold_file, data)
+
             # Update threshold
             data['threshold'] = value
-            
-            # Write back
-            with open(self._threshold_file, 'w') as f:
-                json.dump(data, f)
+
+            # Atomic write: write to a temp file then rename so readers never
+            # see a partially-written (empty) file.
+            dir_name = os.path.dirname(self._threshold_file)
+            with tempfile.NamedTemporaryFile('w', dir=dir_name, delete=False, suffix='.tmp') as tmp_f:
+                tmp_path = tmp_f.name
+                json.dump(data, tmp_f)
+            os.replace(tmp_path, self._threshold_file)
         except Exception as e:
             if self.verbose:
                 print(f"[Tracker] Warning: Could not write threshold: {e}")
     
+    def _safe_read_json(self, path: str, default: dict) -> dict:
+        """Read a JSON file, returning 'default' if the file is empty or corrupt."""
+        try:
+            with open(path, 'r') as f:
+                content = f.read()
+            if not content.strip():
+                return default
+            return json.loads(content)
+        except (json.JSONDecodeError, ValueError):
+            return default
+        except Exception:
+            return default
+
     def _read_threshold(self) -> float:
         """Read threshold from shared file."""
         try:
             if os.path.exists(self._threshold_file):
-                with open(self._threshold_file, 'r') as f:
-                    data = json.load(f)
-                    return data.get('threshold', 1e15)
+                data = self._safe_read_json(self._threshold_file,
+                                            {'threshold': 1e15, 'total_checked': 0, 'total_killed': 0})
+                return data.get('threshold', 1e15)
         except Exception as e:
             if self.verbose:
                 print(f"[Tracker] Warning: Could not read threshold: {e}")
@@ -119,20 +135,23 @@ class SimulationTracker:
         self._write_threshold(value)
     
     def _increment_counter(self, counter_name: str):
-        """Increment a counter in the shared file."""
+        """Increment a counter in the shared file (atomic write to avoid race conditions)."""
         try:
             # Read existing data
-            data = {'threshold': 1e15, 'total_checked': 0, 'total_killed': 0}
+            default = {'threshold': 1e15, 'total_checked': 0, 'total_killed': 0}
+            data = default.copy()
             if os.path.exists(self._threshold_file):
-                with open(self._threshold_file, 'r') as f:
-                    data = json.load(f)
-            
+                data = self._safe_read_json(self._threshold_file, default)
+
             # Increment counter
             data[counter_name] = data.get(counter_name, 0) + 1
-            
-            # Write back
-            with open(self._threshold_file, 'w') as f:
-                json.dump(data, f)
+
+            # Atomic write
+            dir_name = os.path.dirname(self._threshold_file)
+            with tempfile.NamedTemporaryFile('w', dir=dir_name, delete=False, suffix='.tmp') as tmp_f:
+                tmp_path = tmp_f.name
+                json.dump(data, tmp_f)
+            os.replace(tmp_path, self._threshold_file)
         except Exception as e:
             if self.verbose:
                 print(f"[Tracker] Error incrementing {counter_name}: {e}")
@@ -141,9 +160,9 @@ class SimulationTracker:
         """Get a counter value from the shared file."""
         try:
             if os.path.exists(self._threshold_file):
-                with open(self._threshold_file, 'r') as f:
-                    data = json.load(f)
-                    return data.get(counter_name, 0)
+                data = self._safe_read_json(self._threshold_file,
+                                            {'threshold': 1e15, 'total_checked': 0, 'total_killed': 0})
+                return data.get(counter_name, 0)
             return 0
         except Exception as e:
             if self.verbose:
@@ -226,9 +245,9 @@ class SimulationTracker:
             if elapsed_walltime > kill_walltime_threshold:
                 self.total_killed += 1
                 # Always print kill messages
-                print(f"\n⚠️  [TRACKER] KILLING SIMULATION #{self.total_killed}")
-                print(f"    Elapsed: {elapsed_walltime:.1f}s > Kill threshold: {kill_walltime_threshold:.1f}s")
-                print(f"    (Based on best: {self.threshold:.2e} cycles @ {self.cycles_per_second:.2e} cyc/s × {self.kill_multiplier})")
+                #print(f"\n⚠️  [TRACKER] KILLING SIMULATION #{self.total_killed}")
+                #print(f"    Elapsed: {elapsed_walltime:.1f}s > Kill threshold: {kill_walltime_threshold:.1f}s")
+                #print(f"    (Based on best: {self.threshold:.2e} cycles @ {self.cycles_per_second:.2e} cyc/s × {self.kill_multiplier})")
                 return True
             
             return False
@@ -261,13 +280,13 @@ class SimulationTracker:
         try:
             # Get latest issue tick from trace file
             latest_tick = self._get_latest_issue_tick(trace_file)
-            print(f"Trace file: {trace_file}, Latest tick: {latest_tick}")
+            #print(f"Trace file: {trace_file}, Latest tick: {latest_tick}")
             if latest_tick is None:
                 return False
             
             # Check against kill threshold
             kill_threshold = self.get_kill_threshold()
-            print("kill threshold", kill_threshold)
+            #print("kill threshold", kill_threshold)
             # Debug output every check
             if self.verbose and self._get_counter('total_checked') % 10 == 0:
                 print(f"[Tracker Debug] tick={latest_tick:.2e}, threshold={self.threshold:.2e}, kill_at={kill_threshold:.2e}")
@@ -276,9 +295,9 @@ class SimulationTracker:
                 self._increment_counter('total_killed')
                 killed_count = self._get_counter('total_killed')
                 # Always print kill messages (not just in verbose mode)
-                print(f"\n⚠️  [TRACKER] KILLING SIMULATION #{killed_count}")
-                print(f"    Current tick: {latest_tick:.2e} > Kill threshold: {kill_threshold:.2e}")
-                print(f"    Best threshold: {self.threshold:.2e} × {self.kill_multiplier} = {kill_threshold:.2e}")
+                #print(f"\n⚠️  [TRACKER] KILLING SIMULATION #{killed_count}")
+                #print(f"    Current tick: {latest_tick:.2e} > Kill threshold: {kill_threshold:.2e}")
+                #print(f"    Best threshold: {self.threshold:.2e} × {self.kill_multiplier} = {kill_threshold:.2e}")
                 if self.verbose:
                     print(f"    Trace file: {os.path.basename(trace_file)}")
                 return True

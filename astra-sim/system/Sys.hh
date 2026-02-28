@@ -339,7 +339,10 @@ class Sys : public Callable {
 
     // skip simulation for all nodes and use current duration
     bool replay_only;
-
+    
+    // skip communication for the data collection purpose
+    bool skip_comm;
+    
     // local memory
     Memory* memory;
     

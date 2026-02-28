@@ -8,11 +8,11 @@ echo "AstraSim Peak Memory Prediction Pipeline"
 echo "========================================"
 
 # Configuration
-TEST_MODE=${TEST_MODE:-false}
-PARALLEL_JOBS=${PARALLEL_JOBS:-1}
+TEST_MODE=${TEST_MODE:-true}
+PARALLEL_JOBS=${PARALLEL_JOBS:-2}
 NUM_MODELS=${NUM_MODELS:-30}
 STRATEGY_SAMPLE_RATE=${STRATEGY_SAMPLE_RATE:-0.2}
-BATCH_SIZE=${BATCH_SIZE:-1}
+BATCH_SIZE=${BATCH_SIZE:-2}
 NPU_COUNTS=${NPU_COUNTS:-"16,32,64,128,256,512,1024"}
 SIM_TYPE=${SIM_TYPE:-"analytical_unaware"}
 APPEND=${APPEND:-true}
@@ -20,7 +20,7 @@ ENFORCE_MICRO_BATCH_RATIO=${ENFORCE_MICRO_BATCH_RATIO:-true}
 if [ "$TEST_MODE" = "true" ]; then
     echo "Running in TEST MODE"
     TEST_FLAG="--test_mode"
-    NUM_MODELS=2
+    NPU_COUNTS="16"  # Limit NPU counts in test mode
 else
     TEST_FLAG=""
 fi
@@ -55,18 +55,17 @@ echo ""
 
 cd "$(dirname "$0")/.."
 
-python ml_model/generate_training_data.py \
-    --num_models "$NUM_MODELS" \
+python ml_model/generate_training_data_old.py \
     --npu_counts "$NPU_COUNTS" \
     --parallel_jobs "$PARALLEL_JOBS" \
     --batch_size "$BATCH_SIZE" \
     --strategy_sample_rate "$STRATEGY_SAMPLE_RATE" \
     --sim_type "$SIM_TYPE" \
+    --output_csv ml_model/training_data1.csv \
     $APPEND_FLAG \
-    $MICRO_BATCH_FLAG \
     $TEST_FLAG
 
-if [ ! -f ml_model/training_data.csv ]; then
+if [ ! -f ml_model/training_data1.csv ]; then
     echo "Error: Training data not generated!"
     exit 1
 fi
@@ -80,7 +79,7 @@ echo "Step 2: Training ML models..."
 echo ""
 
 python ml_model/train_model.py \
-    --input_csv ml_model/training_data.csv \
+    --input_csv ml_model/training_data1.csv \
     --output_dir ml_model/trained_models
 
 if [ ! -f ml_model/trained_models/best_model.pkl ]; then
@@ -119,7 +118,7 @@ echo "Pipeline completed successfully!"
 echo "========================================"
 echo ""
 echo "Generated files:"
-echo "  - Training data: ml_model/training_data.csv"
+echo "  - Training data: ml_model/training_data1.csv"
 echo "  - Trained model: ml_model/trained_models/best_model.pkl"
 echo "  - Model results: ml_model/trained_models/model_results.csv"
 echo "  - Visualizations: ml_model/trained_models/*.png"

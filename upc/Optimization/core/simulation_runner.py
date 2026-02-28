@@ -214,7 +214,7 @@ class SimulationRunner:
             
             if was_killed:
                 # Simulation was killed early - extract partial results
-                print(f"\n    🛑 Simulation killed early (exceeded threshold)")
+                #print(f"\n    🛑 Simulation killed early (exceeded threshold)")
                 if self.verbose:
                     print(f"       Extracting partial results...")
                 
@@ -231,7 +231,7 @@ class SimulationRunner:
                             print("    ⚠️  Could not extract partial execution time")
                         return None
                 
-                print(f"    📊 Partial execution time: {exec_time:.2f}s (KILLED)")
+                #print(f"    📊 Partial execution time: {exec_time:.2f}s (KILLED)")
                 if self.verbose:
                     print(f"       (Used as upper bound for optimization)")
                 
@@ -357,7 +357,7 @@ class SimulationRunner:
         """
         pattern = f"{self.workload_dir}/{config_name}.seq_*.batch_*{suffix}.0.et"
         matching_files = glob.glob(pattern)
-        print("matching_files:",matching_files)
+        #print("matching_files:",matching_files)
         if matching_files:
             # Remove .0.et suffix
             return matching_files[0][:-5]
@@ -441,7 +441,7 @@ class SimulationRunner:
                 
                 # Kill the entire process group (shell + simulator)
                 try:
-                    print(f"\n    ⚡ Killing simulation process group (PID: {pid})")
+                    #print(f"\n    ⚡ Killing simulation process group (PID: {pid})")
                     # Kill process group using negative PID
                     os.killpg(os.getpgid(pid), signal.SIGKILL)  # Use SIGKILL to ensure termination
                     wait_thread.join(timeout=2)  # Wait for thread to finish

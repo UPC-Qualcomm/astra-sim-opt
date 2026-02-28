@@ -88,7 +88,7 @@ def get_valid_parallelism_strategies(num_npus, num_stacks, max_dp=None, max_mp=N
     
     return strategies
 
-def generate_model_configs():
+def generate_model_configs2():
     """Generate various model configurations to explore."""
     configs = []
     
@@ -115,6 +115,53 @@ def generate_model_configs():
     configs.extend([
         {'name': 'xlarge_1', 'din': 50000, 'dmodel': 8192, 'dff': 32768, 'batch': 512, 'micro_batch': 512, 'seq': 2048, 'head': 64, 'num_stacks': 64, 'min_npus': 64, 'max_npus': 2048},
         #{'name': 'xlarge_2', 'din': 50000, 'dmodel': 10240, 'dff': 40960, 'batch': 1024, 'micro_batch': 512, 'seq': 2048, 'head': 80, 'num_stacks': 80, 'min_npus': 64, 'max_npus': 2048},
+    ])
+    
+    return configs
+
+
+def generate_model_configs():
+    """Generate various model configurations to explore from generate_workloads.py models.
+    Excludes models ending with _xL pattern (like _2L, _3L, etc.).
+    """
+    configs = []
+    
+    # Format: [din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks]
+    # From generate_workloads.py Model enum, excluding _xL patterns
+    
+    # Small models (16-64 NPUs)
+    configs.extend([
+        {'name': 'T5_Small', 'din': 32128, 'dmodel': 512, 'dff': random.randint(3, 8) * 512, 'batch': 2048, 'micro_batch': 32, 'seq': 512, 'head': 8, 'num_stacks': 6, 'min_npus': 16, 'max_npus': 64},
+        {'name': 'T5_Base', 'din': 32000, 'dmodel': 768, 'dff': random.randint(3, 8) * 768, 'batch': 2048, 'micro_batch': 64, 'seq': 512, 'head': 12, 'num_stacks': 12, 'min_npus': 16, 'max_npus': 64},
+        {'name': 'T5_Large', 'din': 16000, 'dmodel': 1024, 'dff': random.randint(3, 8) * 1024, 'batch': 128, 'micro_batch': 32, 'seq': 8192, 'head': 16, 'num_stacks': 24, 'min_npus': 16, 'max_npus': 128},
+    ])
+    
+    # Medium models (32-256 NPUs)
+    configs.extend([
+        {'name': 'GPT_2_Small', 'din': 48000, 'dmodel': 768, 'dff': random.randint(3, 8) * 768, 'batch': 128, 'micro_batch': 32, 'seq': 1024, 'head': 12, 'num_stacks': 12, 'min_npus': 16, 'max_npus': 128},
+        {'name': 'GPT_2_Medium', 'din': 100000, 'dmodel': 10240, 'dff': random.randint(3, 8) * 10240, 'batch': 2048, 'micro_batch': 64, 'seq': 1024, 'head': 16, 'num_stacks': 96, 'min_npus': 32, 'max_npus': 256},
+        {'name': 'GPT_3_1300M', 'din': 50000, 'dmodel': 12288, 'dff': random.randint(3, 8) * 12288, 'batch': 512, 'micro_batch': 512, 'seq': 2048, 'head': 16, 'num_stacks': 48, 'min_npus': 32, 'max_npus': 256},
+        {'name': 'GPT_Neo_2700M', 'din': 64000, 'dmodel': 2560, 'dff': random.randint(3, 8) * 2560, 'batch': 512, 'micro_batch': 128, 'seq': 8192, 'head': 32, 'num_stacks': 32, 'min_npus': 32, 'max_npus': 512},
+    ])
+    
+    # Large models (64+ NPUs)
+    configs.extend([
+        {'name': 'llama_8B', 'din': 128000, 'dmodel': 2048, 'dff': random.randint(3, 8) * 2048, 'batch': 256, 'micro_batch': 256, 'seq': 256, 'head': 32, 'num_stacks': 80, 'min_npus': 64, 'max_npus': 512},
+        {'name': 'FLAN_T5_XXL_11B', 'din': 256000, 'dmodel': 4096, 'dff': random.randint(3, 8) * 4096, 'batch': 2048, 'micro_batch': 2048, 'seq': 1024, 'head': 64, 'num_stacks': 24, 'min_npus': 64, 'max_npus': 512},
+        {'name': 'GPT_13B', 'din': 50257, 'dmodel': 18432 , 'dff': random.randint(3, 8) * 18432, 'batch': 512, 'micro_batch': 512, 'seq': 201638448, 'head': 40, 'num_stacks': 40, 'min_npus': 64, 'max_npus': 1024},
+        {'name': 'GPT_NeoX_20B', 'din': 50257, 'dmodel': 6144, 'dff': random.randint(3, 8) * 6144, 'batch': 2048, 'micro_batch': 128, 'seq': 65536, 'head': 128, 'num_stacks': 44, 'min_npus': 64, 'max_npus': 1024},
+        {'name': 'GPT_30B', 'din': 200000, 'dmodel': 8192 , 'dff': random.randint(3, 8) * 8192 , 'batch': 2048, 'micro_batch': 512, 'seq': 32768, 'head': 32, 'num_stacks': 120, 'min_npus': 64, 'max_npus': 1024},
+    ])
+    
+    # Very large models (128+ NPUs)
+    configs.extend([
+        {'name': 'GPT_40B', 'din': 50257, 'dmodel': 1536, 'dff': random.randint(3, 8) * 1536, 'batch': 512, 'micro_batch': 64, 'seq': 131072, 'head': 160, 'num_stacks': 144, 'min_npus': 128, 'max_npus': 2048},
+        {'name': 'LLaMA_3_70B', 'din': 64000, 'dmodel': 1024, 'dff': random.randint(3, 8) * 1024, 'batch': 1024, 'micro_batch': 1024, 'seq': 65536, 'head': 64, 'num_stacks': 80, 'min_npus': 128, 'max_npus': 2048},
+        {'name': 'Model_100B', 'din': 32000, 'dmodel': 9216, 'dff': random.randint(3, 8) * 9216, 'batch': 2048, 'micro_batch': 128, 'seq': 2048, 'head': 72, 'num_stacks': 88, 'min_npus': 256, 'max_npus': 2048},
+        {'name': 'Model_120B', 'din': 32000, 'dmodel': 1024, 'dff': random.randint(3, 8) * 1024, 'batch': 2048, 'micro_batch': 256, 'seq': 4096, 'head': 80, 'num_stacks': 96, 'min_npus': 256, 'max_npus': 2048},
+        {'name': 'GPT_3_175B', 'din': 50257, 'dmodel': 2048, 'dff': random.randint(3, 8) * 2048, 'batch': 2048, 'micro_batch': 512, 'seq': 1024, 'head': 96, 'num_stacks': 160, 'min_npus': 512, 'max_npus': 2048},
+        {'name': 'PaLM_540B', 'din': 48000, 'dmodel': 5140, 'dff': random.randint(3, 8) * 5140, 'batch': 2048, 'micro_batch': 1024, 'seq': 8192, 'head': 72, 'num_stacks': 118, 'min_npus': 1024, 'max_npus': 2048},
+        {'name': 'GPT_4_Estimated_over_1T', 'din': 16000, 'dmodel': 20480, 'dff': random.randint(3, 8) * 20480, 'batch': 2048, 'micro_batch': 32, 'seq': 8192, 'head': 128, 'num_stacks': 128, 'min_npus': 1024, 'max_npus': 2048},
     ])
     
     return configs
@@ -399,6 +446,59 @@ def parse_simulation_results(output_dir, config):
     
     return results
 
+def get_boundary_parallelism_strategies(num_npus, num_stacks):
+    """Generate boundary case parallelism strategies where all NPUs are assigned to one dimension.
+    
+    Returns strategies where:
+    - All NPUs in DP: (num_npus, 1, 1, 1)
+    - All NPUs in MP: (1, num_npus, 1, 1) if num_npus <= 64
+    - All NPUs in SP: (1, 1, num_npus, 1) if num_npus <= 16
+    - All NPUs in PP: (1, 1, 1, num_npus) if num_npus <= num_stacks
+    """
+    boundary_strategies = []
+    fsdp = random.choice([0, 1])
+    if num_npus <= 512:
+        
+        # All in DP
+        boundary_strategies.append({
+            'dp': num_npus,
+            'mp': 1,
+            'sp': 1,
+            'pp': 1,
+            'fsdp': fsdp
+        })
+        
+        # All in MP (if reasonable)
+        boundary_strategies.append({
+            'dp': 1,
+            'mp': num_npus,
+            'sp': 1,
+            'pp': 1,
+            'fsdp': fsdp
+        })
+        
+        # All in SP (if reasonable)
+        boundary_strategies.append({
+            'dp': 1,
+            'mp': 1,
+            'sp': num_npus,
+            'pp': 1,
+            'fsdp': fsdp
+        })
+        
+        # All in PP (if valid)
+        if num_npus <= num_stacks:
+            boundary_strategies.append({
+                'dp': 1,
+                'mp': 1,
+                'sp': 1,
+                'pp': num_npus,
+                'fsdp': fsdp
+            })
+    
+    return boundary_strategies
+
+
 def main():
     parser = argparse.ArgumentParser(description='Generate ML training data for AstraSim peak memory prediction')
     parser.add_argument('--npu_counts', type=str, default='16,32,64,128,256,512,1024,2048',
@@ -442,7 +542,7 @@ def main():
     print(f"  - Strategy sampling rate: {args.strategy_sample_rate:.0%}")
     
     # Set random seed for reproducibility
-    random.seed(42)
+    #random.seed(42)
     
     # Generate all simulation configurations
     all_configs = []
@@ -458,19 +558,31 @@ def main():
                 print(f"  - Skipping {model_config['name']} for {num_npus} NPUs (model too large, min: {model_config.get('min_npus', 1)})")
                 continue
             
+            # Get boundary strategies
+            boundary_strategies = get_boundary_parallelism_strategies(num_npus, model_config['num_stacks'])
+            
             # Get strategies with PP constrained by model layers
             strategies = get_valid_parallelism_strategies(num_npus, model_config['num_stacks'])
             
             if args.test_mode:
-                strategies = strategies[:3]  # Limit strategies in test mode
+                selected_strategies = strategies[:3]  # Limit strategies in test mode
             else:
                 # Randomly sample a fraction of strategies
-                n_sample = max(1, int(len(strategies) * args.strategy_sample_rate))
-                strategies = random.sample(strategies, n_sample)
+                if num_npus <= 128:
+                    sampling_rate = 0.4
+                else:
+                    sampling_rate = args.strategy_sample_rate
+                non_boundary = [s for s in strategies if s not in boundary_strategies]
+                n_sample = max(1, int(len(non_boundary) * sampling_rate))
+                sampled_strategies = random.sample(non_boundary, min(n_sample, len(non_boundary)))
+                
+                # Combine boundary + sampled strategies
+                selected_strategies = boundary_strategies + sampled_strategies
+            
             
             print(f"  - NPU count {num_npus}, model {model_config['name']}: {len(strategies)} parallelism strategies (sampled)")
             
-            for strategy in strategies:
+            for strategy in selected_strategies:
                 config = generate_workload(model_config, strategy, num_npus, base_dir)
                 all_configs.append(config)
     

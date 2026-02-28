@@ -11,7 +11,7 @@ pip3 install protobuf==5.29.0
 
 pip3 install graphviz pydot sympy tqdm seaborn matplotlib
 
-pip3 install scikit-learn altair scipy umap xgboost intervaltree ipykernel
+pip3 install scikit-learn altair scipy umap-learn xgboost intervaltree ipykernel
 
 cd ..
 

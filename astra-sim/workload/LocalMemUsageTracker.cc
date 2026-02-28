@@ -480,7 +480,7 @@ std::tuple<float, std::string> LocalMemUsageTracker::getPeakMemUsageFormatted() 
 
   float value = static_cast<float>(peakMemUsage);
   std::string unit = "B";
-
+/*
   if (peakMemUsage < 1024ull) {
       value = static_cast<float>(peakMemUsage);
       unit = "B";
@@ -496,7 +496,9 @@ std::tuple<float, std::string> LocalMemUsageTracker::getPeakMemUsageFormatted() 
   } else {
       value = static_cast<float>(peakMemUsage) / (1024.0f * 1024 * 1024 * 1024);
       unit = "TB";
-  }
+  }*/
+  value = static_cast<float>(peakMemUsage) / (1024.0f * 1024 * 1024);
+  unit = "GB";
 
   return std::make_tuple(value, unit);
 }

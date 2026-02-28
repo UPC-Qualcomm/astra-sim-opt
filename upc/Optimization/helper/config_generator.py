@@ -130,10 +130,10 @@ DEFAULT_G2_SYSTEM_CONFIG = {
     "endpoint-delay": 10,
     "active-chunks-per-dimension": 1,
     "preferred-dataset-splits": 4,
-    "all-reduce-implementation": ["halvingDoubling"],
-    "all-gather-implementation": ["halvingDoubling"],
-    "reduce-scatter-implementation": ["halvingDoubling"],
-    "all-to-all-implementation": ["halvingDoubling"],
+    "all-reduce-implementation": ["halvingDoubling", "halvingDoubling", "halvingDoubling", "halvingDoubling", "halvingDoubling"],
+    "all-gather-implementation": ["halvingDoubling", "halvingDoubling", "halvingDoubling"],
+    "reduce-scatter-implementation": ["halvingDoubling", "halvingDoubling", "halvingDoubling"],
+    "all-to-all-implementation": ["halvingDoubling", "halvingDoubling", "halvingDoubling"],
     "collective-optimization": "localBWAware",
     "local-mem-bw": 3350,
     "local-mem-size": 80,
@@ -148,21 +148,21 @@ DEFAULT_G2_SYSTEM_CONFIG = {
 }
 
 DEFAULT_NETWORK_CONFIG = {
-    "topology": ["Switch", "Switch"],
-    "npus_count": [8, 2],
-    "bandwidth": [450.0, 100.0],
+    "topology": ["Switch", "Switch", "Switch"],
+    "npus_count": [8, 4, 3],
+    "bandwidth": [450.0, 100.0, 100.0],
     "bandwidth_unit": "GB/s",
-    "latency": [0.0, 0.0],
+    "latency": [0.0, 0.0, 0.0],
     "packet_size": 1500,
     "header_size": 48
 }
 
 DEFAULT_G2_NETWORK_CONFIG = {
-    "npus_count": [ 16 ],
+    "npus_count": [ 8, 4, 2 ],
     "bandwidth_unit": "GB/s",
     "packet_size": 1500,
-    "header_size": 44,
-    "topology_file": os.environ['ASTRA_SIM_ROOT'] + "/upc/configuration/g2/FoldedClos.json"
+    "header_size": 48,
+    "topology_file": os.environ['ASTRA_SIM_ROOT'] + "/upc/configuration/g2/FoldedClos"
 }
 
 DEFAULT_MEMORY_CONFIG = {
@@ -370,24 +370,28 @@ def generate_g2_system_config(config: Dict[str, Any]) -> str:
     """
     Generate G2-specific system configuration JSON file.
     
-    G2 uses 1D lists for collective algorithms (single hierarchy level).
-    Supports collective implementations per dimension.
+    Supports multi-dimensional NPU configurations via 'npus_per_dim'.
+    The number of dimensions determines the length of collective implementation arrays.
     
     Args:
         config: Configuration dictionary that may contain:
                 - Basic params: 'scheduling-policy', 'endpoint-delay', etc.
                 - Collective algos: 'all-reduce', 'all-gather', 'reduce-scatter', 'all-to-all'
+                  (can be a string for all dims, or a list per dimension)
+                - 'npus_per_dim': List defining network dimensions (e.g., [8, 4, 2] for 3D).
+                  Defaults to [8, 4, 2] if not provided.
     
     Returns:
         Absolute path to config file (reused if same parameters)
     """
     global _SYSTEM_CONFIG_CACHE
     
-    # Start with G2 defaults (1D lists for collective algorithms)
+    # Start with G2 defaults
     system_config = DEFAULT_G2_SYSTEM_CONFIG.copy()
     
-    # G2 is single-dimension, but we build collectives same way
-    num_dims = 1
+    # Determine number of dimensions from npus_per_dim (default [8, 4, 2] → 3 dims)
+    npus_per_dim = config.get('npus_per_dim', [8, 4, 2])
+    num_dims = len(npus_per_dim)
     collective_impls = _build_collective_implementations(config, num_dims)
     system_config.update(collective_impls)
     
@@ -407,14 +411,6 @@ def generate_g2_system_config(config: Dict[str, Any]) -> str:
     for key in param_mapping:
         if key in config:
             system_config[key] = config[key]
-    
-    # Ensure collective algorithms are 1D lists (G2 requirement)
-    for algo_key in ['all-reduce-implementation', 'all-gather-implementation', 
-                     'reduce-scatter-implementation', 'all-to-all-implementation']:
-        if algo_key in system_config and isinstance(system_config[algo_key], list):
-            # If it's a 2D list, take the first element; otherwise keep as is
-            if len(system_config[algo_key]) > 0 and isinstance(system_config[algo_key][0], list):
-                system_config[algo_key] = system_config[algo_key][0]
     
     # Check cache - reuse if same config exists
     config_hash = _hash_config(system_config)
@@ -495,15 +491,21 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
     paths_mode = net_sim_config.get('paths_mode', 'Uniform')
     topology_config = net_sim_config.get('topology_config', {}).copy()
     
+    # Resolve npus_per_dim for multi-dim npus_count in the network config
+    import math
+    if 'npus_per_dim' in config:
+        _npus_per_dim = list(config['npus_per_dim'])
+    elif isinstance(config.get('npu_count'), (list, tuple)):
+        _npus_per_dim = list(config['npu_count'])
+    else:
+        _npus_per_dim = None  # will fall back to [total_num_npus] later
+
     # If num_npus is not in topology_config, try to get it from config
     if 'num_npus' not in topology_config:
-        if 'npu_count' in config:
+        if _npus_per_dim is not None:
+            topology_config['num_npus'] = math.prod(_npus_per_dim) if hasattr(math, 'prod') else eval('*'.join(map(str, _npus_per_dim)))
+        elif 'npu_count' in config:
             topology_config['num_npus'] = config['npu_count']
-        elif 'npus_per_dim' in config:
-            # Calculate num_npus from npus_per_dim
-            import math
-            npus_per_dim = config['npus_per_dim']
-            topology_config['num_npus'] = math.prod(npus_per_dim) if hasattr(math, 'prod') else eval('*'.join(map(str, npus_per_dim)))
     
     # Build bandwidth configuration from config parameters
     bw_config = topology_config.get('bandwidth_config', {}).copy()
@@ -626,13 +628,16 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
         base_filename=topology_file_name
     )
 
+    # Build npus_count: use multi-dim npus_per_dim when available, else fall back to [total]
+    npus_count = _npus_per_dim if _npus_per_dim is not None else [topology_config['num_npus']]
+
     # Create the G2 network config that references this topology file
     g2_network_config = {
-        "npus_count": [topology_config['num_npus']],
+        "npus_count": npus_count,
         "bandwidth_unit": bw_unit,
         "packet_size": 1500,
         "header_size": 44,
-        "topology_file": topology_file_path + ".json"
+        "topology_file": topology_file_path# + ".json"
     }
     
     # Generate network config YML file that points to the topology

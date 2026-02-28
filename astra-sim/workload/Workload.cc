@@ -227,7 +227,8 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     }
 
     // hotfix: comm init group is not metadata node
-    if (node->name() == "## process_group:init ##") {
+    if (node->name() == "## process_group:init ##" || sys->skip_comm) {
+        std::cout << "Encountered process group init or skip_comm is true, treating as metadata node. Node name: " << node->name() << std::endl;
         issue_pytorch_pg_metadata(node);
         this->skip_invalid(node);  // for proper dependancy resolving
         return;
@@ -588,7 +589,7 @@ void Workload::skip_invalid(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     auto& dependancy_resolver = this->et_feeder->getDependancyResolver();
     dependancy_resolver.finish_node(node_id);
     auto logger = LoggerFactory::get_logger("workload");
-    logger->debug("callback,sys->id={}, tick={}, node->id={}, "
+    logger->debug("skip_callback,sys->id={}, tick={}, node->id={}, "
                   "node->name={}, node->type={}",
                   sys->id, Sys::boostedTick(), node->id(), node->name(),
                   static_cast<uint64_t>(node->type()));

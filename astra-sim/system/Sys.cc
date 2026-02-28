@@ -560,6 +560,15 @@ bool Sys::initialize_sys(string name) {
         this->comm_NI->enable_network_logger = enable_network_logger;
     }
 
+    this->skip_comm = false;
+    if (j.contains("skip-comm")) {
+        if (j["skip-comm"] != 0) {
+            this->skip_comm = true;
+        } else {
+            this->skip_comm = false;
+        }
+    }
+
     inFile.close();
     return true;
 }

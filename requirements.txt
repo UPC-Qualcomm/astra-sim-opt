@@ -9,3 +9,5 @@ plotly==6.2.0
 kaleido==0.2.1
 PyYAML==6.0.2
 scikit-learn==1.4.2
+deephyper==0.13.2
+catboost==1.2.10
