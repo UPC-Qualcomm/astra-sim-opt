@@ -36,7 +36,7 @@ if _NEW_DIR not in sys.path:
 
 from create_topology import CustomizedDragonfly, Jellyfish, FoldedClos
 from utils import write_ns3_topology_file, write_g2_topology_files
-from aprox_topology import (
+from aprox_topology_group_agg import (
     approximate_foldedclos,
     approximate_dragonfly,
     approximate_jellyfish,
@@ -194,7 +194,7 @@ def _count_switches(topo_obj):
 # Quick self-test when run directly
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
-    out = './approx_test_output'
+    out = './approx_test_output_group_agg'
 
     print("=" * 60)
     print("TEST 1 — FoldedClos K=4, 2 NPUs/node, switch intra-node")
@@ -205,22 +205,22 @@ if __name__ == '__main__':
         'npus_per_node': 8, 'intra_node_topology': 'switch', 'num_nvswitches': 1,
     }, output_dir=out, base_filename='FoldedClos_K4_approx')
 
-    #print("=" * 60)
-    #print("TEST 2 — Dragonfly G=4, A=4, h=2, 2 NPUs/node")
-    #print("=" * 60)
-    #df_bw = {'host_switch': 100, 'intra_group': 200, 'inter_group': 100, 'intra_node': 900}
-    #generate_approx_topology_files('Dragonfly', {
-    #    'G': 4, 'A': 4, 'h': 2, 'concentration': 1,
-    #    'bandwidth_config': df_bw, 'bw_unit': 'GB/s',
-    #    'npus_per_node': 2, 'intra_node_topology': 'switch', 'num_nvswitches': 1,
-    #}, output_dir=out, base_filename='Dragonfly_G4A4_approx')
-#
-    #print("=" * 60)
-    #print("TEST 3 — Jellyfish 8 switches, degree 3, 2 NPUs/node")
-    #print("=" * 60)
-    #jf_bw = {'host_switch': 100, 'switch_switch': 200, 'intra_node': 900}
-    #generate_approx_topology_files('Jellyfish', {
-    #    'num_switches': 8, 'degree': 3, 'num_hosts_per_switch': 1,
-    #    'bandwidth_config': jf_bw, 'bw_unit': 'GB/s',
-    #    'npus_per_node': 2, 'intra_node_topology': 'switch', 'num_nvswitches': 1,
-    #}, output_dir=out, base_filename='Jellyfish_8sw_approx')
+    print("=" * 60)
+    print("TEST 2 — Dragonfly G=4, A=4, h=2, 2 NPUs/node")
+    print("=" * 60)
+    df_bw = {'host_switch': 100, 'intra_group': 200, 'inter_group': 100, 'intra_node': 900}
+    generate_approx_topology_files('Dragonfly', {
+        'G': 4, 'A': 4, 'h': 2, 'concentration': 1,
+        'bandwidth_config': df_bw, 'bw_unit': 'GB/s',
+        'npus_per_node': 2, 'intra_node_topology': 'switch', 'num_nvswitches': 1,
+    }, output_dir=out, base_filename='Dragonfly_G4A4_approx')
+    
+    print("=" * 60)
+    print("TEST 3 — Jellyfish 8 switches, degree 3, 2 NPUs/node")
+    print("=" * 60)
+    jf_bw = {'host_switch': 100, 'switch_switch': 200, 'intra_node': 900}
+    generate_approx_topology_files('Jellyfish', {
+        'num_switches': 8, 'degree': 3, 'num_hosts_per_switch': 1,
+        'bandwidth_config': jf_bw, 'bw_unit': 'GB/s',
+        'npus_per_node': 2, 'intra_node_topology': 'switch', 'num_nvswitches': 1,
+    }, output_dir=out, base_filename='Jellyfish_8sw_approx')
