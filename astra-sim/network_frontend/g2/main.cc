@@ -37,7 +37,8 @@ int main(int argc, char* argv[]) {
         cmd_line_parser.get<std::string>("logging-configuration");
     
     const auto logging_folder =
-        cmd_line_parser.get<std::string>("logging-folder");    const auto num_queues_per_dim =
+        cmd_line_parser.get<std::string>("logging-folder");    
+    const auto num_queues_per_dim =
         cmd_line_parser.get<int>("num-queues-per-dim");
     const auto comm_scale = cmd_line_parser.get<double>("comm-scale");
     const auto injection_scale = cmd_line_parser.get<double>("injection-scale");
@@ -71,7 +72,7 @@ int main(int argc, char* argv[]) {
     // Set up Network API
     G2NetworkApi::set_event_queue(event_queue);
 
-    Network net(topology_file, workload_configuration, packet_size, header_size, bandwidth_unit);
+    Network net(topology_file, workload_configuration, packet_size, header_size, bandwidth_unit, logging_folder);
     G2NetworkApi::set_network(&net);
 
     // Create ASTRA-sim related resources

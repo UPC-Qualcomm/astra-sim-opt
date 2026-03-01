@@ -40,7 +40,7 @@ def get_timings_df(csv_trace_file, output_file_name):
     #merged_df.to_csv(output_file_name)
     # TODO: To optimize performance Add the exposed and overlaped amount of cycles to each node 
     # Use best_combinatoin.py
-    num_sys = merged_df["sys_id"].max()
+    num_sys = int(merged_df["sys_id"].max())
 
     extended_data = []
     for sys_id in range(num_sys+1):
