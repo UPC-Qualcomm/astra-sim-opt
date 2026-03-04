@@ -139,16 +139,23 @@ def main(args):
         # Crear directorio de salida único para esta ejecución
         run_start_time = datetime.now()
         timestamp = run_start_time.strftime("%Y%m%d_%H%M%S_%f")[:-3] + "ms"
-        # if args.g2_network_config:
-        #     network_name = os.path.splitext(os.path.basename(args.g2_network_config))[0].split('_')[0]
-        # elif args.ns3_network_config:
-        #     network_name = os.path.splitext(os.path.basename(args.ns3_network_config))[0].split('_')[0]
         network_name = args.topology_name
-        # Include run_number in the folder name if provided
+
+        # Determine simulator type label to make folder names unique across parallel runs
+        sim_labels = []
+        if args.g2_system_config and args.g2_network_config:
+            sim_labels.append("g2")
+        if args.analytical_system_config and args.analytical_network_config:
+            sim_labels.append("analytical")
+        if args.ns3_system_config and args.ns3_network_config:
+            sim_labels.append("ns3")
+        sim_label = "_".join(sim_labels) if sim_labels else "sim"
+
+        # Include sim_label and run_number in the folder name if provided
         if args.run_number:
-            run_folder_name = f"run_{args.run_number:02d}_{timestamp}"
+            run_folder_name = f"run_{sim_label}_{args.run_number:02d}_{timestamp}"
         else:
-            run_folder_name = f"run_{timestamp}"
+            run_folder_name = f"run_{sim_label}_{timestamp}"
         base_run_dir = os.path.join(args.base_output_dir, network_name, coll_name, run_folder_name)
         print(base_run_dir)
         
@@ -186,6 +193,8 @@ def main(args):
             f.write(f"NS3 Precomputed Paths Override: {args.ns3_precomputed_paths}\n")
             if args.ns3_ecmp_seed is not None:
                 f.write(f"NS3 ECMP Seed Override: {args.ns3_ecmp_seed}\n")
+            if args.g2_ecmp_seed is not None:
+                f.write(f"G2/Analytical ECMP Seed Override: {args.g2_ecmp_seed}\n")
             f.write("\n")
             f.write(f"Python Executable: {args.python_exec}\n")
         print(f"Guardada la configuración de la ejecución en: {config_summary_path}")
@@ -205,6 +214,8 @@ def main(args):
             g2_overrides = {}
             if args.g2_topology_file:
                 g2_overrides["topology_file"] = os.path.abspath(args.g2_topology_file)
+            if args.g2_ecmp_seed is not None:
+                g2_overrides["ecmp_seed"] = args.g2_ecmp_seed
             modify_config_file(args.g2_network_config, g2_net_conf_dest, g2_overrides)
 
             # Leer el fichero de config de red de G2 para encontrar el fichero de topología
@@ -359,6 +370,9 @@ if __name__ == "__main__":
     
     # New: NS3 ECMP seed override
     parser.add_argument("--ns3-ecmp-seed", type=int, default=None, help="Sobrescribe el valor de ECMP_SEED en la configuración de NS3.")
+    
+    # New: G2/Analytical ECMP seed override
+    parser.add_argument("--g2-ecmp-seed", type=int, default=None, help="Sobrescribe el valor de ecmp_seed en la configuración de red G2 y analítica (YML).")
     
     # New: Base output directory
     parser.add_argument("--base-output-dir", type=str, default="output/comparison_run", help="Directorio base para las salidas (por defecto: output/comparison_run).")
