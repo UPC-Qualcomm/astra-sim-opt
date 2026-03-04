@@ -7,9 +7,9 @@ export MODE="ecmp"
 export NPUS_COUNT=1024
 export TIMEOUT="10000m"
 export MAX_PARALLEL_JOBS=5
-export NUM_RUNS=1
+export NUM_RUNS=5
 export BASE_ECMP_SEED=25
-export WORKLOAD_DIR_REL="upc/experiments_files/experiment7/workload/GPT13B"
+export WORKLOAD_DIR_REL="upc/experiments_files/experiment7/workload/GPT40B"
 
 export SYSTEM_CONFIG_NAMES="FoldedClos1024"
 export TOPOLOGY_NAMES="FoldedClos1024"

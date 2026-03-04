@@ -6,8 +6,8 @@ export EXPERIMENT_NUM=6
 export MODE="ecmp"
 export NPUS_COUNT=128
 export TIMEOUT="10000m"
-export MAX_PARALLEL_JOBS=5
-export NUM_RUNS=1
+export MAX_PARALLEL_JOBS=20
+export NUM_RUNS=5
 export BASE_ECMP_SEED=25
 export WORKLOAD_DIR_REL="upc/experiments_files/experiment6/workload/GPT40B"
 

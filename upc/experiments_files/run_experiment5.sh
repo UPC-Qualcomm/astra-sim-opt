@@ -9,7 +9,7 @@ export TIMEOUT="1000m"
 export MAX_PARALLEL_JOBS=10
 export NUM_RUNS=5
 export BASE_ECMP_SEED=25
-export WORKLOAD_DIR_REL="upc/experiments_files/experiment5/workload/GPT13B"
+export WORKLOAD_DIR_REL="upc/experiments_files/experiment5/workload/Llama8B"
 
 export SYSTEM_CONFIG_NAMES="FoldedClos128"
 export TOPOLOGY_NAMES="FoldedClosECMP128"
