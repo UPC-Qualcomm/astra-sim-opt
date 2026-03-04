@@ -104,7 +104,7 @@ class Model(Enum):
         elif model == Model.FLAN_T5_XXL_11B:
             return [32128, 4096, 4096, 10240, [2048], 32, 1024, 64, 24]
         elif model == Model.GPT_13B:
-            return [50257, 5140, 5140, 20560, [2048], 32, 2048, 40, 40]
+            return [50257, 5140, 5140, 20560, [64], 32, 2048, 40, 8]
         elif model == Model.GPT_NeoX_20B:
             return [50257, 6144, 6144, 24576, [2048], 32, 2048, 64, 44]
         elif model == Model.GPT_30B:

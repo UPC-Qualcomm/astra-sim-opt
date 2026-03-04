@@ -231,7 +231,7 @@ if __name__ == "__main__":
     dp = {1, 2, 4, 8, 16, 32, 64}
     mp = {1, 2, 4, 8, 16}
     pp = {1, 2, 4}
-    weight_sharded = {False}
+    weight_sharded = {False, True}
     max_sp= 4
 
     parser.add_argument(

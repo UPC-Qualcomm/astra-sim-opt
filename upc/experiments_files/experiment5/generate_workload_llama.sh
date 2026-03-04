@@ -1,9 +1,9 @@
-python3 /app/astra-sim/upc/experiments_files/experiment4/generate_workloads.py \
+python3 /app/astra-sim/upc/experiments_files/experiment5/generate_workloads.py \
     --model 17 \
-    --folder_name /app/astra-sim/upc/experiments_files/experiment4/workload/Llama8B_last \
-    --num_samples 15
+    --folder_name /app/astra-sim/upc/experiments_files/experiment5/workload/Llama8B_last \
+    --num_samples 30
 
-cd /app/astra-sim/upc/experiments_files/experiment4/workload/
+cd /app/astra-sim/upc/experiments_files/experiment5/workload/
 for file in Llama8B_last/*; do
     if [ -f "$file" ]; then
         mv "$file" "Llama8B_last_$(basename "$file")"

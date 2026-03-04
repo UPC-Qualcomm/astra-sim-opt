@@ -100,7 +100,7 @@ class Model(Enum):
         elif model == Model.GPT_Neo_2700M:
             return [50257, 2560, 2560, 10240, [2048], 32, 2048, 32, 32]
         elif model == Model.llama_8B:
-            return [30522, 4096, 4096, 16384, [128], 32, 256, 32, 4]
+            return [30522, 4096, 4096, 16384, [64], 32, 2048, 32, 4]
         elif model == Model.FLAN_T5_XXL_11B:
             return [32128, 4096, 4096, 10240, [2048], 32, 1024, 64, 24]
         elif model == Model.GPT_13B:
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     dp = {1, 2, 4, 8, 16, 32}
     mp = {1, 2, 4, 8}
     pp = {1, 2, 4}
-    weight_sharded = {False}
+    weight_sharded = {False, True}
     max_sp= 2
 
     parser.add_argument(
