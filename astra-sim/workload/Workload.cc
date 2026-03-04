@@ -231,6 +231,7 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
         std::cout << "Encountered process group init or skip_comm is true, treating as metadata node. Node name: " << node->name() << std::endl;
         issue_pytorch_pg_metadata(node);
         this->skip_invalid(node);  // for proper dependancy resolving
+        issue_dep_free_nodes();
         return;
     }
 
