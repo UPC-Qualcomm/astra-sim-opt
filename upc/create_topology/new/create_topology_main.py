@@ -235,7 +235,7 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
 
     # 3. Generate Routing Paths
     final_paths = {}
-    
+    path_gen = None   # Set below for large-topology streaming mode
     if paths_mode == "Uniform":
         # Generate standard uniform routing
         # GenerateUniformRouting returns paths[src][dst] = [hop1, hop2, ...]
@@ -252,7 +252,6 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./", base_
         
     elif paths_mode in ["ECMP", "Random"]:
         all_paths = {}
-        path_gen = None   # Set below for large-topology streaming mode
 
         if topology in ["Dragonfly", "Jellyfish"]:
             # Dragonfly / Jellyfish: compute switch-level paths then wrap with NPUs
