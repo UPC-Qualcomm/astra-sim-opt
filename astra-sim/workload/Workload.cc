@@ -209,7 +209,7 @@ void Workload::issue(shared_ptr<Chakra::FeederV3::ETFeederNode> node) {
     }
     // hotfix: if node type is COMM_COLL, it will be first synchronized then
     // dispatched, so dont occupy now.
-    if (node->type() != ChakraNodeType::COMM_COLL_NODE) {
+    if (node->type() != ChakraNodeType::COMM_COLL_NODE || sys->replay_only) {
         this->hw_resource->occupy(node);
         
         // Update last issued node for ORDER_INJECTION mode
