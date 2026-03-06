@@ -16,10 +16,14 @@ Static / Dynamic separation (no expansion multiplier):
   static_power  = switch_count × degree × P_base
   dynamic_power = switch_count × degree × (P_active − P_base) × avg_utilisation
 
-Link power uses the link_type field set by the parser:
-  - 'nvlink' → nvswitch power params
-  - 'nic'    → nic power params
-  - anything else (network / unknown) → tor power params
+Link power uses the link_type field set by the parser (actual switch-type name):
+  - 'nvlink'      → nvswitch power params
+  - 'nic'         → nic power params
+  - 'tor'         → tor power params
+  - 'aggregation' → aggregation power params
+  - 'core'        → core power params
+  - 'per_npu'     → per_npu power params (defaults to nic params when unconfigured)
+  - anything else → tor power params (fallback)
 """
 
 from typing import Dict, List, Optional, Set
@@ -56,23 +60,21 @@ class LinkModel:
 
         Reuses the same per-type switch params as SwitchTypeModel so that
         both the link-wire and switch-port sides share a consistent power
-        budget:
-          nvlink  → nvswitch_*  (NVLink wires are NVSwitch port power)
-          nic     → nic_*
-          network → tor_*       (fabric wires connect into the ToR layer)
+        budget.  The link_type field is the actual switch-type name set by
+        the topology-aware parser (e.g. 'nvlink', 'nic', 'tor',
+        'aggregation', 'core', …), so every fabric layer gets its own
+        power params.  Falls back to tor params for unknown fabric types.
         """
-        if self._is_nic():
-            return (self.config.nic_active_power,
-                    self.config.nic_idle_power,
-                    self.config.nic_sleep_power)
-        if self._is_nvlink():
-            return (self.config.nvswitch_active_power,
-                    self.config.nvswitch_idle_power,
-                    self.config.nvswitch_sleep_power)
-        # Fabric / network link → ToR layer power
-        return (self.config.tor_active_power,
-                self.config.tor_idle_power,
-                self.config.tor_sleep_power)
+        cfg = self.config
+        type_map = {
+            'nvlink':      (cfg.nvswitch_active_power,  cfg.nvswitch_idle_power,      cfg.nvswitch_sleep_power),
+            'nic':         (cfg.nic_active_power,        cfg.nic_idle_power,           cfg.nic_sleep_power),
+            'tor':         (cfg.tor_active_power,        cfg.tor_idle_power,           cfg.tor_sleep_power),
+            'aggregation': (cfg.aggregation_active_power, cfg.aggregation_idle_power, cfg.aggregation_sleep_power),
+            'core':        (cfg.core_active_power,       cfg.core_idle_power,          cfg.core_sleep_power),
+            'per_npu':     (cfg.per_npu_active_power,    cfg.per_npu_idle_power,       cfg.per_npu_sleep_power),
+        }
+        return type_map.get(self.link.link_type, type_map['tor'])
 
     def static_power(self) -> float:
         _, idle, sleep = self._link_params()

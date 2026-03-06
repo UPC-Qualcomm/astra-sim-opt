@@ -188,7 +188,7 @@ class PowerModel:
         print(f"POWER MODEL RESULTS - {breakdown['mode']}")
         print("="*80)
         
-        print(f"\n📊 EXECUTION PROFILE:")
+        print(f"\nEXECUTION PROFILE:")
         print(f"  Total Time:          {breakdown['total_execution_time_s']:.3f} s")
         print(f"  Compute Time (mean): {breakdown['compute_time_s']:.3f} s  "
               f"util {breakdown['compute_utilization']:.1%} "
@@ -197,7 +197,7 @@ class PowerModel:
               f"util {breakdown['comm_utilization']:.1%} "
               f"[{breakdown['min_comm_util']:.1%} – {breakdown['max_comm_util']:.1%}]")
         
-        print(f"\n⚡ POWER CONSUMPTION:")
+        print(f"\nPOWER CONSUMPTION:")
         print(f"  Total Power:         {breakdown['total_power_W']:.2f} W")
         print(f"    GPU Power:         {breakdown['gpu_power_W']:.2f} W ({breakdown['gpu_power_W']/breakdown['total_power_W']:.1%})")
         print(f"    Network Power:     {breakdown['network_power_W']:.2f} W ({breakdown['network_power_W']/breakdown['total_power_W']:.1%})")
@@ -206,20 +206,20 @@ class PowerModel:
         for sw_type, sw_info in breakdown['switch_power_by_type'].items():
             print(f"        {sw_type:<16} {sw_info['power_W']:.2f} W  ({sw_info['count']} units)")
         
-        print(f"\n🔋 ENERGY CONSUMPTION:")
+        print(f"\nENERGY CONSUMPTION:")
         print(f"  Total Energy:        {breakdown['total_energy_J']:.2f} J")
         print(f"    GPU Energy:        {breakdown['gpu_energy_J']:.2f} J ({breakdown['gpu_energy_J']/breakdown['total_energy_J']:.1%})")
         print(f"    Network Energy:    {breakdown['network_energy_J']:.2f} J ({breakdown['network_energy_J']/breakdown['total_energy_J']:.1%})")
         
-        print(f"\n🎯 PERFORMANCE METRICS:")
+        print(f"\nPERFORMANCE METRICS:")
         print(f"  Total Samples:       {breakdown['total_samples']:,}")
         print(f"  Throughput:          {breakdown['throughput_samples_per_sec']:.2f} samples/s")
         
-        print(f"\n🏆 EFFICIENCY (MLPerf Power Metric):")
+        print(f"\nEFFICIENCY (MLPerf Power Metric):")
         print(f"  Samples per Joule:   {breakdown['samples_per_joule']:.4f} samples/J")
         print(f"  Joules per Sample:   {breakdown['joules_per_sample']:.4f} J/sample")
         
-        print(f"\n🖥️  HARDWARE CONFIGURATION:")
+        print(f"\nHARDWARE CONFIGURATION:")
         print(f"  GPUs:                {breakdown['num_gpus']}")
         print(f"  Links:               {breakdown['num_links']}")
         print(f"  Total Switches:      {breakdown['total_switch_count']}")

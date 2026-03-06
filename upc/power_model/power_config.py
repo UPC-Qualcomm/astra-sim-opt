@@ -39,7 +39,7 @@ class PowerConfig:
     #
     # HOW TO OBTAIN VALUES FROM A DATASHEET
     # ----------------------------------------
-    # Datasheets publish total switch power (Watts), not per-port fractions.
+    # Datasheets publish total switch power (Watts).
     # Use switch_port_power_from_datasheet() to convert:
     #
     #   active_power = P_max_W  / N_ports   (full line-rate)
@@ -165,7 +165,7 @@ class PowerConfig:
         where Omega_port = P_max_W / N_ports  and
               omega_ports = (P_max_W - P_chassis) / P_max_W.
 
-        With a datasheet you already have P_idle_W directly, so:
+        With a datasheet we have P_idle_W directly, so:
             idle_per_port = P_idle_W / N_ports
         Both expressions are equal — the paper's fractions are only needed when
         P_idle is *unknown* and must be estimated from P_max.
@@ -244,8 +244,13 @@ class PowerConfig:
            ``{type}_active_power``, ``{type}_idle_power``,
            ``{type}_sleep_power``.
 
-        3. **Python class defaults** — used for any field absent from the
-           JSON under both forms above.
+        3. **nic params** (per_npu only) — if neither form above is present
+           in the JSON for ``per_npu``, the already-resolved nic params are
+           used so that per-NPU intra-node switches behave like NICs by
+           default without the user needing to configure them explicitly.
+
+        4. **Python class defaults** — used for any other field absent from
+           the JSON under both forms above.
 
         The ``{type}_N_ports`` value (when present) is also stored in
         ``switch_port_counts`` and used by ``SwitchTypeModel._get_degree()``
@@ -297,14 +302,19 @@ class PowerConfig:
         # --- Per-switch-type power resolution + port-count collection ---
         # For each type: use datasheet inputs → converter if all three keys present;
         # otherwise fall back to direct W/port values or Python defaults.
+        # Exception: per_npu with NO keys in JSON falls back to the resolved nic params
+        # so that intra-node per-NPU switches behave like NICs by default.
         # N_ports (when available) is stored for degree lookup in _get_degree().
         sw_active: Dict[str, float] = {}
         sw_idle:   Dict[str, float] = {}
         sw_sleep:  Dict[str, float] = {}
         port_counts: Dict[str, int] = {}
         for sw_type in ('nvswitch', 'tor', 'aggregation', 'core', 'nic', 'per_npu'):
-            if all(f'{sw_type}_{k}' in config_dict
-                   for k in ('P_max_W', 'P_idle_W', 'N_ports')):
+            has_datasheet = all(f'{sw_type}_{k}' in config_dict
+                                for k in ('P_max_W', 'P_idle_W', 'N_ports'))
+            has_direct    = any(f'{sw_type}_{k}' in config_dict
+                                for k in ('active_power', 'idle_power', 'sleep_power'))
+            if has_datasheet:
                 omega = config_dict.get(f'{sw_type}_omega_sport', 0.1)
                 n = int(config_dict[f'{sw_type}_N_ports'])
                 a, i, s = cls.switch_port_power_from_datasheet(
@@ -314,13 +324,23 @@ class PowerConfig:
                     omega_sport=omega,
                 )
                 port_counts[sw_type] = n
-            else:
+            elif has_direct:
                 a = config_dict.get(f'{sw_type}_active_power',
                                     getattr(defaults, f'{sw_type}_active_power'))
                 i = config_dict.get(f'{sw_type}_idle_power',
                                     getattr(defaults, f'{sw_type}_idle_power'))
                 s = config_dict.get(f'{sw_type}_sleep_power',
                                     getattr(defaults, f'{sw_type}_sleep_power'))
+            else:
+                # Not configured in JSON at all.
+                # per_npu: default to the already-resolved nic params (intra-node
+                # per-NPU switches behave like NICs unless explicitly overridden).
+                if sw_type == 'per_npu' and 'nic' in sw_active:
+                    a, i, s = sw_active['nic'], sw_idle['nic'], sw_sleep['nic']
+                else:
+                    a = getattr(defaults, f'{sw_type}_active_power')
+                    i = getattr(defaults, f'{sw_type}_idle_power')
+                    s = getattr(defaults, f'{sw_type}_sleep_power')
             sw_active[sw_type], sw_idle[sw_type], sw_sleep[sw_type] = a, i, s
 
         # Merge switch_type_prefixes: defaults first, then JSON overrides

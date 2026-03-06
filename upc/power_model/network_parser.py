@@ -71,13 +71,16 @@ class NetworkStats:
 
     def classify_link_type(self, src: str, dst: str) -> str:
         """
-        Return 'nvlink', 'nic', 'network', or 'unknown' for a link.
+        Return the link-type classification for a directed link src → dst.
 
         Classification rules (in order):
-          • If either endpoint is type 'nvswitch' → 'nvlink'
-          • If either endpoint is type 'nic' or 'per_npu' → 'nic'
-          • If both endpoints are any switch type (non-host) → 'network'
-          • Otherwise → 'unknown'
+          1. If either endpoint is 'nvswitch'  → 'nvlink'
+          2. If either endpoint is 'nic'       → 'nic'
+          3. If either endpoint is 'per_npu'   → 'per_npu'
+          4. Fabric links – return the actual switch-type name of the network
+             endpoint: prefer dst_type (link terminates at dst switch);
+             fall back to src_type when dst is a host or unknown.
+          5. Otherwise → 'unknown'
         """
         topo = self.topology_info
         if not topo:
@@ -87,12 +90,23 @@ class NetworkStats:
         src_type = node_types.get(src, "unknown")
         dst_type = node_types.get(dst, "unknown")
 
+        # NVSwitch wires (NVLink)
         if "nvswitch" in (src_type, dst_type):
             return "nvlink"
-        if "nic" in (src_type, dst_type) or "per_npu" in (src_type, dst_type):
+        # NIC wires
+        if "nic" in (src_type, dst_type):
             return "nic"
-        if src_type not in ("host", "unknown") and dst_type not in ("host", "unknown"):
-            return "network"
+        # per_npu – returned as-is; caller uses per_npu power params
+        if "per_npu" in (src_type, dst_type):
+            return "per_npu"
+        # Fabric links: return the actual switch-type of the relevant endpoint.
+        # Prefer dst_type (the link terminates at the dst switch);
+        # fall back to src_type if dst is a host or unknown.
+        LEAF_TYPES = {"host", "unknown"}
+        if dst_type not in LEAF_TYPES:
+            return dst_type
+        if src_type not in LEAF_TYPES:
+            return src_type
 
         return "unknown"
 
