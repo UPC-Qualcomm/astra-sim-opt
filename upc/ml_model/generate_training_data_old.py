@@ -232,8 +232,7 @@ def run_single_simulation(config, base_dir, sim_type='analytical_unaware'):
             config['cmd'],
             cwd=config['cwd'],
             capture_output=True,
-            text=True,
-            timeout=600
+            text=True
         )
         
         if result.returncode != 0:
@@ -279,8 +278,7 @@ def run_single_simulation(config, base_dir, sim_type='analytical_unaware'):
             sim_cmd,
             cwd=base_dir,
             capture_output=True,
-            text=True,
-            timeout=3600
+            text=True
         )
         
         if result.returncode != 0:
