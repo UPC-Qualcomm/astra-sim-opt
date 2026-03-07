@@ -6,6 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
 from intervaltree import IntervalTree
+import subprocess
 
 def extract_runtime_results_old(log_path):
     pattern = r"\[(\d+)\] finished, (\d+) cycles, exposed communication (\d+) cycles"
@@ -224,6 +225,10 @@ def extract_slowest_npu(logs, output_filename):
 
 
 
+def str_to_bool(v):
+    # Convert "true" to True and "false" to False
+    return v.lower() in ("true", "t", "1", "yes", "y")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -232,6 +237,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output_filename", type=str, help="The results file name (only if single file mode)"
     )
+    parser.add_argument(
+        "--include_power", type=str_to_bool, help="Include power results", default=False,
+    )
+
     args = parser.parse_args()
 
     if os.path.isfile(args.sim_logfile):
@@ -256,6 +265,16 @@ if __name__ == "__main__":
         logs = list_logs(args.output_filename, "_res.csv")
         out_filename = args.output_filename + ".csv" if len(args.output_filename.split("/")) == 4 else args.output_filename + args.output_filename.split("/")[3] + ".csv"
         extract_slowest_npu(logs, out_filename)
+        
+        if args.include_power:
+            command = (
+                f"python merge_power_results.py "
+                f"--results {out_filename} "
+                f"--power-dir {args.sim_logfile} "
+                f"--output {str.replace(out_filename, '.csv', '_with_power.csv')} "
+            )
+            result = subprocess.run(command, shell=True)
+
     else:
         raise ValueError(f"{args.sim_logfile} is neither a file nor a directory.")
 
