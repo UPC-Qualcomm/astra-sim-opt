@@ -1,12 +1,7 @@
 from create_topology_main import generate_topology_files
 import os
 # Define output paths
-g2_output_path = os.environ["ASTRA_SIM_ROOT"]+"/upc/configuration/g2/topologies"
-ns3_output_path = os.environ["ASTRA_SIM_ROOT"]+"/upc/configuration/ns3/topologies"
-
-# Create directories if they don't exist
-os.makedirs(g2_output_path, exist_ok=True)
-os.makedirs(ns3_output_path, exist_ok=True)
+output_path = os.environ["ASTRA_SIM_ROOT"]+"/upc/configuration/topologies"
 
 # =============================================================================
 # BASIC TOPOLOGIES (without intra-node topology)
@@ -55,7 +50,7 @@ fc_config_intra = {
     'num_nvswitches': 4               # Number of NVSwitches (for 'switch' topology)
 }
 generate_topology_files(topology="FoldedClos", paths_mode="ECMP", config=fc_config_intra, 
-                        output_dir="./topologies", base_filename="FoldedClos_128npus_switch")
+                        output_dir=output_path, base_filename="FoldedClos_128npus_switch")
 
 # --- Folded Clos with Ring intra-node topology ---
 # Ring topology: NPUs connected in a ring
