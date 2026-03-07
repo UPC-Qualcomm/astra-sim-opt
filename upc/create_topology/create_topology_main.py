@@ -1,4 +1,5 @@
 import random
+import networkx as nx
 from create_topology import CustomizedDragonfly, Jellyfish, FoldedClos
 from utils import write_ns3_topology_file, write_g2_topology_files
 
@@ -237,18 +238,51 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./topologi
     final_paths = {}
     path_gen = None   # Set below for large-topology streaming mode
     if paths_mode == "Uniform":
-        # Generate standard uniform routing
-        # GenerateUniformRouting returns paths[src][dst] = [hop1, hop2, ...]
-        # Wrap each path in a list to match the expected format: paths[src][dst] = [[hop1, hop2, ...]]
-        raw_uniform = topo_obj.GenerateUniformRouting()
-        for src, dests in raw_uniform.items():
-            if not src.startswith('h'):
-                continue
-            final_paths[src] = {}
-            for dst, path in dests.items():
-                if not dst.startswith('h') or src == dst:
+        _npus_per_node = topo_obj.npus_per_node
+        _total_npus = int(topo_obj.numHosts)
+
+        if intra_node_topology and _npus_per_node > 1:
+            # GenerateUniformRouting uses a formula based on server-level numbering
+            # (K^3/4 servers). With intra-node topology the NPU indices no longer
+            # match server indices, so the formula picks the WRONG source edge switch
+            # (e.g. h9 = NPU 9 is under t1, but the formula treats it as server 9
+            # which is in pod 2 under t9). Inserting NVSwitches around such a path
+            # creates hops that don't exist (v22 → t9 when v22 only connects to t1).
+            #
+            # Mirror the ECMP approach exactly: build paths from the full graph
+            # (which physically includes NVSwitch links), so all fabric hops are
+            # valid. Override same-node pairs with intra-node paths.
+            G = nx.DiGraph(topo_obj.links.values())
+
+            for npu1 in range(_total_npus):
+                h1 = f'h{npu1+1}'
+                final_paths[h1] = {}
+                node1 = npu1 // _npus_per_node
+                for npu2 in range(_total_npus):
+                    if npu1 == npu2:
+                        continue
+                    h2 = f'h{npu2+1}'
+                    node2 = npu2 // _npus_per_node
+                    if node1 == node2:
+                        # Same node: intra-node path only (NVSwitch, no fabric hops)
+                        final_paths[h1][h2] = topo_obj.generate_intra_node_paths(h1, h2)
+                    else:
+                        # Different node: graph-derived shortest path naturally
+                        # includes NVSwitches at both ends via real topology links
+                        path = nx.shortest_path(G, h1, h2)
+                        final_paths[h1][h2] = [path]
+        else:
+            # No intra-node topology: GenerateUniformRouting is correct.
+            # It returns paths[src][dst] = [hop1, hop2, ...]; wrap in a list.
+            raw_uniform = topo_obj.GenerateUniformRouting()
+            for src, dests in raw_uniform.items():
+                if not src.startswith('h'):
                     continue
-                final_paths[src][dst] = [path]
+                final_paths[src] = {}
+                for dst, path in dests.items():
+                    if not dst.startswith('h') or src == dst:
+                        continue
+                    final_paths[src][dst] = [path]
         
     elif paths_mode in ["ECMP", "Random"]:
         all_paths = {}

@@ -736,7 +736,7 @@ class CustomizedDragonfly(IntraNodeTopologyMixin):
         for link in self.interpod_links:
             G.add_edge("t{}".format(link[0]+1),"t{}".format(link[1]+1),weight=2)
             G.add_edge("t{}".format(link[1]+1),"t{}".format(link[0]+1),weight=2)
-        paths = nx.shortest_path(G, weight='weight')
+        paths = dict(nx.shortest_path(G, weight='weight'))
         return paths
 
     def GenerateShortestPathFlowDict(self, tm):
@@ -1050,7 +1050,7 @@ class Jellyfish(IntraNodeTopologyMixin):
         self.makeLinksFromAdjMatrix()
         G = nx.MultiDiGraph()
         G.add_edges_from(self.links.values())
-        self.paths = (nx.shortest_path(G))
+        self.paths = dict(nx.shortest_path(G))
         return self.paths
 
     def GenerateShortestPathFlowDict(self, tm):
@@ -1350,7 +1350,7 @@ class FoldedClos(IntraNodeTopologyMixin):
         G = nx.Graph()
         G.add_edges_from(self.links.values())
         # print("Time to build networks:", str(time.time() - start_time))
-        paths = (nx.shortest_path(G))
+        paths = dict(nx.shortest_path(G))
         # print("Time to find all shortest paths:", str(time.time() - start_time))
         # Intra-Pod inter-EdgeSwitch routing
         # If source is the ith host in mth edge switch and destination is the jth host in nth edge switch,
