@@ -43,9 +43,10 @@ class PowerModel:
         # Create component models
         self.compute_model = ComputeModel(compute_stats, config)
         self.network_model = NetworkModel(
-            network_stats, 
-            compute_stats.total_exec_time, 
-            config
+            network_stats,
+            compute_stats.total_exec_time,
+            config,
+            comm_time=compute_stats.avg_comm_time,
         )
     
     def total_power(self) -> float:
@@ -105,6 +106,22 @@ class PowerModel:
                self.compute_stats.total_exec_time \
                if self.compute_stats.total_exec_time > 0 else 0.0
     
+    def samples_per_sec_per_megajoule(self) -> float:
+        """
+        Combined throughput-energy efficiency metric.
+
+        samples / (second × MJ) = throughput_samples_per_sec / (total_energy_J / 1e6)
+
+        Captures both speed and energy cost in one number.
+        Higher is better.  Convenient scale: typical DNN training runs land
+        in the range 0.01 – 100 samples/(s·MJ) depending on cluster size.
+
+        Returns:
+            Samples per (second × megajoule)
+        """
+        energy_mj = self.total_energy() / 1e6
+        return self.throughput_samples_per_sec() / energy_mj if energy_mj > 0 else 0.0
+
     def power_efficiency_watts_per_sample_per_sec(self) -> float:
         """
         Alternative efficiency metric: W / (samples/sec).
@@ -163,8 +180,9 @@ class PowerModel:
             'throughput_samples_per_sec': self.throughput_samples_per_sec(),
             
             # Efficiency Metrics
-            'samples_per_joule': self.samples_per_joule(),
-            'joules_per_sample': 1.0 / self.samples_per_joule() if self.samples_per_joule() > 0 else float('inf'),
+            'samples_per_joule':      self.samples_per_joule(),
+            'joules_per_sample':      1.0 / self.samples_per_joule() if self.samples_per_joule() > 0 else float('inf'),
+            'samples_per_sec_per_mj': self.samples_per_sec_per_megajoule(),
             
             # Hardware counts
             'num_gpus': self.compute_stats.num_npus,
@@ -218,6 +236,7 @@ class PowerModel:
         print(f"\nEFFICIENCY (MLPerf Power Metric):")
         print(f"  Samples per Joule:   {breakdown['samples_per_joule']:.4f} samples/J")
         print(f"  Joules per Sample:   {breakdown['joules_per_sample']:.4f} J/sample")
+        print(f"  Samples/(s·MJ):      {breakdown['samples_per_sec_per_mj']:.6f}")
         
         print(f"\nHARDWARE CONFIGURATION:")
         print(f"  GPUs:                {breakdown['num_gpus']}")

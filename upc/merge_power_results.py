@@ -49,6 +49,7 @@ POWER_FIELDS = [
     "throughput_samples_per_sec",
     "samples_per_joule",
     "joules_per_sample",
+    "samples_per_sec_per_mj",
 ]
 
 

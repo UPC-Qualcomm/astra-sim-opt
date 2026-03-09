@@ -47,13 +47,16 @@ class LinkModel:
       2. Node-name prefix fallback (for CSV files without topology info)
     """
 
-    def __init__(self, link: LinkStats, total_time: float, config: PowerConfig):
-        self.link       = link
-        self.total_time = total_time
-        self.config     = config
+    def __init__(self, link: LinkStats, total_time: float, config: PowerConfig,
+                 active_time: float = None):
+        self.link        = link
+        self.total_time  = total_time
+        self.active_time = active_time if (active_time and active_time > 0) else total_time
+        self.config      = config
 
     def utilization(self) -> float:
-        return self.link.utilization(self.total_time)
+        """Link utilisation relative to the active (comm) window."""
+        return self.link.utilization(self.active_time)
 
     def _link_params(self) -> tuple:
         """Return (active, idle, sleep) for this link type.
@@ -130,7 +133,8 @@ class SwitchTypeModel:
                  switch_connections: dict,
                  link_traffic: dict,
                  link_bandwidth_map: dict,
-                 total_time: float):
+                 total_time: float,
+                 active_time: float = None):
         self.switch_type        = switch_type
         self.switch_ids         = {str(s) for s in switch_ids}
         self.config             = config
@@ -138,6 +142,7 @@ class SwitchTypeModel:
         self.link_traffic       = link_traffic         # (src, dst) → bytes
         self.link_bandwidth_map = link_bandwidth_map   # (src, dst) → bandwidth in Bytes/s
         self.total_time         = total_time
+        self.active_time        = active_time if (active_time and active_time > 0) else total_time
 
     # ------------------------------------------------------------------
     # Counts and degree
@@ -199,15 +204,15 @@ class SwitchTypeModel:
         dict  { switch_id: utilization }  – one entry per switch in switch_ids.
         """
         degree = self._get_degree()
-        if self.total_time <= 0 or degree == 0:
+        if self.active_time <= 0 or degree == 0:
             return {sw: 0.0 for sw in self.switch_ids}
 
         raw: Dict[str, float] = {sw: 0.0 for sw in self.switch_ids}
         for (src, dst), bytes_tx in self.link_traffic.items():
             src_s, dst_s = str(src), str(dst)
-            # Use per-link bandwidth
+            # Use per-link bandwidth; divide by active_time (comm window)
             bw = self.link_bandwidth_map.get((src, dst))
-            u = bytes_tx / (bw * self.total_time)
+            u = bytes_tx / (bw * self.active_time)
             if src_s in raw:
                 raw[src_s] += u
             if dst_s in raw:
@@ -351,14 +356,16 @@ class NetworkModel:
     def __init__(self,
                  network_stats: NetworkStats,
                  total_time: float,
-                 config: PowerConfig):
+                 config: PowerConfig,
+                 comm_time: float = None):
         self.stats      = network_stats
         self.total_time = total_time
         self.config     = config
+        self.active_time = comm_time if (comm_time and comm_time > 0) else total_time
 
         # --- link models ---
         self.link_models: List[LinkModel] = [
-            LinkModel(lnk, total_time, config)
+            LinkModel(lnk, total_time, config, active_time=self.active_time)
             for lnk in network_stats.links
         ]
 
@@ -382,7 +389,8 @@ class NetworkModel:
                 switch_connections=topo.switch_connections if topo else {},
                 link_traffic=link_traffic,
                 link_bandwidth_map=link_bandwidth_map,
-                total_time=total_time
+                total_time=total_time,
+                active_time=self.active_time,
             )
 
         # --- switch models (one per type from topology) ---
@@ -425,7 +433,25 @@ class NetworkModel:
         return self.total_link_power() + self.total_switch_power()
 
     def total_network_energy(self) -> float:
-        return self.total_network_power() * self.total_time
+        """Network energy (Joules), split into static and dynamic components.
+
+        Static  : all ports/links remain powered for the full job duration.
+          E_static  = (link_static + switch_static) × total_time
+
+        Dynamic : utilisation-driven extra power exists only while the network
+          is actively transmitting (the comm window, not the full wall time).
+          E_dynamic = (link_dynamic + switch_dynamic) × active_time
+
+        For uncongested links (utilisation < 1) this equals the old formula
+        when active_time == total_time.  When active_time < total_time the
+        dynamic term is correctly smaller, avoiding over-counting power that
+        only exists during comm phases.
+        """
+        E_static  = (self.total_link_static_power() +
+                     self.total_switch_static_power())  * self.total_time
+        E_dynamic = (self.total_link_dynamic_power() +
+                     self.total_switch_dynamic_power()) * self.active_time
+        return E_static + E_dynamic
 
     # ------------------------------------------------------------------
     # Breakdown
@@ -466,6 +492,7 @@ class NetworkModel:
         breakdown['total_switch_count']      = sum(m.count for m in self.switch_models.values())
         breakdown['total_bytes_transmitted'] = self.stats.total_bytes_transmitted
         breakdown['total_time_s']            = self.total_time
+        breakdown['active_time_s']           = self.active_time
         breakdown['lpm_enabled']             = self.config.comm_lpm_enabled
 
         return breakdown

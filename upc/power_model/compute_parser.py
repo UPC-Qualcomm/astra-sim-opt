@@ -50,6 +50,14 @@ class ComputeStats:
         return 0.0
 
     @property
+    def avg_comm_time(self) -> float:
+        """Average communication time across all NPUs (seconds).
+        """
+        if self.npu_stats:
+            return sum(n.comm_time for n in self.npu_stats.values()) / len(self.npu_stats)
+        return 0.0
+
+    @property
     def total_samples(self) -> int:
         """Total samples processed."""
         return self.batch_size * self.iterations
@@ -74,7 +82,7 @@ def parse_astrasim_log(log_file_path: str) -> ComputeStats:
     Mapping to NPUStats:
         Wall time  → total_time   (actual elapsed cycles for this NPU)
         GPU time   → compute_time (cycles spent executing compute operations)
-        Comm time  → comm_time    (exposed communication cycles, not overlapped)
+        Comm time  → comm_time    (total communication time for this NPU)
     """
     clock_freq_hz = 1e9
 
