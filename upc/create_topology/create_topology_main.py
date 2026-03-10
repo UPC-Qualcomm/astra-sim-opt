@@ -101,7 +101,14 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./topologi
 
     Args:
         topology (str): 'FoldedClos', 'Dragonfly', or 'Jellyfish'.
-        paths_mode (str): 'ECMP', 'Uniform', or None.
+        paths_mode (str): 'ECMP', 'Uniform', 'Random', 'LinksOnly', or None.
+            - 'ECMP': All equal-cost shortest paths per src-dst pair.
+            - 'Uniform': One deterministic uniform path per src-dst pair.
+            - 'Random': One randomly chosen ECMP path per src-dst pair.
+            - 'LinksOnly': Only nodes and links are written; no paths.
+                           Routes are computed on-the-fly by the network simulator
+                           (e.g., via NetworkX ECMP in network.py).
+            - None: No output written.
         config (dict): Configuration parameters for the topology.
 
     Formulas for Node Counts:
@@ -237,7 +244,13 @@ def generate_topology_files(topology, paths_mode, config, output_dir="./topologi
     # 3. Generate Routing Paths
     final_paths = {}
     path_gen = None   # Set below for large-topology streaming mode
-    if paths_mode == "Uniform":
+    if paths_mode == "LinksOnly":
+        # No paths pre-computed — the network simulator will generate ECMP paths
+        # on-the-fly (e.g., using NetworkX in network.py).
+        print("LinksOnly mode: writing nodes and links only (no paths).")
+        # fall through to write with empty final_paths
+
+    elif  paths_mode == "Uniform":
         _npus_per_node = topo_obj.npus_per_node
         _total_npus = int(topo_obj.numHosts)
 

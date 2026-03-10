@@ -6,6 +6,14 @@ if [ -z "$ASTRA_SIM_ROOT" ]; then
     echo "ASTRA_SIM_ROOT was not set. Defaulting to: $ASTRA_SIM_ROOT"
 fi
 
+# --- EXPERIMENT CONFIGURATION ---
+EXPERIMENT_NUM=0  # Change this for different experiments (0 for legacy location)
+if [ "$EXPERIMENT_NUM" -eq 0 ]; then
+    BASE_OUTPUT_DIR="$ASTRA_SIM_ROOT/upc/output/comparison_run"
+else
+    BASE_OUTPUT_DIR="$ASTRA_SIM_ROOT/upc/output/comparison_run/experiment${EXPERIMENT_NUM}"
+fi
+
 # --- GENERAL CONFIGURATION ---
 # NPUS_COUNT=16
 NPUS_COUNT=128
@@ -43,125 +51,140 @@ TOPOLOGY_NAMES=("FoldedClos_128_v2_Random" "FoldedClos_128_v3_Random" "FoldedClo
 
 # =================================================================================
 # --- SIMULATION FUNCTION ---
-# Defines the sequence of simulations for a single workload directory.
+# Runs a single simulation with specific parameters (deterministic - single run)
 # =================================================================================
-run_simulations() {
-    workload_dir="$1"
-    # Re-create the array from the passed string
-    read -r -a NS3_CONFIG_INDICES <<< "$2"
-    read -r -a TOPOLOGY_NAMES <<< "$3"
-    read -r -a SYSTEM_CONFIG_NAMES <<< "$4"
+run_single_simulation() {
+    local sim_type="$1"
+    local workload_dir="$2"
+    local sys_name="$3"
+    local topo_name="$4"
+    local ns3_conf_idx="${5:-}"  # Optional, only for NS3
 
     workload_name=$(basename "$workload_dir")
+    TOPOLOGY_SHORT="${topo_name%%_*}"  # first word before first underscore
 
-    echo "#################################################################"
-    echo "--- PROCESSING COLLECTIVE: $workload_name (Timeout: $TIMEOUT) ---"
-    echo "#################################################################"
+    # --- Define system and network config paths based on the current system name ---
+    ANALYTICAL_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/${sys_name}_sys.json"
+    G2_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/${sys_name}_sys.json"
+    NS3_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/${sys_name}_sys.json"
+    ANALYTICAL_NET_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/${sys_name}.yml"
 
-    for sys_name in "${SYSTEM_CONFIG_NAMES[@]}"; do
-        echo "  ================================================="
-        echo "  --- Using System Configuration: $sys_name ---"
-        echo "  ================================================="
+    if [ "$sim_type" == "analytical" ]; then
+        echo ">>> [ANALYTICAL - DETERMINISTIC] Workload: $workload_name | Sys: $sys_name | Topo: $TOPOLOGY_SHORT"
+        timeout "$TIMEOUT" "$PYTHON_EXEC" compare_networks.py \
+            --workload-dir "$workload_dir" \
+            --npus-count "$NPUS_COUNT" \
+            --logical-topology-config "$LOGICAL_CONFIG" \
+            --analytical-system-config "$ANALYTICAL_SYS_CONFIG" \
+            --analytical-network-config "$ANALYTICAL_NET_CONFIG" \
+            --topology-name "$TOPOLOGY_SHORT" \
+            --base-output-dir "$BASE_OUTPUT_DIR" \
+            --python-exec "$PYTHON_EXEC"
 
-        # --- Define system and network config paths based on the current system name ---
-        ANALYTICAL_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/${sys_name}_sys.json"
-        G2_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/${sys_name}_sys.json"
-        NS3_SYS_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/${sys_name}_sys.json"
-        ANALYTICAL_NET_CONFIG="$ASTRA_SIM_ROOT/upc/configuration/${sys_name}.yml"
+    elif [ "$sim_type" == "g2" ]; then
+        G2_TOPOLOGY_FILE="${G2_TOPOLOGY_BASE}/G2_${topo_name}.json"
+        
+        if [ ! -f "$G2_TOPOLOGY_FILE" ]; then
+            echo ">>> [G2] SKIPPED - Topology file not found: $G2_TOPOLOGY_FILE"
+            return 0
+        fi
 
-        # --- 1. ANALYTICAL MODEL EXECUTION ---
-        echo "  --- [1/3] Running Analytical Model for $workload_name ($sys_name) ---"
-        # iterate analytical model for each topology and pass the first word of topo_name as topology-name
-        for topo_name in "${TOPOLOGY_NAMES[@]}"; do
-            TOPOLOGY_SHORT="${topo_name%%_*}"  # first word before first underscore
-            timeout "$TIMEOUT" "$PYTHON_EXEC" compare_networks.py \
-                --workload-dir "$workload_dir" \
-                --npus-count "$NPUS_COUNT" \
-                --logical-topology-config "$LOGICAL_CONFIG" \
-                --analytical-system-config "$ANALYTICAL_SYS_CONFIG" \
-                --analytical-network-config "$ANALYTICAL_NET_CONFIG" \
-                --topology-name "$TOPOLOGY_SHORT" \
-                --python-exec "$PYTHON_EXEC"
-        done
-        echo "  --- Analytical Model Finished for $workload_name ($sys_name) ---"
+        echo ">>> [G2 - DETERMINISTIC] Workload: $workload_name | Sys: $sys_name | Topo: $TOPOLOGY_SHORT"
+        timeout "$TIMEOUT" "$PYTHON_EXEC" compare_networks.py \
+            --workload-dir "$workload_dir" \
+            --npus-count "$NPUS_COUNT" \
+            --logical-topology-config "$LOGICAL_CONFIG" \
+            --g2-system-config "$G2_SYS_CONFIG" \
+            --g2-network-config "$G2_NET_CONFIG" \
+            --g2-topology-file "$G2_TOPOLOGY_FILE" \
+            --topology-name "$TOPOLOGY_SHORT" \
+            --base-output-dir "$BASE_OUTPUT_DIR" \
+            --python-exec "$PYTHON_EXEC"
 
+    elif [ "$sim_type" == "ns3" ]; then
+        NS3_TOPOLOGY_FILE="${NS3_TOPOLOGY_BASE}/ns3_${topo_name}"
+        NS3_CONFIG_FILE="$ASTRA_SIM_ROOT/upc/configuration/ns3/configs/old/FoldedClos_16_config${ns3_conf_idx}.txt"
 
-        # --- 2. G2 MODEL EXECUTION ---
-        echo "  --- [2/3] Running G2 Model for $workload_name ($sys_name) ---"
-        for topo_name in "${TOPOLOGY_NAMES[@]}"; do
-            TOPOLOGY_SHORT="${topo_name%%_*}"  # first word before first underscore
-            G2_TOPOLOGY_FILE="${G2_TOPOLOGY_BASE}/G2_${topo_name}.json"
+        if [ ! -f "$NS3_CONFIG_FILE" ]; then
+            echo ">>> [NS3] SKIPPED - Config file not found: $NS3_CONFIG_FILE"
+            return 0
+        fi
+        
+        echo ">>> [NS3 - DETERMINISTIC] Workload: $workload_name | Sys: $sys_name | Topo: $TOPOLOGY_SHORT | Conf: $ns3_conf_idx"
+        timeout "$TIMEOUT" "$PYTHON_EXEC" compare_networks.py \
+            --workload-dir "$workload_dir" \
+            --npus-count "$NPUS_COUNT" \
+            --logical-topology-config "$LOGICAL_CONFIG" \
+            --ns3-system-config "$NS3_SYS_CONFIG" \
+            --ns3-network-config "$NS3_CONFIG_FILE" \
+            --ns3-topology-file "$NS3_TOPOLOGY_FILE" \
+            --ns3-precomputed-paths 1 \
+            --topology-name "$TOPOLOGY_SHORT" \
+            --base-output-dir "$BASE_OUTPUT_DIR" \
+            --python-exec "$PYTHON_EXEC"
+    fi
+}
 
-            if [ ! -f "$G2_TOPOLOGY_FILE" ]; then
-                echo "    -> WARNING: G2 topology file not found, skipping: $G2_TOPOLOGY_FILE"
-                continue
-            fi
-
-            echo "    -> Using G2 Topology: ${topo_name} for $workload_name ($sys_name)"
-            timeout "$TIMEOUT" "$PYTHON_EXEC" compare_networks.py \
-                --workload-dir "$workload_dir" \
-                --npus-count "$NPUS_COUNT" \
-                --logical-topology-config "$LOGICAL_CONFIG" \
-                --g2-system-config "$G2_SYS_CONFIG" \
-                --g2-network-config "$G2_NET_CONFIG" \
-                --g2-topology-file "$G2_TOPOLOGY_FILE" \
-                --topology-name "$TOPOLOGY_SHORT" \
-                --python-exec "$PYTHON_EXEC"
-        done
-        echo "  --- G2 Model Finished for $workload_name ($sys_name) ---"
-
-
-        # --- 3. NS3 MODEL EXECUTION ---
-        echo "  --- [3/3] Running NS3 Model for $workload_name ($sys_name) ---"
-        for topo_name in "${TOPOLOGY_NAMES[@]}"; do
-            TOPOLOGY_SHORT="${topo_name%%_*}"  # first word before first underscore
-            NS3_TOPOLOGY_FILE="${NS3_TOPOLOGY_BASE}/ns3_${topo_name}"
-            echo "    -> Using NS3 Topology: ${topo_name} for $workload_name ($sys_name)"
-
-            for ns3_conf_idx in "${NS3_CONFIG_INDICES[@]}"; do
-                NS3_CONFIG_FILE="$ASTRA_SIM_ROOT/upc/configuration/ns3/configs/old/FoldedClos_16_config${ns3_conf_idx}.txt"
-
-                if [ ! -f "$NS3_CONFIG_FILE" ]; then
-                    echo "    -> WARNING: NS3 config file not found, skipping: $NS3_CONFIG_FILE"
-                    continue
-                fi
-
-                echo "    -> Using NS3 Config Index: $ns3_conf_idx for $workload_name ($sys_name)"
-                timeout "$TIMEOUT" "$PYTHON_EXEC" compare_networks.py \
-                    --workload-dir "$workload_dir" \
-                    --npus-count "$NPUS_COUNT" \
-                    --logical-topology-config "$LOGICAL_CONFIG" \
-                    --ns3-system-config "$NS3_SYS_CONFIG" \
-                    --ns3-network-config "$NS3_CONFIG_FILE" \
-                    --ns3-topology-file "$NS3_TOPOLOGY_FILE" \
-                    --ns3-precomputed-paths 1 \
-                    --topology-name "$TOPOLOGY_SHORT" \
-                    --python-exec "$PYTHON_EXEC"
+# Generate all parameter combinations for parallelization (deterministic - no multiple runs)
+generate_job_list() {
+    local job_list_file="$1"
+    > "$job_list_file"  # Clear the file
+    
+    # Find all workload directories
+    while IFS= read -r workload_dir; do
+        for sys_name in "${SYSTEM_CONFIG_NAMES[@]}"; do
+            for topo_name in "${TOPOLOGY_NAMES[@]}"; do
+                # Add Analytical job
+                echo "analytical|$workload_dir|$sys_name|$topo_name|" >> "$job_list_file"
+                
+                # Add G2 job
+                echo "g2|$workload_dir|$sys_name|$topo_name|" >> "$job_list_file"
+                
+                # Add NS3 jobs (one per config index)
+                for ns3_conf_idx in "${NS3_CONFIG_INDICES[@]}"; do
+                    echo "ns3|$workload_dir|$sys_name|$topo_name|$ns3_conf_idx" >> "$job_list_file"
+                done
             done
         done
-        echo "  --- NS3 Model Finished for $workload_name ($sys_name) ---"
-    done
+    done < <(find "$BASE_WORKLOAD_DIR" -mindepth 1 -maxdepth 1 -type d)
+    
+    total_jobs=$(wc -l < "$job_list_file")
+    echo "Generated $total_jobs deterministic jobs for parallel execution"
+}
+
+# Wrapper function to parse the job string and call run_single_simulation
+execute_job() {
+    local job_string="$1"
+    IFS='|' read -r sim_type workload_dir sys_name topo_name ns3_conf_idx <<< "$job_string"
+    run_single_simulation "$sim_type" "$workload_dir" "$sys_name" "$topo_name" "$ns3_conf_idx"
 }
 
 # Export the function and variables to be available in sub-shells spawned by xargs
-export -f run_simulations
-export ASTRA_SIM_ROOT NPUS_COUNT LOGICAL_CONFIG PYTHON_EXEC TIMEOUT
+export -f run_single_simulation execute_job
+export ASTRA_SIM_ROOT NPUS_COUNT LOGICAL_CONFIG PYTHON_EXEC TIMEOUT BASE_OUTPUT_DIR
 export G2_NET_CONFIG G2_TOPOLOGY_BASE NS3_TOPOLOGY_BASE
+export SYSTEM_CONFIG_NAMES TOPOLOGY_NAMES NS3_CONFIG_INDICES
 
 # =================================================================================
 # --- MAIN EXECUTION ---
-# Finds all workload directories and runs simulations in parallel using xargs.
+# Generates all job combinations and runs them in parallel using xargs.
 # =================================================================================
-echo "--- STARTING PARALLEL SIMULATIONS (Max jobs: $MAX_PARALLEL_JOBS) ---"
+echo "========================================================================="
+echo "--- STARTING DETERMINISTIC PARALLEL SIMULATIONS (Max jobs: $MAX_PARALLEL_JOBS) ---"
+echo "--- Output directory: $BASE_OUTPUT_DIR ---"
+echo "========================================================================="
 
-# Convert arrays to a space-separated string for passing
-ns3_indices_str="${NS3_CONFIG_INDICES[*]}"
-topology_names_str="${TOPOLOGY_NAMES[*]}"
-system_configs_str="${SYSTEM_CONFIG_NAMES[*]}"
+# Create temporary file for job list
+JOB_LIST_FILE=$(mktemp)
+trap "rm -f $JOB_LIST_FILE" EXIT
 
-find "$BASE_WORKLOAD_DIR" -mindepth 1 -maxdepth 1 -type d | \
-    xargs -P "$MAX_PARALLEL_JOBS" -I {} bash -c 'run_simulations "{}" "$1" "$2" "$3"' _ "$ns3_indices_str" "$topology_names_str" "$system_configs_str"
+# Generate all job combinations
+generate_job_list "$JOB_LIST_FILE"
 
+# Execute all jobs in parallel
+cat "$JOB_LIST_FILE" | xargs -P "$MAX_PARALLEL_JOBS" -I {} bash -c 'execute_job "{}"'
+
+echo ""
 echo "#################################################################"
-echo "--- ALL SPLIT SIMULATIONS HAVE FINISHED ---"
+echo "--- ALL DETERMINISTIC SIMULATIONS HAVE FINISHED ---"
 echo "#################################################################"

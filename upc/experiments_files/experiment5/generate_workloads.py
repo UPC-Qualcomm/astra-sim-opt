@@ -3,6 +3,7 @@ import os
 import subprocess
 import multiprocessing
 import argparse
+import random
 from enum import Enum
 from tqdm import tqdm
 
@@ -27,6 +28,8 @@ def get_design_space(
     for ddp in dp:
         for mmp in mp:
             for ssharded in weight_sharded:
+                if ddp == 1 and ssharded:
+                    continue
                 for ppp in pp:
                     ssp = num_npus // (ddp * mmp * ppp)
                     if ssp < 1 or ssp > max_ssp or (num_npus != (ddp * mmp * ssp * ppp)):
@@ -46,6 +49,8 @@ def get_design_space_no_sp(
     for ddp in dp:
         for mmp in mp:
             for ssharded in weight_sharded:
+                if ddp == 1 and ssharded:
+                    continue
                 for ppp in pp:
                     if num_npus != (ddp * mmp * ppp):
                         continue
@@ -95,11 +100,11 @@ class Model(Enum):
         elif model == Model.GPT_Neo_2700M:
             return [50257, 2560, 2560, 10240, [2048], 32, 2048, 32, 32]
         elif model == Model.llama_8B:
-            return [30522, 4096, 4096, 16384, [128], 32, 256, 32, 4]
+            return [30522, 4096, 4096, 16384, [64], 32, 2048, 32, 4]
         elif model == Model.FLAN_T5_XXL_11B:
             return [32128, 4096, 4096, 10240, [2048], 32, 1024, 64, 24]
         elif model == Model.GPT_13B:
-            return [50257, 5140, 5140, 20560, [2048], 32, 2048, 40, 40]
+            return [50257, 5140, 5140, 20560, [64], 32, 2048, 40, 8]
         elif model == Model.GPT_NeoX_20B:
             return [50257, 6144, 6144, 24576, [2048], 32, 2048, 64, 44]
         elif model == Model.GPT_30B:
@@ -222,8 +227,8 @@ if __name__ == "__main__":
         default="Default",
     )
     
-    num_npus = 16
-    dp = {1, 2, 4, 8, 16}
+    num_npus = 128
+    dp = {1, 2, 4, 8, 16, 32}
     mp = {1, 2, 4, 8}
     pp = {1, 2, 4}
     weight_sharded = {False, True}
@@ -264,6 +269,12 @@ if __name__ == "__main__":
         type=int,
         default=max_sp,
         help="Maximum spatial parallelism"
+    )
+    parser.add_argument(
+        "--num_samples",
+        type=int,
+        default=None,
+        help="Randomly sample this many design points (default: all)"
     )
 
     # Additional custom arguments newly added in STG
@@ -326,6 +337,8 @@ if __name__ == "__main__":
 
     design_space = get_design_space(num_npus, dp, mp, pp, weight_sharded, max_sp)
     #design_space = get_design_space_no_sp(num_npus, dp, mp, pp, weight_sharded)
+    if args.num_samples is not None:
+        design_space = random.sample(design_space, min(args.num_samples, len(design_space)))
     func = partial(generate_instance, model=Model(int(model)), folder_name=folder_name, custom_args=custom_args)
 
     with multiprocessing.Pool(int(multiprocessing.cpu_count() * 0.95)) as pool:

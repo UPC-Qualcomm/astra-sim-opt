@@ -6,6 +6,14 @@ if [ -z "$ASTRA_SIM_ROOT" ]; then
     echo "ASTRA_SIM_ROOT was not set. Defaulting to: $ASTRA_SIM_ROOT"
 fi
 
+# --- EXPERIMENT CONFIGURATION ---
+EXPERIMENT_NUM=0  # Change this for different experiments (0 for legacy location)
+if [ "$EXPERIMENT_NUM" -eq 0 ]; then
+    BASE_OUTPUT_DIR="$ASTRA_SIM_ROOT/upc/output/comparison_run"
+else
+    BASE_OUTPUT_DIR="$ASTRA_SIM_ROOT/upc/output/comparison_run/experiment${EXPERIMENT_NUM}"
+fi
+
 # --- GENERAL CONFIGURATION ---
 NPUS_COUNT=16
 # NPUS_COUNT=128
@@ -75,6 +83,7 @@ run_single_simulation() {
             --analytical-network-config "$ANALYTICAL_NET_CONFIG" \
             --topology-name "$TOPOLOGY_SHORT" \
             --run-number "$run_num" \
+            --base-output-dir "$BASE_OUTPUT_DIR" \
             --python-exec "$PYTHON_EXEC"
 
     elif [ "$sim_type" == "g2" ]; then
@@ -95,6 +104,7 @@ run_single_simulation() {
             --g2-topology-file "$G2_TOPOLOGY_FILE" \
             --topology-name "$TOPOLOGY_SHORT" \
             --run-number "$run_num" \
+            --base-output-dir "$BASE_OUTPUT_DIR" \
             --python-exec "$PYTHON_EXEC"
 
     elif [ "$sim_type" == "ns3" ]; then
@@ -121,6 +131,7 @@ run_single_simulation() {
             --topology-name "$TOPOLOGY_SHORT" \
             --run-number "$run_num" \
             --ns3-ecmp-seed "$ECMP_SEED" \
+            --base-output-dir "$BASE_OUTPUT_DIR" \
             --python-exec "$PYTHON_EXEC"
     fi
 }
@@ -163,7 +174,7 @@ execute_job() {
 
 # Export the function and variables to be available in sub-shells spawned by xargs
 export -f run_single_simulation execute_job
-export ASTRA_SIM_ROOT NPUS_COUNT LOGICAL_CONFIG PYTHON_EXEC TIMEOUT
+export ASTRA_SIM_ROOT NPUS_COUNT LOGICAL_CONFIG PYTHON_EXEC TIMEOUT BASE_OUTPUT_DIR
 export G2_NET_CONFIG G2_TOPOLOGY_BASE NS3_TOPOLOGY_BASE NUM_RUNS BASE_ECMP_SEED
 export SYSTEM_CONFIG_NAMES TOPOLOGY_NAMES NS3_CONFIG_INDICES
 
@@ -173,6 +184,7 @@ export SYSTEM_CONFIG_NAMES TOPOLOGY_NAMES NS3_CONFIG_INDICES
 # =================================================================================
 echo "========================================================================="
 echo "--- STARTING FULLY PARALLELIZED SIMULATIONS (Max jobs: $MAX_PARALLEL_JOBS) ---"
+echo "--- Output directory: $BASE_OUTPUT_DIR ---"
 echo "========================================================================="
 
 # Create temporary file for job list
@@ -188,4 +200,5 @@ cat "$JOB_LIST_FILE" | xargs -P "$MAX_PARALLEL_JOBS" -I {} bash -c 'execute_job 
 echo ""
 echo "#################################################################"
 echo "--- ALL PARALLEL SIMULATIONS HAVE FINISHED ---"
+echo "#################################################################"
 echo "#################################################################"
