@@ -29,32 +29,32 @@ from tqdm import tqdm
 # Constants & Search Space
 # ===================================================================
 
-NPU_COUNTS = [256]#[2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+NPU_COUNTS = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
 
 # Logical dimension factorizations (max 8 per dimension)
 LOGICAL_DIMS = {
-    # 2:   [2],
-    # 4:   [4],
-    # 8:   [8],
-    # 16:  [8, 2],
-    # 32:  [8, 4],
-    # 64:  [8, 8],
-    # 128: [8, 16],
+    2:   [2],
+    4:   [4],
+    8:   [8],
+    16:  [8, 2],
+    32:  [8, 4],
+    64:  [8, 8],
+    128: [8, 16],
     256: [8, 16, 2],
-    # 512: [8, 16, 2, 2],
-    # 1024: [8, 16, 2, 4]
+    512: [8, 16, 2, 2],
+    1024: [8, 16, 2, 4]
 }
 #d1024_L32_seq2048_b16_mb16_16_1_16_1_1
 # Model parameter search space
-D_MODEL_VALUES = [1024]#[512, 1024, 2048, 4096]
-NUM_STACKS_VALUES = [32]#[2, 4, 8, 16, 32]
-SEQ_LEN_VALUES = [2048]#[512, 1024, 2048, 4096]
+D_MODEL_VALUES = [512, 1024, 2048, 4096]
+NUM_STACKS_VALUES = [2, 4, 8, 16, 32]
+SEQ_LEN_VALUES = [512, 1024, 2048, 4096]
 
 # Batch sizes: powers of 2 from 2 to 2048
-BATCH_VALUES = [16]#[2**i for i in range(2,11)]
+BATCH_VALUES = [2**i for i in range(2,11)]
 
 # Micro-batch options
-MICRO_BATCH_VALUES = [16]#[2**i for i in range(2, 11)]
+MICRO_BATCH_VALUES = [2**i for i in range(2, 11)]
 
 # Fixed model parameters
 VOCAB_SIZE = 32000
@@ -203,7 +203,7 @@ def get_valid_strategies(npu_count, num_heads, num_stacks, seq_len):
 
 
 def get_valid_micro_batches(batch):
-    return [mb for mb in MICRO_BATCH_VALUES if batch >= mb and batch % mb == 0 and batch // mb <= 2**5]
+    return [mb for mb in MICRO_BATCH_VALUES if batch >= mb and batch % mb == 0 and batch // mb <= 2**4]
 
 
 def sample_search_space(num_samples, seed=42):
@@ -357,8 +357,8 @@ if __name__ == "__main__":
         description="Experiment 8: Multi-scale workload generation"
     )
     parser.add_argument(
-        "--num_samples", type=int, default=200,
-        help="Number of random configurations to generate (default: 200)"
+        "--num_samples", type=int, default=300,
+        help="Number of random configurations to generate (default: 300)"
     )
     parser.add_argument(
         "--seed", type=int, default=42,
