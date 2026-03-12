@@ -62,7 +62,9 @@ int main(int argc, char* argv[]) {
     const auto packet_size = network_parser.get_packet_size(); // in bytes
     const auto header_size = network_parser.get_header_size(); // in bytes
     const auto bandwidth_unit = network_parser.get_bandwidth_unit(); // bandwidth unit string
-
+    const auto ecmp_seed = network_parser.get_ecmp_seed(); // ECMP random seed for path selection
+    const auto routing_mode = network_parser.get_routing_mode(); // routing mode string
+    
     // Get total number of NPUs
     auto npus_count = 1;
     for (const auto& count : npus_count_per_dim) {
@@ -72,7 +74,7 @@ int main(int argc, char* argv[]) {
     // Set up Network API
     G2NetworkApi::set_event_queue(event_queue);
 
-    Network net(topology_file, workload_configuration, packet_size, header_size, bandwidth_unit, logging_folder);
+    Network net(topology_file, workload_configuration, packet_size, header_size, bandwidth_unit, logging_folder, ecmp_seed, routing_mode);
     G2NetworkApi::set_network(&net);
 
     // Create ASTRA-sim related resources

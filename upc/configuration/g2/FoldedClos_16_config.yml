@@ -2,4 +2,5 @@ npus_count: [ 16 ]
 bandwidth_unit: GB/s
 packet_size: 1000
 header_size: 36
+routing_mode: ecmp # Options: 'ecmp', 'foldedclos_uniform', 'dragonfly_uniform', 'jellyfish_uniform'.
 topology_file: "/app/astra-sim/upc/configuration/g2/topologies/G2_FoldedClos_16.0_topology0.json"
