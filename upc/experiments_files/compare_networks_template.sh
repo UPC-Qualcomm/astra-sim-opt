@@ -24,6 +24,10 @@ NPUS_COUNT="${NPUS_COUNT:-16}"
 TIMEOUT="${TIMEOUT:-300m}"
 MAX_PARALLEL_JOBS="${MAX_PARALLEL_JOBS:-8}"
 
+# Memory limit (KB) shared across all parallel jobs. Each job gets TOTAL_VMEM_LIMIT / MAX_PARALLEL_JOBS.
+# Set to 0 or empty to disable. Default: 20000000 (~20 GB)
+TOTAL_VMEM_LIMIT="${TOTAL_VMEM_LIMIT:-20000000}"
+
 # For ECMP mode only
 NUM_RUNS="${NUM_RUNS:-1}"  # Number of runs per configuration (for ECMP)
 BASE_ECMP_SEED="${BASE_ECMP_SEED:-25}"
@@ -135,7 +139,7 @@ run_single_simulation() {
             echo ">>> [G2 - DETERMINISTIC] Workload: $workload_name | Sys: $sys_name | Topo: $TOPOLOGY_SHORT"
         fi
 
-        timeout "$TIMEOUT" "$PYTHON_EXEC" $ASTRA_SIM_ROOT/upc/compare_networks.py \
+        G2_CMD=(timeout "$TIMEOUT" "$PYTHON_EXEC" $ASTRA_SIM_ROOT/upc/compare_networks.py \
             --workload-dir "$workload_dir" \
             --npus-count "$NPUS_COUNT" \
             --logical-topology-config "$LOGICAL_CONFIG" \
@@ -145,7 +149,12 @@ run_single_simulation() {
             --topology-name "$TOPOLOGY_SHORT" \
             --run-number "$run_num" \
             --base-output-dir "$BASE_OUTPUT_DIR" \
-            --python-exec "$PYTHON_EXEC"
+            --python-exec "$PYTHON_EXEC")
+        if [ "$MODE" == "ecmp" ]; then
+            ECMP_SEED=$((BASE_ECMP_SEED + run_num - 1))
+            G2_CMD+=(--g2-ecmp-seed "$ECMP_SEED")
+        fi
+        "${G2_CMD[@]}"
 
     elif [ "$sim_type" == "ns3" ]; then
         NS3_TOPOLOGY_FILE="${NS3_TOPOLOGY_BASE}/${topo_name}"
@@ -252,6 +261,11 @@ generate_job_list() {
 
 execute_job() {
     local job_string="$1"
+    # Apply per-job virtual memory limit
+    if [ -n "$TOTAL_VMEM_LIMIT" ] && [ "$TOTAL_VMEM_LIMIT" -gt 0 ] 2>/dev/null; then
+        local per_job_limit=$((TOTAL_VMEM_LIMIT / MAX_PARALLEL_JOBS))
+        ulimit -v "$per_job_limit" 2>/dev/null
+    fi
     IFS='|' read -r sim_type workload_dir sys_name topo_name run_num ns3_conf_idx <<< "$job_string"
     run_single_simulation "$sim_type" "$workload_dir" "$sys_name" "$topo_name" "$run_num" "$ns3_conf_idx"
 }
@@ -260,7 +274,7 @@ execute_job() {
 export -f run_single_simulation execute_job is_sim_enabled
 export ASTRA_SIM_ROOT NPUS_COUNT PYTHON_EXEC TIMEOUT BASE_OUTPUT_DIR
 export G2_TOPOLOGY_BASE NS3_TOPOLOGY_BASE NUM_RUNS BASE_ECMP_SEED
-export MODE EXPERIMENT_NAME
+export MODE EXPERIMENT_NAME TOTAL_VMEM_LIMIT MAX_PARALLEL_JOBS
 export SYSTEM_CONFIG_NAMES_ARRAY TOPOLOGY_NAMES_ARRAY NS3_CONFIG_INDICES_ARRAY SIM_TYPES_ARRAY
 
 # =================================================================================
@@ -270,6 +284,9 @@ main() {
     echo "========================================================================="
     echo "--- EXPERIMENT: $EXPERIMENT_NAME (Mode: $MODE) ---"
     echo "--- NPUs: $NPUS_COUNT | Max Parallel Jobs: $MAX_PARALLEL_JOBS ---"
+    if [ -n "$TOTAL_VMEM_LIMIT" ] && [ "$TOTAL_VMEM_LIMIT" -gt 0 ] 2>/dev/null; then
+        echo "--- Memory limit: ${TOTAL_VMEM_LIMIT} KB total, $((TOTAL_VMEM_LIMIT / MAX_PARALLEL_JOBS)) KB/job ---"
+    fi
     echo "--- System Configs: $SYSTEM_CONFIG_NAMES ---"
     echo "--- Topologies: $TOPOLOGY_NAMES ---"
     echo "--- Simulators: $SIM_TYPES ---"
