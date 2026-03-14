@@ -426,7 +426,7 @@ def obj_latency_network_power(exec_time, is_oom, metadata, config, power=0.5):
 """
 WHICH OBJECTIVE FUNCTION SHOULD YOU USE?
 
-1. **obj_latency_network_raw** (RECOMMENDED)
+1. **obj_latency_network_raw** (RECOMMENDED for network-BW MOO)
    - Use with DeepHyper's objective_scaler="minmax" or "standardize"
    - DeepHyper automatically normalizes based on observed values
    - No manual tuning needed
@@ -447,20 +447,17 @@ WHICH OBJECTIVE FUNCTION SHOULD YOU USE?
    - Very sensitive to small changes
    - Can cause optimization issues
 
+For power-aware objectives (g2 + estimate_power=1), use the built-in classes
+in Optimization.core.objective:
+    MinimizePower, MinimizeEnergy, MinimizePowerAndTime, MinimizeEnergyAndTime
+
 EXAMPLE USAGE:
 ```python
-from custom_objectives import obj_latency_network_raw
+from Optimization import MinimizeEnergyAndTime
 
-# Let DeepHyper handle scaling
 optimizer = DeepHyperOptimizer(
     ...
-    objective=CustomObjective(
-        obj_latency_network_raw,
-        "time_network_raw",
-        minimize=True,
-        is_multi_objective=True
-    ),
-    objective_scaler="minmax",  # DeepHyper handles normalization
+    objective=MinimizeEnergyAndTime(),
     ...
 )
 ```

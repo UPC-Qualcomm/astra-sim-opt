@@ -162,6 +162,8 @@ DEFAULT_G2_NETWORK_CONFIG = {
     "bandwidth_unit": "GB/s",
     "packet_size": 1500,
     "header_size": 48,
+    "routing_mode": "foldedclos_uniform",
+    "ecmp_seed": 42,
     "topology_file": os.environ['ASTRA_SIM_ROOT'] + "/upc/configuration/g2/FoldedClos"
 }
 
@@ -488,7 +490,7 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
     
     # Extract topology configuration
     topology = net_sim_config.get('topology', 'FoldedClos')
-    paths_mode = net_sim_config.get('paths_mode', 'Uniform')
+    paths_mode = net_sim_config.get('paths_mode', 'None')
     topology_config = net_sim_config.get('topology_config', {}).copy()
     
     # Resolve npus_per_dim for multi-dim npus_count in the network config
@@ -637,6 +639,8 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
         "bandwidth_unit": bw_unit,
         "packet_size": 1500,
         "header_size": 44,
+        "routing_mode": net_sim_config.get("routing_mode", "foldedclos_uniform"),
+        "ecmp_seed": 42,
         "topology_file": topology_file_path# + ".json"
     }
     

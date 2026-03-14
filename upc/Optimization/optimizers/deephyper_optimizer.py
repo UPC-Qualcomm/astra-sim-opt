@@ -39,13 +39,35 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
     
     if clusters and 'cluster' in config:
         config = enrich_config_with_clusters(config, clusters)
+
+    def _bump_cleanup_counter(name: str, amount: int):
+        cleanup_state = optimizer_state.get('periodic_cleanup')
+        if cleanup_state is None or amount == 0:
+            return
+        counters = cleanup_state.get('cleanup_counters')
+        if counters is None:
+            return
+        counters[name] = int(counters.get(name, 0)) + int(amount)
     
     try:
         returned_config, exec_time, is_oom, file_paths, metadata = evaluate_config_worker(
             config, simulation_runner
         )
-        
+
+        was_killed = bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False
+
+        # Failed evaluation with generated files: clean immediately.
         if exec_time is None:
+            cleanup_result = BaseOptimizer.cleanup_path_bundle(
+                tracked_paths=file_paths,
+                verbose=optimizer_state.get('periodic_cleanup', {}).get('verbose', False) if optimizer_state.get('periodic_cleanup') is not None else False,
+                print_deleted_files=optimizer_state.get('periodic_cleanup', {}).get('print_deleted_files', False) if optimizer_state.get('periodic_cleanup') is not None else False,
+                reason="failed",
+            )
+            if isinstance(file_paths, dict) and file_paths:
+                _bump_cleanup_counter('simulations_cleaned', 1)
+            if cleanup_result['total_removed'] > 0:
+                _bump_cleanup_counter('files_deleted', cleanup_result['total_removed'])
             return "F"
         
         # Update tracker threshold if exec_time improved
@@ -69,13 +91,57 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
             
             optimizer_state['extra_data_cache'][config_key] = {
                 'exec_time': exec_time,
-                'config_files': config_files
+                'config_files': config_files,
+                'was_killed': bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False,
             }
             print(f"✓ Cached data for config_key with {len(config_files)} files, exec_time={exec_time}")
         
         score = objective.compute(exec_time, is_oom, metadata, config)
         if score is None:
             return "F"
+
+        cleanup_state = optimizer_state.get('periodic_cleanup')
+        if cleanup_state is not None:
+            with cleanup_state['lock']:
+                cleanup_state['scores'].append(score)
+                cleanup_state['file_paths'].append(dict(file_paths))
+                current_idx = len(cleanup_state['scores']) - 1
+
+                # Immediate cleanup for killed/OOM runs.
+                if was_killed or bool(is_oom):
+                    reason = "killed" if was_killed else "oom"
+                    cleanup_result = BaseOptimizer.cleanup_path_bundle(
+                        tracked_paths=dict(file_paths),
+                        verbose=cleanup_state.get('verbose', False),
+                        print_deleted_files=cleanup_state.get('print_deleted_files', False),
+                        reason=reason,
+                    )
+                    if isinstance(file_paths, dict) and file_paths:
+                        cleanup_state['cleaned_indices'][current_idx] = True
+                        _bump_cleanup_counter('simulations_cleaned', 1)
+                    if cleanup_result['total_removed'] > 0:
+                        _bump_cleanup_counter('files_deleted', cleanup_result['total_removed'])
+
+                record_count = len(cleanup_state['scores'])
+                next_cleanup_at = cleanup_state['control'].get('next_cleanup_at', cleanup_state['cleanup_batch_size'])
+                if (
+                    record_count > cleanup_state['keep_top_k']
+                    and cleanup_state['cleanup_batch_size'] > 0
+                    and record_count >= next_cleanup_at
+                ):
+                    BaseOptimizer.cleanup_records(
+                        scores=list(cleanup_state['scores']),
+                        file_paths=list(cleanup_state['file_paths']),
+                        keep_top_k=cleanup_state['keep_top_k'],
+                        minimize=objective.minimize,
+                        cleaned_indices=cleanup_state['cleaned_indices'],
+                        verbose=cleanup_state.get('verbose', False),
+                        print_deleted_files=cleanup_state.get('print_deleted_files', False),
+                        cleanup_counters=cleanup_state.get('cleanup_counters'),
+                    )
+                    cleanup_state['control']['next_cleanup_at'] = (
+                        (record_count // cleanup_state['cleanup_batch_size']) + 1
+                    ) * cleanup_state['cleanup_batch_size']
         
         # Handle multi-objective returns (tuple of scores)
         if isinstance(score, (tuple, list)):
@@ -142,8 +208,9 @@ class DeepHyperOptimizer(BaseOptimizer):
         moo_scalarization_weight=None,
         objective_scaler: str = "minmax",
         # Framework parameters
-        save_dir: str = ".",
+        save_dir: str = "./experiments",
         keep_top_k: int = -1,
+        cleanup_batch_size: int = -1,
         profile_time: bool = False,
         evaluator_method: str = "process",
         results_filename: Optional[str] = None,
@@ -203,7 +270,8 @@ class DeepHyperOptimizer(BaseOptimizer):
             
             # Framework parameters
             save_dir: Directory to save results
-            keep_top_k: Keep top K results files (-1 = all, 0 = none)
+            keep_top_k: Keep top K results files during periodic cleanup (-1 = disable cleanup)
+            cleanup_batch_size: Run cleanup every N successful evaluations (-1 = disable periodic cleanup)
             profile_time: Track detailed timing statistics
             evaluator_method: Parallel evaluation method ("process" or "thread")
             
@@ -229,6 +297,7 @@ class DeepHyperOptimizer(BaseOptimizer):
             verbose=verbose,
             save_dir=save_dir,
             keep_top_k=keep_top_k,
+            cleanup_batch_size=cleanup_batch_size,
             profile_time=profile_time
         )
         
@@ -321,6 +390,20 @@ class DeepHyperOptimizer(BaseOptimizer):
         from multiprocessing import Manager
         self._manager = Manager()
         self.extra_data_cache = self._manager.dict()
+        self.periodic_cleanup_state = None
+        if self._periodic_cleanup_enabled():
+            self.periodic_cleanup_state = {
+                'scores': self._manager.list(),
+                'file_paths': self._manager.list(),
+                'cleaned_indices': self._manager.dict(),
+                'control': self._manager.dict({'next_cleanup_at': self.cleanup_batch_size}),
+                'cleanup_counters': self._manager.dict({'simulations_cleaned': 0, 'files_deleted': 0}),
+                'lock': self._manager.Lock(),
+                'keep_top_k': self.keep_top_k,
+                'cleanup_batch_size': self.cleanup_batch_size,
+                'verbose': self.verbose,
+                'print_deleted_files': self.cleanup_print_deleted_files,
+            }
         # Note: self.file_paths is already initialized as [] in BaseOptimizer
         
         # Initialize simulation tracker for early termination
@@ -489,7 +572,8 @@ class DeepHyperOptimizer(BaseOptimizer):
             'objective': self.objective,
             'clusters': getattr(self.search_space, 'clusters', None),
             'extra_data_cache': self.extra_data_cache,
-            'tracker': self.tracker if self.enable_tracker else None
+            'tracker': self.tracker if self.enable_tracker else None,
+            'periodic_cleanup': self.periodic_cleanup_state,
         }
         
         eval_func = partial(_deephyper_evaluate_wrapper, optimizer_state=optimizer_state)
@@ -551,6 +635,7 @@ class DeepHyperOptimizer(BaseOptimizer):
                 if cached_data:
                     config_data = dict(cached_data.get('config_files', {}))
                     config_data['exec_time'] = cached_data.get('exec_time')
+                    config_data['was_killed'] = bool(cached_data.get('was_killed', False))
                 else:
                     config_data = {}
                 config_file_data.append(config_data)
@@ -570,11 +655,12 @@ class DeepHyperOptimizer(BaseOptimizer):
             
             # Add exec_time column
             self.deephyper_results['exec_time'] = [data.get('exec_time', None) for data in config_file_data]
+            self.deephyper_results['was_killed'] = [bool(data.get('was_killed', False)) for data in config_file_data]
             
             if self.verbose:
                 n_enriched = sum(1 for data in config_file_data if data)
                 print(f"✓ Enriched {n_enriched}/{len(self.deephyper_results)} rows with config file information")
-                print(f"  Added columns: {', '.join(config_file_keys)}, exec_time")
+                print(f"  Added columns: {', '.join(config_file_keys)}, exec_time, was_killed")
     
     def _collect_results_from_deephyper(self):
         """Collect and process results from DeepHyper's output dataframe."""
@@ -631,7 +717,9 @@ class DeepHyperOptimizer(BaseOptimizer):
             
             self.configs.append(config)
             self.scores.append(score)
-            self.metadata.append(self._get_simulation_metadata())
+            metadata = self._get_simulation_metadata()
+            metadata['was_killed'] = bool(row.get('was_killed', False))
+            self.metadata.append(metadata)
             n_success += 1
             
             # Try to read config files if job_id exists (to retrieve file_paths from job metadata)
@@ -658,9 +746,6 @@ class DeepHyperOptimizer(BaseOptimizer):
                 self.best_iteration = len(self.configs) - 1
                 if self.verbose:
                     print(f"    🏆 NEW BEST: {score:.4f}")
-            
-            if self.keep_top_k >= 0:
-                self._cleanup_files()
         
         if self.verbose:
             print(f"\nCollected {n_success} successful evaluations")
@@ -872,24 +957,45 @@ class DeepHyperOptimizer(BaseOptimizer):
             search_label = "CBO" if self.search_type == "cbo" else "RANDOM SEARCH"
             if self.verbose:
                 print("-"*70 + f"\nRUNNING {search_label}\n" + "-"*70 + "\n")
+
+            if self.periodic_cleanup_state is not None:
+                self.periodic_cleanup_state['print_deleted_files'] = self.cleanup_print_deleted_files
             
             with self.time_stats.timer("search"):
                 self.deephyper_results = self.search.search(
                     evaluator=self.evaluator,
                     max_evals=self.budget
                 )
+
+            # Final cleanup pass to ensure only top-K artifacts remain.
+            if self.periodic_cleanup_state is not None:
+                with self.periodic_cleanup_state['lock']:
+                    BaseOptimizer.cleanup_records(
+                        scores=list(self.periodic_cleanup_state['scores']),
+                        file_paths=list(self.periodic_cleanup_state['file_paths']),
+                        keep_top_k=self.periodic_cleanup_state['keep_top_k'],
+                        minimize=self.objective.minimize,
+                        cleaned_indices=self.periodic_cleanup_state['cleaned_indices'],
+                        verbose=self.periodic_cleanup_state.get('verbose', False),
+                        print_deleted_files=self.periodic_cleanup_state.get('print_deleted_files', False),
+                        cleanup_counters=self.periodic_cleanup_state.get('cleanup_counters'),
+                    )
+
+                counters = self.periodic_cleanup_state.get('cleanup_counters')
+                if counters is not None:
+                    self.cleanup_stats['simulations_cleaned'] = int(counters.get('simulations_cleaned', 0))
+                    self.cleanup_stats['files_deleted'] = int(counters.get('files_deleted', 0))
             
             # Finalize and save results
             with self.time_stats.timer("save_results"):
                 self._finalize_and_save_results(enrichment_verbosity=True)
             
-            if self.keep_top_k >= 0:
-                if self.verbose:
-                    print("\n" + "-"*70 + "\nFINAL CLEANUP\n" + "-"*70)
-                self._cleanup_files()
-            
             if self.verbose:
                 print("\n" + "-"*70 + f"\n{search_label} COMPLETE\n" + "-"*70)
+                print(
+                    f"Cleanup summary: simulations_cleaned={self.cleanup_stats.get('simulations_cleaned', 0)}, "
+                    f"files_deleted={self.cleanup_stats.get('files_deleted', 0)}"
+                )
                 self.print_summary()
             
             self.time_stats.end_total()
@@ -898,6 +1004,23 @@ class DeepHyperOptimizer(BaseOptimizer):
         except KeyboardInterrupt:
             self._log("\n\nOptimization interrupted by user", "warning")
             self._log("Saving intermediate results...", "info")
+
+            if self.periodic_cleanup_state is not None:
+                with self.periodic_cleanup_state['lock']:
+                    BaseOptimizer.cleanup_records(
+                        scores=list(self.periodic_cleanup_state['scores']),
+                        file_paths=list(self.periodic_cleanup_state['file_paths']),
+                        keep_top_k=self.periodic_cleanup_state['keep_top_k'],
+                        minimize=self.objective.minimize,
+                        cleaned_indices=self.periodic_cleanup_state['cleaned_indices'],
+                        verbose=self.periodic_cleanup_state.get('verbose', False),
+                        print_deleted_files=self.periodic_cleanup_state.get('print_deleted_files', False),
+                        cleanup_counters=self.periodic_cleanup_state.get('cleanup_counters'),
+                    )
+                counters = self.periodic_cleanup_state.get('cleanup_counters')
+                if counters is not None:
+                    self.cleanup_stats['simulations_cleaned'] = int(counters.get('simulations_cleaned', 0))
+                    self.cleanup_stats['files_deleted'] = int(counters.get('files_deleted', 0))
             
             # Finalize and save any completed results
             self._finalize_and_save_results(enrichment_verbosity=False)

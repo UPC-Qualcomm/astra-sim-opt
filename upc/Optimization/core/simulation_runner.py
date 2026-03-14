@@ -27,6 +27,7 @@ from run_astrasim import run_astrasim, post_process_simulation
 sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..helper import workload_generator, output_parser, config_generator, config_parser
 from .simulation_tracker import SimulationTracker
+from .power_estimator import run_power_estimation
 
 
 class SimulationRunner:
@@ -204,6 +205,16 @@ class SimulationRunner:
                     print("    ⚠️  Workload file not found")
                 return None
             
+            # Prepare paths for any post-run handling (including failures)
+            config_basename = os.path.basename(workload_file)
+            file_paths = {
+                'workload': workload_file,
+                'output_pattern': os.path.join(self.output_dir, config_basename),
+                'system_config': self.system_config,
+                'network_config': self.network_config,
+                'memory_config': self.memory_config,
+            }
+
             # 3. Run simulation
             if self.verbose:
                 print(f"    Running simulation: {workload_file}")
@@ -237,14 +248,6 @@ class SimulationRunner:
                 
                 # Return partial results
                 if return_paths:
-                    config_basename = os.path.basename(workload_file)
-                    file_paths = {
-                        'workload': workload_file,
-                        'output_pattern': os.path.join(self.output_dir, config_basename),
-                        'system_config': self.system_config,
-                        'network_config': self.network_config,
-                        'memory_config': self.memory_config,
-                    }
                     metadata = self._get_simulation_metadata()
                     metadata['was_killed'] = True
                     metadata['sim_walltime'] = sim_walltime
@@ -255,6 +258,12 @@ class SimulationRunner:
             if result != "":
                 if self.verbose:
                     print(f"    ⚠️  Simulation failed: {result}")
+                if return_paths:
+                    metadata = self._get_simulation_metadata()
+                    metadata['was_killed'] = False
+                    metadata['sim_failed'] = True
+                    metadata['sim_walltime'] = sim_walltime
+                    return None, None, file_paths, metadata
                 return None
             
             # 4. Extract execution time
@@ -265,26 +274,35 @@ class SimulationRunner:
             if exec_time is None:
                 if self.verbose:
                     print("    ⚠️  Could not extract execution time", result)
+                if return_paths:
+                    metadata = self._get_simulation_metadata()
+                    metadata['was_killed'] = False
+                    metadata['sim_failed'] = True
+                    metadata['sim_walltime'] = sim_walltime
+                    return None, is_oom, file_paths, metadata
                 return None
             
             if self.verbose:
                 print(f"    ✓ Execution time: {exec_time:.2f}s")
             
-            # 5. Return with file paths and metadata if requested
+            # 5. Run power estimation when explicitly requested (estimate_power=1, Mode D)
+            power_metrics = {}
+            if self.net_sim_config.get('estimate_power') == 1 and not is_oom:
+                power_metrics = run_power_estimation(
+                    output_dir=self.output_dir,
+                    network_config=self.network_config,
+                    base_dir=self.base_dir,
+                    workload_file=workload_file,
+                    power_config_path=self.net_sim_config.get('power_config_path'),
+                    verbose=self.verbose,
+                )
+            
+            # 6. Return with file paths and metadata if requested
             if return_paths:
-                # Get base filename for output files
-                config_basename = os.path.basename(workload_file)
-                file_paths = {
-                    'workload': workload_file,  # Base path without numbered extension
-                    'output_pattern': os.path.join(self.output_dir, config_basename),  # Base path for output files
-                    'system_config': self.system_config,
-                    'network_config': self.network_config,
-                    'memory_config': self.memory_config,
-                }
-                
                 # Collect metadata about the actual simulation configuration
                 metadata = self._get_simulation_metadata()
                 metadata['sim_walltime'] = sim_walltime
+                metadata.update(power_metrics)  # Merge power metrics (empty dict if not g2 or failed)
                 
                 return exec_time, is_oom, file_paths, metadata
             else:
@@ -295,7 +313,7 @@ class SimulationRunner:
                 print(f"    ⚠️  Error in run_simulation: {e}")
             # Return appropriate None tuple based on return_paths flag
             if return_paths:
-                return None, None, {}, {}
+                return None, None, {}, {'sim_failed': True}
             else:
                 return None, None
     
@@ -413,7 +431,7 @@ class SimulationRunner:
             network_log=self.network_log_dir,
             sim_type=self.net_sim_config.get('sim_type', 'analytical_unaware'),
             return_pid=True,
-            keep_trace=True  # Keep trace file for tracking
+            #keep_trace=True  # Keep trace file for tracking
         )
         
         # Track result in a dict
@@ -431,7 +449,7 @@ class SimulationRunner:
         wait_thread.start()
         
         # Monitor simulation progress
-        check_interval = 0.0005  # Check every 50ms
+        check_interval = 5  # Check every 50ms
         while not result['finished']:
             time.sleep(check_interval)
             

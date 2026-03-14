@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 import time
 import os
+import glob
 
 from .time_statistics import TimeStatistics
 from .objective import ObjectiveFunction, MinimizeExecutionTime
@@ -53,6 +54,7 @@ class BaseOptimizer(ABC):
         verbose: bool = True,
         save_dir: str = ".",
         keep_top_k: int = -1,
+        cleanup_batch_size: int = -1,
         profile_time: bool = False
     ):
         """
@@ -67,7 +69,9 @@ class BaseOptimizer(ABC):
             objective: ObjectiveFunction to optimize (default: MinimizeExecutionTime)
             verbose: Whether to print progress
             save_dir: Directory to save results
-            keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
+            keep_top_k: Keep only top K results' files during cleanup (-1 = disable cleanup, 0 = keep none)
+            cleanup_batch_size: Run cleanup every N successful evaluations (-1 = disable periodic cleanup).
+                               Must be greater than keep_top_k when cleanup is enabled.
             profile_time: Whether to track and print detailed time statistics
         """
         self.search_space = search_space
@@ -79,7 +83,13 @@ class BaseOptimizer(ABC):
         self.verbose = verbose
         self.save_dir = save_dir
         self.keep_top_k = keep_top_k
+        self.cleanup_batch_size = cleanup_batch_size
         self.profile_time = profile_time
+
+        if self.keep_top_k >= 0 and self.cleanup_batch_size > 0 and self.cleanup_batch_size <= self.keep_top_k:
+            raise ValueError(
+                f"cleanup_batch_size ({self.cleanup_batch_size}) must be greater than keep_top_k ({self.keep_top_k})"
+            )
         
         # Time profiling
         self.time_stats = TimeStatistics(enabled=profile_time)
@@ -100,6 +110,13 @@ class BaseOptimizer(ABC):
         # State
         self.current_iteration = 0
         self.start_time = None
+        self._next_cleanup_at = self.cleanup_batch_size if self._periodic_cleanup_enabled() else None
+        self._cleaned_file_indices = set()
+        self.cleanup_stats: Dict[str, int] = {
+            'simulations_cleaned': 0,
+            'files_deleted': 0,
+        }
+        self.cleanup_print_deleted_files: bool = False
         
         # Create save directory
         os.makedirs(save_dir, exist_ok=True)
@@ -166,6 +183,13 @@ class BaseOptimizer(ABC):
                     exec_time, is_oom = result
                     file_paths = {}
                     metadata = {}
+
+                # Failed run that still produced files: clean immediately.
+                if exec_time is None:
+                    self._cleanup_single_simulation_files(file_paths, reason="failed")
+                    if verbose:
+                        print("    ⚠️  Evaluation failed")
+                    return None
                 
                 # Compute objective score (pass config as well)
                 score = self.objective.compute(exec_time, is_oom, metadata, config)
@@ -184,24 +208,23 @@ class BaseOptimizer(ABC):
                     
                     if self.verbose and verbose:
                         print(f"    🏆 NEW BEST! Score: {score:.4f} (exec_time: {exec_time:.2f}s)")
-                
-                # Cleanup if needed
-                if self.keep_top_k >= 0:
-                    self._cleanup_files()
+
+                # Conservative cleanup for high-cost runs
+                was_killed = bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False
+                if was_killed or bool(is_oom):
+                    reason = "killed" if was_killed else "oom"
+                    if self._cleanup_single_simulation_files(file_paths, reason=reason):
+                        self._cleaned_file_indices.add(len(self.file_paths) - 1)
+
+                self._maybe_run_periodic_cleanup()
                 
                 return score
             else:
-                # Track empty file paths and metadata for failed runs
-                self.file_paths.append({})
-                self.metadata.append({})
                 if verbose:
                     print("    ⚠️  Evaluation failed")
                 return None
                 
         except Exception as e:
-            # Track empty file paths and metadata for failed runs
-            self.file_paths.append({})
-            self.metadata.append({})
             if verbose:
                 print(f"    ⚠️  Error evaluate config: {e}")
             return None
@@ -367,78 +390,252 @@ class BaseOptimizer(ABC):
             }.get(level, '')
             
             print(f"{prefix}{message}")
-    
-    def _cleanup_files(self):
-        """
-        Clean up files, keeping only the top K results.
-        
-        Removes workload and simulation output files for configurations
-        that are not in the top K performers. CSV results are always kept.
-        """
-        import glob
-        
-        if self.keep_top_k < 0:
-            # No cleanup
-            if self.verbose:
-                self._log(f"Cleanup disabled (keep_top_k={self.keep_top_k})", "info")
-            return
-        
-        if len(self.scores) <= self.keep_top_k:
-            # Not enough evaluations yet
-            if self.verbose:
-                self._log(f"Cleanup skipped: only {len(self.scores)} evaluations, need > {self.keep_top_k}", "info")
-            return
-        
-        # Find indices of top K configurations (lowest scores)
-        top_k_indices = sorted(range(len(self.scores)), key=lambda i: self.scores[i])[:self.keep_top_k]
-        top_k_set = set(top_k_indices)
-        
+
+    def _periodic_cleanup_enabled(self) -> bool:
+        """Return True when periodic cleanup is configured."""
+        return self.keep_top_k >= 0 and self.cleanup_batch_size > 0 and self.cleanup_batch_size > self.keep_top_k
+
+    def _maybe_run_periodic_cleanup(self, force: bool = False):
+        """Run periodic cleanup when the configured successful-evaluation threshold is reached."""
+        if not self._periodic_cleanup_enabled():
+            return False
+
+        record_count = len(self.scores)
+        if record_count <= self.keep_top_k:
+            return False
+
+        if not force:
+            if self._next_cleanup_at is None or record_count < self._next_cleanup_at:
+                return False
+
         if self.verbose:
-            self._log(f"Cleanup: Keeping top {self.keep_top_k} out of {len(self.scores)} evaluations", "info")
-        
-        # Clean up files not in top K
+            self._log(
+                f"Periodic cleanup: keeping top {self.keep_top_k} out of {record_count} successful evaluations",
+                "info"
+            )
+
+        self.cleanup_records(
+            scores=self.scores,
+            file_paths=self.file_paths,
+            keep_top_k=self.keep_top_k,
+            minimize=self.objective.minimize,
+            cleaned_indices=self._cleaned_file_indices,
+            verbose=self.verbose,
+            log_fn=self._log,
+            print_deleted_files=self.cleanup_print_deleted_files,
+            cleanup_counters=self.cleanup_stats,
+        )
+
+        if self.cleanup_batch_size > 0:
+            self._next_cleanup_at = ((record_count // self.cleanup_batch_size) + 1) * self.cleanup_batch_size
+
+        return True
+
+    def set_cleanup_debug(self, print_deleted_files: bool = True):
+        """Enable/disable detailed printing of deleted files during cleanup."""
+        self.cleanup_print_deleted_files = bool(print_deleted_files)
+
+    def get_cleanup_status(self) -> Dict[str, int]:
+        """Return cleanup counters for verification/debugging."""
+        return {
+            'simulations_cleaned': int(self.cleanup_stats.get('simulations_cleaned', 0)),
+            'files_deleted': int(self.cleanup_stats.get('files_deleted', 0)),
+        }
+
+    def _cleanup_single_simulation_files(self, file_paths: Optional[Dict[str, str]], reason: str = "failed") -> bool:
+        """Immediately clean files generated by a single simulation."""
+        if not file_paths:
+            return False
+
+        result = self.cleanup_path_bundle(
+            tracked_paths=file_paths,
+            verbose=self.verbose,
+            log_fn=self._log,
+            print_deleted_files=self.cleanup_print_deleted_files,
+            reason=reason,
+        )
+
+        has_any_path = isinstance(file_paths, dict) and bool(file_paths)
+        if has_any_path:
+            self.cleanup_stats['simulations_cleaned'] += 1
+        if result['total_removed'] > 0:
+            self.cleanup_stats['files_deleted'] += result['total_removed']
+        return has_any_path
+
+    @staticmethod
+    def cleanup_path_bundle(
+        tracked_paths: Dict[str, str],
+        verbose: bool = False,
+        log_fn=None,
+        print_deleted_files: bool = False,
+        reason: str = "cleanup",
+    ) -> Dict[str, Any]:
+        """Delete all files associated with one simulation record."""
+        def emit(message: str, level: str = "info"):
+            if not verbose:
+                return
+            if log_fn is not None:
+                log_fn(message, level)
+            else:
+                prefix = {
+                    'info': '',
+                    'warning': '⚠️  ',
+                    'error': '❌ '
+                }.get(level, '')
+                print(f"{prefix}{message}")
+
+        deleted_files: List[str] = []
+        workload_files_removed = 0
+        output_files_removed = 0
+
+        workload_base = tracked_paths.get('workload') if isinstance(tracked_paths, dict) else None
+        if workload_base:
+            for workload_file in glob.glob(workload_base + ".*"):
+                if os.path.exists(workload_file):
+                    try:
+                        os.remove(workload_file)
+                        deleted_files.append(workload_file)
+                        workload_files_removed += 1
+                    except Exception as exc:
+                        emit(f"Warning: Could not remove {workload_file}: {exc}", "warning")
+
+        output_base = tracked_paths.get('output_pattern') if isinstance(tracked_paths, dict) else None
+        if output_base:
+            for output_file in glob.glob(output_base + "*"):
+                if os.path.exists(output_file):
+                    try:
+                        os.remove(output_file)
+                        deleted_files.append(output_file)
+                        output_files_removed += 1
+                    except Exception as exc:
+                        emit(f"Warning: Could not remove {output_file}: {exc}", "warning")
+
+        total_removed = workload_files_removed + output_files_removed
+        if total_removed > 0 and verbose:
+            emit(
+                f"Immediate cleanup ({reason}): removed {total_removed} files "
+                f"({workload_files_removed} workload + {output_files_removed} output)",
+                "info",
+            )
+            if print_deleted_files:
+                for path in deleted_files:
+                    emit(f"  deleted: {path}", "info")
+
+        return {
+            'deleted_files': deleted_files,
+            'workload_files_removed': workload_files_removed,
+            'output_files_removed': output_files_removed,
+            'total_removed': total_removed,
+        }
+
+    @staticmethod
+    def cleanup_records(
+        scores,
+        file_paths,
+        keep_top_k: int,
+        minimize: bool = True,
+        cleaned_indices=None,
+        verbose: bool = False,
+        log_fn=None,
+        print_deleted_files: bool = False,
+        cleanup_counters: Optional[Dict[str, int]] = None,
+    ):
+        """
+        Remove tracked files for all non-top-K scored records.
+
+        Args:
+            scores: Sequence of recorded objective scores.
+            file_paths: Sequence of tracked file-path dictionaries aligned with ``scores``.
+            keep_top_k: Number of best-scoring records to preserve.
+            minimize: Whether lower scores are better.
+            cleaned_indices: Mutable set-like or dict-like object used to avoid repeated cleanup.
+            verbose: Whether to emit cleanup logs.
+            log_fn: Optional logger callable ``log_fn(message, level)``.
+        """
+        def emit(message: str, level: str = "info"):
+            if not verbose:
+                return
+            if log_fn is not None:
+                log_fn(message, level)
+            else:
+                prefix = {
+                    'info': '',
+                    'warning': '⚠️  ',
+                    'error': '❌ '
+                }.get(level, '')
+                print(f"{prefix}{message}")
+
+        def is_cleaned(idx: int) -> bool:
+            if cleaned_indices is None:
+                return False
+            if hasattr(cleaned_indices, 'get'):
+                return bool(cleaned_indices.get(idx, False))
+            return idx in cleaned_indices
+
+        def mark_cleaned(idx: int):
+            if cleaned_indices is None:
+                return
+            if hasattr(cleaned_indices, '__setitem__'):
+                cleaned_indices[idx] = True
+            else:
+                cleaned_indices.add(idx)
+
+        if keep_top_k < 0 or len(scores) <= keep_top_k:
+            return False
+
+        sorted_indices = sorted(
+            range(len(scores)),
+            key=lambda i: scores[i],
+            reverse=not minimize,
+        )
+        top_k_set = set(sorted_indices[:keep_top_k])
+
         files_removed = 0
         output_files_removed = 0
-        for i, file_paths in enumerate(self.file_paths):
-            if i not in top_k_set and file_paths:
-                # Remove all workload files matching the pattern (for multi-NPU setups)
-                # file_paths['workload'] is the base path without numbered extension
-                # e.g., "/path/to/4_8_2_1_1.seq_2048.batch_2048"
-                # We need to remove 4_8_2_1_1.seq_2048.batch_2048.0.et, .1.et, .2.et, etc.
-                if 'workload' in file_paths:
-                    workload_pattern = file_paths['workload'] + ".*"
-                    matching_files = glob.glob(workload_pattern)
-                    for workload_file in matching_files:
-                        if os.path.exists(workload_file):
-                            try:
-                                os.remove(workload_file)
-                                files_removed += 1
-                            except Exception as e:
-                                if self.verbose:
-                                    self._log(f"Warning: Could not remove {workload_file}: {e}", "warning")
-                    
-                    if self.verbose and matching_files:
-                        self._log(f"  Removed {len(matching_files)} workload files: {os.path.basename(file_paths['workload'])}.*.et", "info")
-                
-                # Remove simulation output files (all files with the config basename)
-                # e.g., 4_8_2_1_1.seq_2048.batch_2048.log, .csv, etc.
-                if 'output_pattern' in file_paths:
-                    output_pattern = file_paths['output_pattern'] + "*"
-                    matching_outputs = glob.glob(output_pattern)
-                    for output_file in matching_outputs:
-                        if os.path.exists(output_file):
-                            try:
-                                os.remove(output_file)
-                                output_files_removed += 1
-                            except Exception as e:
-                                if self.verbose:
-                                    self._log(f"Warning: Could not remove {output_file}: {e}", "warning")
-                    
-                    if self.verbose and matching_outputs:
-                        self._log(f"  Removed {len(matching_outputs)} output files: {os.path.basename(file_paths['output_pattern'])}*", "info")
-        
-        if self.verbose:
-            self._log(f"Cleanup complete: Removed {files_removed} workload files, {output_files_removed} output files", "info")
+        cleaned_records = 0
+
+        def bump_counter(name: str, amount: int):
+            if cleanup_counters is None or amount == 0:
+                return
+            if hasattr(cleanup_counters, 'get') and hasattr(cleanup_counters, '__setitem__'):
+                cleanup_counters[name] = int(cleanup_counters.get(name, 0)) + int(amount)
+
+        for idx, tracked_paths in enumerate(file_paths):
+            if idx in top_k_set or not tracked_paths or is_cleaned(idx):
+                continue
+
+            result = BaseOptimizer.cleanup_path_bundle(
+                tracked_paths=tracked_paths,
+                verbose=verbose,
+                log_fn=log_fn,
+                print_deleted_files=print_deleted_files,
+                reason="periodic_topk",
+            )
+
+            cleaned_records += 1
+            if result['total_removed'] > 0:
+                files_removed += result['workload_files_removed']
+                output_files_removed += result['output_files_removed']
+
+            mark_cleaned(idx)
+
+        bump_counter('simulations_cleaned', cleaned_records)
+        bump_counter('files_deleted', files_removed + output_files_removed)
+
+        if verbose:
+            emit(
+                f"Cleanup complete: pruned {cleaned_records} records, removed {files_removed} workload files and {output_files_removed} output files",
+                "info"
+            )
+
+            if cleanup_counters is not None:
+                emit(
+                    f"Cleanup totals so far: simulations_cleaned={int(cleanup_counters.get('simulations_cleaned', 0))}, "
+                    f"files_deleted={int(cleanup_counters.get('files_deleted', 0))}",
+                    "info",
+                )
+
+        return True
     
     def __repr__(self) -> str:
         """String representation."""

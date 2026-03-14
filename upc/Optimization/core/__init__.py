@@ -15,10 +15,23 @@ from .simulation_runner import SimulationRunner
 from .simulation_tracker import SimulationTracker
 from .time_statistics import TimeStatistics
 from .categorical_encoder import get_numerical, get_str
+from .power_estimator import run_power_estimation
 from .objective import (
     ObjectiveFunction,
     MinimizeExecutionTime,
     MinimizeExecutionTimeAndNetworkBW,
+    MinimizePower,
+    MinimizeEnergy,
+    MinimizePowerAndTime,
+    MinimizeEnergyAndTime,
+    MinimizeEDP,
+    MinimizeEDPAndNetworkBW,
+    MinimizeED2PAndNetworkBW,
+    MinimizeE2DAndNetworkBW,
+    MinimizeEnergyCyclesAndNetworkBW,
+    MinimizePowerCyclesAndNetworkBW,
+    MinimizeWeightedEDP,
+    MinimizeEnergyAndCycles,
     CustomObjective,
     create_objective
 )
@@ -37,9 +50,22 @@ __all__ = [
     'TimeStatistics',
     'get_numerical',
     'get_str',
+    'run_power_estimation',
     'ObjectiveFunction',
     'MinimizeExecutionTime',
     'MinimizeExecutionTimeAndNetworkBW',
+    'MinimizePower',
+    'MinimizeEnergy',
+    'MinimizePowerAndTime',
+    'MinimizeEnergyAndTime',
+    'MinimizeEDP',
+    'MinimizeEDPAndNetworkBW',
+    'MinimizeED2PAndNetworkBW',
+    'MinimizeE2DAndNetworkBW',
+    'MinimizeEnergyCyclesAndNetworkBW',
+    'MinimizePowerCyclesAndNetworkBW',
+    'MinimizeWeightedEDP',
+    'MinimizeEnergyAndCycles',
     'CustomObjective',
     'create_objective',
 ]

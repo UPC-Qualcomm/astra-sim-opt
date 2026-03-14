@@ -37,13 +37,15 @@ def main():
     
     # Configuration
     MODEL_NUM = 5 # GPT_40B (Model enum value)
-    MODEL_NAME = "GPT_1300_analytical_test_op"  # Descriptive name for results folder and plots
-    NUM_NPUS = 16
+    MODEL_NAME = "GPT_40B_e2d_and_network_bw"  # Descriptive name for results folder and plots
+    NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
-    BUDGET = 50
-    INIT_SAMPLES = 20
-    N_WORKERS = 4
-    Objective_0_Name = "Execution Time (s)"
+    BUDGET = 300
+    INIT_SAMPLES = 50
+    N_WORKERS = 8
+    TOP_K = 10  # Number of top configurations to keep track of
+    CLEANUP_BATCH_SIZE = 18  # Batch size for parallel evaluation (if supported by sim runner)
+    Objective_0_Name = "e2dp (j^2 * s)"
     Objective_1_Name = "Network Total BW (GB/s)"
     
 
@@ -79,11 +81,15 @@ def main():
     net_sim_config = {
         'sim_type': 'g2',
         'topology': 'FoldedClos',
-        'paths_mode': 'Uniform',
+        'paths_mode': 'None',
+        "routing_mode": "foldedclos_uniform",
+        'estimate_power': 1,  # Enable power estimation
+        'power_config_path': os.path.join(os.environ['ASTRA_SIM_ROOT'], 'upc', 'power_model', 'a100_config.json'),
         'topology_config': {
             'num_npus': search_space.num_npus,
             'npus_per_node': 8,
-            'intra_node_topology': 'fully_connected',
+            'intra_node_topology': 'switch',
+            'num_nvswitches': 4,
             'bandwidth_config': {
                 'host_edge': 100,
                 'edge_agg': 100,
@@ -110,14 +116,14 @@ def main():
     print("\n4. Creating objective function...")
     
     objective = create_objective(
-        objective_type='time_and_network_bw'
+        objective_type='e2d_and_network_bw'
     )
-    objective = CustomObjective(
-        obj_latency_network,  # Raw values - let DeepHyper normalize
-        "MOO_time_network_total_bw",
-        minimize=True,
-        is_multi_objective=True
-    )
+    #objective = CustomObjective(
+    #    obj_latency_network,  # Raw values - let DeepHyper normalize
+    #    "MOO_time_network_total_bw",
+    #    minimize=True,
+    #    is_multi_objective=True
+    #)
     print(f"   Using: {objective.name}")
 
     # 5. Create DeepHyper optimizer
@@ -137,7 +143,7 @@ def main():
         acq_optimizer="mixedga",
         random_state=42,
         verbose=True,
-        keep_top_k=20,
+        keep_top_k=TOP_K,
         profile_time=True,
         evaluator_method="process",        
         acq_optimizer_kwargs={"max_total_failures": -1, "acq_optimizer_freq": 2},
@@ -148,7 +154,8 @@ def main():
         # Tracker for early termination (enabled by default)
         enable_tracker=True,
         tracker_kill_multiplier=1.5,
-        tracker_initial_threshold=1e15  
+        tracker_initial_threshold=1e15,
+        cleanup_batch_size=CLEANUP_BATCH_SIZE  
     )
     print(f"   Using: {optimizer}")
     if optimizer.tracker:
@@ -177,12 +184,7 @@ def main():
         
         # Show tracker statistics
         if optimizer.tracker:
-            status = optimizer.tracker.get_status()
-            print(f"\n⚡ TRACKER STATISTICS:")
-            print(f"   Final threshold: {status['threshold']:.2e} cycles")
-            print(f"   Kill threshold: {status['kill_threshold']:.2e} cycles")
-            print(f"   Total checks: {status.get('total_checked', 0)}")
-            print(f"   Total killed: {status.get('total_killed', 0)}")
+            print(optimizer.tracker)
             killed_count = history['was_killed'].sum() if 'was_killed' in history.columns else 0
             kill_percentage = (killed_count / len(history) * 100) if len(history) > 0 else 0
             print(f"   Simulations killed: {killed_count}/{len(history)} ({kill_percentage:.1f}%)")
@@ -206,7 +208,7 @@ def main():
             # Get the CSV file path
             csv_path = os.path.join(optimizer.save_dir, optimizer.results_filename)
             model_name = getattr(optimizer.simulation_runner, 'model_name', 'model')
-            output_base = os.path.join(optimizer.save_dir, f"./experiments/pareto_front_{model_name}")
+            output_base = os.path.join(optimizer.save_dir, f"./pareto_front_{model_name}")
             
             # Generate both HTML and PNG plots
             pareto_plots = plot_pareto_front(

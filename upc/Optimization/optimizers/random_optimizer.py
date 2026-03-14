@@ -82,6 +82,7 @@ class RandomOptimizer(BaseOptimizer):
         verbose: bool = True,
         save_dir: str = ".",
         keep_top_k: int = -1,
+        cleanup_batch_size: int = -1,
         profile_time: bool = False
     ):
         """
@@ -97,7 +98,8 @@ class RandomOptimizer(BaseOptimizer):
             batch_size: Configs per batch when parallel (default: n_workers * 2)
             verbose: Whether to print progress
             save_dir: Directory to save results
-            keep_top_k: Keep only top K results' files (-1 = keep all, 0 = keep none)
+            keep_top_k: Keep only top K results' files during periodic cleanup (-1 = disable cleanup)
+            cleanup_batch_size: Run cleanup every N successful evaluations (-1 = disable periodic cleanup)
             profile_time: Whether to track and print detailed time statistics
         """
         # Call parent constructor with init_samples = 0
@@ -112,6 +114,7 @@ class RandomOptimizer(BaseOptimizer):
             verbose=verbose,
             save_dir=save_dir,
             keep_top_k=keep_top_k,
+            cleanup_batch_size=cleanup_batch_size,
             profile_time=profile_time
         )
         
@@ -213,6 +216,9 @@ class RandomOptimizer(BaseOptimizer):
             
             # Run evaluation
             self._run_batched(sampled_configs)
+
+            # Final cleanup pass to ensure only top-K artifacts remain.
+            self._maybe_run_periodic_cleanup(force=True)
             
             # Print summary
             if self.verbose:
@@ -228,6 +234,7 @@ class RandomOptimizer(BaseOptimizer):
         except KeyboardInterrupt:
             self._log("\n\nOptimization interrupted by user", "warning")
             self._log("Saving intermediate results...", "info")
+            self._maybe_run_periodic_cleanup(force=True)
             self.save_results()
             self.time_stats.end_total()
             return self.best_config, self.get_history()
@@ -281,17 +288,21 @@ class RandomOptimizer(BaseOptimizer):
                             self.best_score = score
                             self.best_config = config
                             self.best_iteration = self.current_iteration
+
+                        # Immediate cleanup for killed/OOM runs.
+                        was_killed = bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False
+                        if was_killed or bool(is_oom):
+                            reason = "killed" if was_killed else "oom"
+                            if self._cleanup_single_simulation_files(file_paths, reason=reason):
+                                self._cleaned_file_indices.add(len(self.file_paths) - 1)
                         
                         successful += 1
                     else:
-                        self.file_paths.append({})
-                        self.metadata.append({})
+                        self._cleanup_single_simulation_files(file_paths, reason="failed")
                         failed += 1
             
-            # Cleanup if needed
-            if self.keep_top_k >= 0:
-                with self.time_stats.timer("file_cleanup"):
-                    self._cleanup_files()
+            with self.time_stats.timer("file_cleanup"):
+                self._maybe_run_periodic_cleanup()
             
             if self.verbose:
                 print(f"  ✓ Batch completed in {batch_time:.1f}s")
