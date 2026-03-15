@@ -44,7 +44,8 @@ def main():
     INIT_SAMPLES = 50
     N_WORKERS = 8
     TOP_K = 10  # Number of top configurations to keep track of
-    CLEANUP_BATCH_SIZE = 18  # Batch size for parallel evaluation (if supported by sim runner)
+    CLEANUP_BATCH_SIZE = 20  # Batch size for parallel evaluation (if supported by sim runner)
+    COMPRESS_AND_CLEAN_IS_ENABLED = True  # Whether to enable artifact compression and cleanup after each batch of evaluations
     Objective_0_Name = "e2dp (j^2 * s)"
     Objective_1_Name = "Network Total BW (GB/s)"
     
@@ -155,7 +156,8 @@ def main():
         enable_tracker=True,
         tracker_kill_multiplier=1.5,
         tracker_initial_threshold=1e15,
-        cleanup_batch_size=CLEANUP_BATCH_SIZE  
+        cleanup_batch_size=CLEANUP_BATCH_SIZE,
+        compress_and_clean_is_enabled=COMPRESS_AND_CLEAN_IS_ENABLED
     )
     print(f"   Using: {optimizer}")
     if optimizer.tracker:

@@ -62,7 +62,8 @@ def main():
     N_WORKERS = 8
     TOP_K = 10
     CLEANUP_BATCH_SIZE = 20
-
+    COMPRESS_AND_CLEAN_IS_ENABLED = False
+    
     print("=" * 70)
     print("EXAMPLE: DeepHyper Bayesian Optimization Sweep")
     print("=" * 70)
@@ -158,6 +159,7 @@ def main():
         tracker_kill_multiplier=1.5,
         tracker_initial_threshold=1e15,
         cleanup_batch_size=CLEANUP_BATCH_SIZE,
+        compress_and_clean_is_enabled=COMPRESS_AND_CLEAN_IS_ENABLED
     )
     print(f"   Using: {optimizer}")
     if optimizer.tracker:

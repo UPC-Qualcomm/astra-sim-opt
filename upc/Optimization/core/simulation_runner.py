@@ -302,6 +302,8 @@ class SimulationRunner:
                 # Collect metadata about the actual simulation configuration
                 metadata = self._get_simulation_metadata()
                 metadata['sim_walltime'] = sim_walltime
+                metadata['was_killed'] = False
+                metadata['sim_failed'] = False
                 metadata.update(power_metrics)  # Merge power metrics (empty dict if not g2 or failed)
                 
                 return exec_time, is_oom, file_paths, metadata
@@ -455,20 +457,22 @@ class SimulationRunner:
             
             # Check if simulation should be killed based on issue ticks
             if self.tracker.should_kill_simulation(trace_file):
-                result['killed'] = True
-                
-                # Kill the entire process group (shell + simulator)
-                try:
-                    #print(f"\n    ⚡ Killing simulation process group (PID: {pid})")
-                    # Kill process group using negative PID
-                    os.killpg(os.getpgid(pid), signal.SIGKILL)  # Use SIGKILL to ensure termination
-                    wait_thread.join(timeout=2)  # Wait for thread to finish
-                except ProcessLookupError:
-                    pass  # Process already finished
-                except Exception as e:
-                    if self.verbose:
-                        print(f"       Warning: Could not kill process: {e}")
-                break
+                if process.poll() is None:
+                    # Process is still running — kill it
+                    result['killed'] = True
+                    try:
+                        #print(f"\n    ⚡ Killing simulation process group (PID: {pid})")
+                        # Kill process group using negative PID
+                        os.killpg(os.getpgid(pid), signal.SIGKILL)  # Use SIGKILL to ensure termination
+                        wait_thread.join(timeout=2)  # Wait for thread to finish
+                    except ProcessLookupError:
+                        pass  # Process already finished
+                    except Exception as e:
+                        if self.verbose:
+                            print(f"       Warning: Could not kill process: {e}")
+                    break
+            # If should_kill returned True but process already finished: do nothing,
+            # let the loop exit naturally via result['finished'] = True.
         
         error = "" if process.returncode == 0 else "Simulation failed"
         return error, result['killed']
