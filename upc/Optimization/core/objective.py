@@ -19,7 +19,7 @@ Example:
     # Use in optimizer
     optimizer = ScikitBayesianOptimizer(..., objective=objective)
 """
-
+import math
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Callable
 
@@ -183,7 +183,7 @@ class MinimizeExecutionTimeAndNetworkBW(ObjectiveFunction):
         
         # COSMIC formula: reward = 1 / sqrt((sim_time * sum(network_bw) - 1)^2)
         obj = exec_time * total_network_bw
-        import math
+        
         denominator = math.sqrt((exec_time * total_network_bw - 1 ) ** 2)
                 
         reward = 1.0 / denominator
@@ -251,7 +251,7 @@ class MinimizePowerAndTime(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
-        import math
+        
         if is_oom:
             return PENALTY, PENALTY
         total_power_W = metadata.get('total_power_W')
@@ -277,7 +277,7 @@ class MinimizeEnergyAndTime(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
-        import math
+        
         if is_oom:
             return PENALTY, PENALTY
         total_energy_J = metadata.get('total_energy_J')
@@ -324,7 +324,7 @@ class MinimizeEDP(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None) -> float:
-        import math
+        
         if is_oom:
             return PENALTY
         total_energy_J = metadata.get('total_energy_J')
@@ -389,7 +389,7 @@ class MinimizeEDPAndNetworkBW(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
-        import math
+        
         if is_oom:
             return PENALTY, PENALTY
         total_energy_J = metadata.get('total_energy_J')
@@ -427,7 +427,7 @@ class MinimizeED2PAndNetworkBW(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
-        import math
+        
         if is_oom:
             return PENALTY, PENALTY
         total_energy_J = metadata.get('total_energy_J')
@@ -462,7 +462,7 @@ class MinimizeE2DAndNetworkBW(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
-        import math
+        
         if is_oom:
             return PENALTY, PENALTY
         total_energy_J = metadata.get('total_energy_J')
@@ -495,7 +495,7 @@ class MinimizeEnergyCyclesAndNetworkBW(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
-        import math
+        
         if is_oom:
             return PENALTY, PENALTY, PENALTY
 
@@ -529,7 +529,7 @@ class MinimizePowerCyclesAndNetworkBW(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
-        import math
+        
         if is_oom:
             return PENALTY, PENALTY, PENALTY
 
@@ -604,7 +604,7 @@ class MinimizeWeightedEDP(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None) -> float:
-        import math
+        
         if is_oom:
             return PENALTY
         total_energy_J = metadata.get('total_energy_J')
@@ -646,7 +646,7 @@ class MinimizeEnergyAndCycles(ObjectiveFunction):
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
-        import math
+        
         if is_oom:
             return PENALTY, PENALTY
         total_energy_J = metadata.get('total_energy_J')

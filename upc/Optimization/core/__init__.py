@@ -11,6 +11,7 @@ from .sampler import (
     GridSampler
 )
 from .base_optimizer import BaseOptimizer
+from .artifact_cleanup import ArtifactCleanupManager
 from .simulation_runner import SimulationRunner
 from .simulation_tracker import SimulationTracker
 from .time_statistics import TimeStatistics
@@ -45,6 +46,7 @@ __all__ = [
     'SobolSampler',
     'GridSampler',
     'BaseOptimizer',
+    'ArtifactCleanupManager',
     'SimulationRunner',
     'SimulationTracker',
     'TimeStatistics',

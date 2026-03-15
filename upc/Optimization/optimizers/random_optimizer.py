@@ -218,7 +218,10 @@ class RandomOptimizer(BaseOptimizer):
             self._run_batched(sampled_configs)
 
             # Final cleanup pass to ensure only top-K artifacts remain.
-            self._maybe_run_periodic_cleanup(force=True)
+            self._run_periodic_cleanup(force=True)
+
+            # Compress top-K artifacts and delete the originals.
+            self.compress_and_clean()
             
             # Print summary
             if self.verbose:
@@ -234,7 +237,7 @@ class RandomOptimizer(BaseOptimizer):
         except KeyboardInterrupt:
             self._log("\n\nOptimization interrupted by user", "warning")
             self._log("Saving intermediate results...", "info")
-            self._maybe_run_periodic_cleanup(force=True)
+            self._run_periodic_cleanup(force=True)
             self.save_results()
             self.time_stats.end_total()
             return self.best_config, self.get_history()
@@ -272,6 +275,7 @@ class RandomOptimizer(BaseOptimizer):
                 failed = 0
                 for config, exec_time, is_oom, file_paths, metadata in results:
                     self.current_iteration = len(self.configs)
+                    cleanup_reason = self._get_immediate_cleanup_reason(exec_time, is_oom, metadata)
                     
                     if exec_time is not None:
                         # Compute objective score
@@ -290,19 +294,17 @@ class RandomOptimizer(BaseOptimizer):
                             self.best_iteration = self.current_iteration
 
                         # Immediate cleanup for killed/OOM runs.
-                        was_killed = bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False
-                        if was_killed or bool(is_oom):
-                            reason = "killed" if was_killed else "oom"
-                            if self._cleanup_single_simulation_files(file_paths, reason=reason):
-                                self._cleaned_file_indices.add(len(self.file_paths) - 1)
+                        if cleanup_reason in {"killed", "oom"}:
+                            if self._cleanup_single_simulation_files(file_paths, reason=cleanup_reason):
+                                self.cleanup_manager.mark_index_cleaned(len(self.file_paths) - 1)
                         
                         successful += 1
                     else:
-                        self._cleanup_single_simulation_files(file_paths, reason="failed")
+                        self._cleanup_single_simulation_files(file_paths, reason=cleanup_reason or "failed")
                         failed += 1
             
             with self.time_stats.timer("file_cleanup"):
-                self._maybe_run_periodic_cleanup()
+                self._run_periodic_cleanup()
             
             if self.verbose:
                 print(f"  ✓ Batch completed in {batch_time:.1f}s")

@@ -53,7 +53,7 @@ def main():
     objective_key = get_objective_key()
     objective_meta = OBJECTIVE_METADATA[objective_key]
 
-    MODEL_NUM = 5
+    MODEL_NUM = 19
     MODEL_NAME = f"GPT_40B_{objective_key}"
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
@@ -61,7 +61,7 @@ def main():
     INIT_SAMPLES = 50
     N_WORKERS = 8
     TOP_K = 10
-    CLEANUP_BATCH_SIZE = 18
+    CLEANUP_BATCH_SIZE = 20
 
     print("=" * 70)
     print("EXAMPLE: DeepHyper Bayesian Optimization Sweep")

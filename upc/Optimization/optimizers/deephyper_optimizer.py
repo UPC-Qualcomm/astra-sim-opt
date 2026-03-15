@@ -13,7 +13,7 @@ import yaml
 
 # Add parent directory to path for imports
 sys.path.append(os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
-from ..core import BaseOptimizer
+from ..core import BaseOptimizer, ArtifactCleanupManager
 from ..core.simulation_tracker import SimulationTracker
 from ..helper import evaluate_config_worker, workload_generator
 
@@ -54,15 +54,16 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
             config, simulation_runner
         )
 
-        was_killed = bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False
+        cleanup_reason = ArtifactCleanupManager.get_immediate_cleanup_reason(exec_time, is_oom, metadata)
+        was_killed = cleanup_reason == "killed"
 
         # Failed evaluation with generated files: clean immediately.
         if exec_time is None:
-            cleanup_result = BaseOptimizer.cleanup_path_bundle(
+            cleanup_result = ArtifactCleanupManager.cleanup_path_bundle(
                 tracked_paths=file_paths,
                 verbose=optimizer_state.get('periodic_cleanup', {}).get('verbose', False) if optimizer_state.get('periodic_cleanup') is not None else False,
                 print_deleted_files=optimizer_state.get('periodic_cleanup', {}).get('print_deleted_files', False) if optimizer_state.get('periodic_cleanup') is not None else False,
-                reason="failed",
+                reason=cleanup_reason,
             )
             if isinstance(file_paths, dict) and file_paths:
                 _bump_cleanup_counter('simulations_cleaned', 1)
@@ -108,13 +109,12 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
                 current_idx = len(cleanup_state['scores']) - 1
 
                 # Immediate cleanup for killed/OOM runs.
-                if was_killed or bool(is_oom):
-                    reason = "killed" if was_killed else "oom"
-                    cleanup_result = BaseOptimizer.cleanup_path_bundle(
+                if cleanup_reason in {"killed", "oom"}:
+                    cleanup_result = ArtifactCleanupManager.cleanup_path_bundle(
                         tracked_paths=dict(file_paths),
                         verbose=cleanup_state.get('verbose', False),
                         print_deleted_files=cleanup_state.get('print_deleted_files', False),
-                        reason=reason,
+                        reason=cleanup_reason,
                     )
                     if isinstance(file_paths, dict) and file_paths:
                         cleanup_state['cleaned_indices'][current_idx] = True
@@ -122,26 +122,11 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
                     if cleanup_result['total_removed'] > 0:
                         _bump_cleanup_counter('files_deleted', cleanup_result['total_removed'])
 
-                record_count = len(cleanup_state['scores'])
-                next_cleanup_at = cleanup_state['control'].get('next_cleanup_at', cleanup_state['cleanup_batch_size'])
-                if (
-                    record_count > cleanup_state['keep_top_k']
-                    and cleanup_state['cleanup_batch_size'] > 0
-                    and record_count >= next_cleanup_at
-                ):
-                    BaseOptimizer.cleanup_records(
-                        scores=list(cleanup_state['scores']),
-                        file_paths=list(cleanup_state['file_paths']),
-                        keep_top_k=cleanup_state['keep_top_k'],
-                        minimize=objective.minimize,
-                        cleaned_indices=cleanup_state['cleaned_indices'],
-                        verbose=cleanup_state.get('verbose', False),
-                        print_deleted_files=cleanup_state.get('print_deleted_files', False),
-                        cleanup_counters=cleanup_state.get('cleanup_counters'),
-                    )
-                    cleanup_state['control']['next_cleanup_at'] = (
-                        (record_count // cleanup_state['cleanup_batch_size']) + 1
-                    ) * cleanup_state['cleanup_batch_size']
+                ArtifactCleanupManager.run_periodic_cleanup_for_state(
+                    cleanup_state=cleanup_state,
+                    minimize=objective.minimize,
+                    force=False,
+                )
         
         # Handle multi-objective returns (tuple of scores)
         if isinstance(score, (tuple, list)):
@@ -970,22 +955,17 @@ class DeepHyperOptimizer(BaseOptimizer):
             # Final cleanup pass to ensure only top-K artifacts remain.
             if self.periodic_cleanup_state is not None:
                 with self.periodic_cleanup_state['lock']:
-                    BaseOptimizer.cleanup_records(
-                        scores=list(self.periodic_cleanup_state['scores']),
-                        file_paths=list(self.periodic_cleanup_state['file_paths']),
-                        keep_top_k=self.periodic_cleanup_state['keep_top_k'],
+                    ArtifactCleanupManager.run_periodic_cleanup_for_state(
+                        cleanup_state=self.periodic_cleanup_state,
                         minimize=self.objective.minimize,
-                        cleaned_indices=self.periodic_cleanup_state['cleaned_indices'],
-                        verbose=self.periodic_cleanup_state.get('verbose', False),
-                        print_deleted_files=self.periodic_cleanup_state.get('print_deleted_files', False),
-                        cleanup_counters=self.periodic_cleanup_state.get('cleanup_counters'),
+                        force=True,
                     )
 
-                counters = self.periodic_cleanup_state.get('cleanup_counters')
-                if counters is not None:
-                    self.cleanup_stats['simulations_cleaned'] = int(counters.get('simulations_cleaned', 0))
-                    self.cleanup_stats['files_deleted'] = int(counters.get('files_deleted', 0))
-            
+                self.cleanup_manager.sync_counters(self.periodic_cleanup_state.get('cleanup_counters'))
+
+            # Compress top-K artifacts and delete the originals.
+            self.compress_and_clean()
+
             # Finalize and save results
             with self.time_stats.timer("save_results"):
                 self._finalize_and_save_results(enrichment_verbosity=True)
@@ -1007,20 +987,12 @@ class DeepHyperOptimizer(BaseOptimizer):
 
             if self.periodic_cleanup_state is not None:
                 with self.periodic_cleanup_state['lock']:
-                    BaseOptimizer.cleanup_records(
-                        scores=list(self.periodic_cleanup_state['scores']),
-                        file_paths=list(self.periodic_cleanup_state['file_paths']),
-                        keep_top_k=self.periodic_cleanup_state['keep_top_k'],
+                    ArtifactCleanupManager.run_periodic_cleanup_for_state(
+                        cleanup_state=self.periodic_cleanup_state,
                         minimize=self.objective.minimize,
-                        cleaned_indices=self.periodic_cleanup_state['cleaned_indices'],
-                        verbose=self.periodic_cleanup_state.get('verbose', False),
-                        print_deleted_files=self.periodic_cleanup_state.get('print_deleted_files', False),
-                        cleanup_counters=self.periodic_cleanup_state.get('cleanup_counters'),
+                        force=True,
                     )
-                counters = self.periodic_cleanup_state.get('cleanup_counters')
-                if counters is not None:
-                    self.cleanup_stats['simulations_cleaned'] = int(counters.get('simulations_cleaned', 0))
-                    self.cleanup_stats['files_deleted'] = int(counters.get('files_deleted', 0))
+                self.cleanup_manager.sync_counters(self.periodic_cleanup_state.get('cleanup_counters'))
             
             # Finalize and save any completed results
             self._finalize_and_save_results(enrichment_verbosity=False)

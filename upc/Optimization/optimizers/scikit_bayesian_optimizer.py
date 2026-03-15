@@ -254,6 +254,7 @@ class ScikitBayesianOptimizer(BaseOptimizer):
         
         # Process results
         for config, exec_time, is_oom, file_paths, metadata in results:
+            cleanup_reason = self._get_immediate_cleanup_reason(exec_time, is_oom, metadata)
             if exec_time is not None:
                 # Compute objective score
                 score = self.objective.compute(exec_time, is_oom, metadata, config)
@@ -269,15 +270,13 @@ class ScikitBayesianOptimizer(BaseOptimizer):
                     self.best_iteration = len(self.configs) - 1
 
                 # Immediate cleanup for killed/OOM runs.
-                was_killed = bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False
-                if was_killed or bool(is_oom):
-                    reason = "killed" if was_killed else "oom"
-                    if self._cleanup_single_simulation_files(file_paths, reason=reason):
-                        self._cleaned_file_indices.add(len(self.file_paths) - 1)
+                if cleanup_reason in {"killed", "oom"}:
+                    if self._cleanup_single_simulation_files(file_paths, reason=cleanup_reason):
+                        self.cleanup_manager.mark_index_cleaned(len(self.file_paths) - 1)
             else:
-                self._cleanup_single_simulation_files(file_paths, reason="failed")
+                self._cleanup_single_simulation_files(file_paths, reason=cleanup_reason or "failed")
 
-            self._maybe_run_periodic_cleanup()
+            self._run_periodic_cleanup()
     
     def optimize_step(self) -> Tuple[Optional[Dict], Optional[float]]:
         """
@@ -328,7 +327,10 @@ class ScikitBayesianOptimizer(BaseOptimizer):
                 self._run_sequential_bo()
 
             # Final cleanup pass to ensure only top-K artifacts remain.
-            self._maybe_run_periodic_cleanup(force=True)
+            self._run_periodic_cleanup(force=True)
+
+            # Compress top-K artifacts and delete the originals.
+            self.compress_and_clean()
             
             # Print summary
             if self.verbose:
@@ -347,7 +349,7 @@ class ScikitBayesianOptimizer(BaseOptimizer):
         except KeyboardInterrupt:
             self._log("\n\nOptimization interrupted by user", "warning")
             self._log("Saving intermediate results...", "info")
-            self._maybe_run_periodic_cleanup(force=True)
+            self._run_periodic_cleanup(force=True)
             self.save_results()
             self.time_stats.end_total()
             return self.best_config, self.get_history()
@@ -461,6 +463,7 @@ class ScikitBayesianOptimizer(BaseOptimizer):
             successful_in_batch = 0
             for config, exec_time, is_oom, file_paths, metadata in results:
                 self.current_iteration = len(self.configs)
+                cleanup_reason = self._get_immediate_cleanup_reason(exec_time, is_oom, metadata)
                 
                 if exec_time is not None:
                     # Compute objective score
@@ -481,19 +484,17 @@ class ScikitBayesianOptimizer(BaseOptimizer):
                             print(f"  🏆 NEW BEST: {score:.4f} (exec_time: {exec_time:.2f}s)")
 
                     # Immediate cleanup for killed/OOM runs.
-                    was_killed = bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False
-                    if was_killed or bool(is_oom):
-                        reason = "killed" if was_killed else "oom"
-                        if self._cleanup_single_simulation_files(file_paths, reason=reason):
-                            self._cleaned_file_indices.add(len(self.file_paths) - 1)
+                    if cleanup_reason in {"killed", "oom"}:
+                        if self._cleanup_single_simulation_files(file_paths, reason=cleanup_reason):
+                            self.cleanup_manager.mark_index_cleaned(len(self.file_paths) - 1)
                 else:
-                    self._cleanup_single_simulation_files(file_paths, reason="failed")
+                    self._cleanup_single_simulation_files(file_paths, reason=cleanup_reason or "failed")
                     if self.verbose:
                         config_str = ", ".join([f"{k}={v}" for k, v in config.items()])
                         print(f"  ⚠️  Failed: {config_str}")
             
             with self.time_stats.timer("cleanup"):
-                self._maybe_run_periodic_cleanup()
+                self._run_periodic_cleanup()
             
             if self.verbose:
                 print(f"\nBatch result: {successful_in_batch}/{len(batch_configs)} successful")

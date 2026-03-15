@@ -86,7 +86,7 @@ def run_power_estimation(
         workload_filename = os.path.basename(workload_file)
         log_file     = os.path.join(output_dir, workload_filename + ".log")
         link_traffic = os.path.join(output_dir, workload_filename + "_link_traffic.csv")
-
+        output_json  = os.path.join(output_dir, workload_filename + "_power_est.json")
         if not os.path.isfile(log_file):
             if verbose:
                 print(f"    ⚠️  Power estimation skipped: log file not found: {log_file}")
@@ -131,7 +131,7 @@ def run_power_estimation(
                 log_file,
                 link_traffic,
                 mode='D',
-                output_json=None,
+                output_json=output_json,
                 config_path=power_config_path,
                 nodemap_file=nodemap,
             )
