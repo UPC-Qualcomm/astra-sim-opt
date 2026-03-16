@@ -286,54 +286,6 @@ class MinimizeEnergyAndTime(ObjectiveFunction):
         return math.log10(max(1.0, total_energy_J)), math.log10(max(1.0, exec_time))
 
 
-class MinimizeEDP(ObjectiveFunction):
-    """
-    Minimize the Energy-Delay Product (EDP).
-
-    EDP = total_energy_J  ×  exec_cycles
-
-    where ``exec_cycles`` is the raw wall-clock time returned by AstraSim
-    (``exec_time`` in the optimizer pipeline — the parser reads the
-    ``Wall time: N`` log line directly in cycles).
-
-    **Why EDP?**
-
-    Optimizing energy alone can produce designs that are very slow (e.g. low
-    bandwidth saves switching power but hurts throughput).  Optimizing cycles
-    alone ignores power entirely.  EDP combines both with equal weight:
-
-    * Halving execution time  → EDP halves  (same as halving energy).
-    * Doubling energy         → EDP doubles (same as doubling delay).
-
-    This naturally steers the search toward the *knee* of the
-    energy-performance Pareto front — configurations that are neither
-    power-wasteful nor pathologically slow.
-
-    **Requires** ``estimate_power=1`` in ``net_sim_config`` so that
-    ``total_energy_J`` is populated in metadata by the power estimator.
-    Returns ``PENALTY`` if the metric is absent (e.g. simulation was killed
-    or power estimation was disabled).
-
-    The raw product is log10-transformed before being returned so that
-    the surrogate model works with values of manageable magnitude
-    (``log10(EDP) ~ log10(energy_J) + log10(cycles)`` ≈ 6-12 + 9-12 → 15-24).
-    """
-
-    def __init__(self):
-        super().__init__("Minimize EDP (Energy × Cycles) [Mode D]")
-
-    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
-                config: Optional[Dict[str, Any]] = None) -> float:
-        
-        if is_oom:
-            return PENALTY
-        total_energy_J = metadata.get('total_energy_J')
-        if total_energy_J is None or exec_time is None:
-            return PENALTY
-        edp = total_energy_J * exec_time
-        return math.log10(max(1.0, edp))
-
-
 def _compute_total_network_bw(config: Dict[str, Any], npus_per_node: int = 8) -> float:
     """Compute aggregate network bandwidth (GB/s) from optimization config."""
     npu_count     = config.get('npu_count', 1)
