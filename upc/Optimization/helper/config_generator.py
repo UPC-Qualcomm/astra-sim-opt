@@ -698,7 +698,7 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
     network_config_path = os.path.join(CONFIG_OUTPUT_DIR, f"network_g2_{config_hash}.yml")
     
     # Write atomically to avoid readers seeing partial YAML under parallel runs.
-    temp_network_config_path = network_config_path + ".tmp"
+    temp_network_config_path = network_config_path
     with open(temp_network_config_path, 'w') as f:
         yaml.dump(g2_network_config, f, default_flow_style=None)
     os.replace(temp_network_config_path, network_config_path)

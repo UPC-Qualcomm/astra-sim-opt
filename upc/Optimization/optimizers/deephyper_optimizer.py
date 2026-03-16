@@ -69,6 +69,8 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
                 _bump_cleanup_counter('simulations_cleaned', 1)
             if cleanup_result['total_removed'] > 0:
                 _bump_cleanup_counter('files_deleted', cleanup_result['total_removed'])
+            
+            print("    ⚠️  exec_time error")
             return "F"
         
         # Update tracker threshold only on successful completed runs.
@@ -109,6 +111,8 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
         
         score = objective.compute(exec_time, is_oom, metadata, config)
         if score is None:
+            
+            print("    ⚠️  objective error")
             return "F"
 
         cleanup_state = optimizer_state.get('periodic_cleanup')
@@ -296,6 +300,9 @@ class DeepHyperOptimizer(BaseOptimizer):
             cleanup_batch_size=cleanup_batch_size,
             profile_time=profile_time
         )
+        import random as py_random
+        if random_state is not None:
+            py_random.seed(random_state)
         
         # Framework parameters
         self.n_workers = max(1, n_workers)
@@ -504,6 +511,8 @@ class DeepHyperOptimizer(BaseOptimizer):
 
         # Install smart constraint-aware sampler (first sample valid parallelism,
         # then sample all remaining parameters).
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
         smart_fn = self._make_constrained_sampling_fn()
         if smart_fn is not None:
             problem.set_sampling_fn(smart_fn)
@@ -596,27 +605,61 @@ class DeepHyperOptimizer(BaseOptimizer):
             if k not in {'cluster', 'dp', 'mp', 'sp', 'pp'}
         }
 
-        rng = np.random.RandomState(self.random_state if self.random_state is not None else 42)
-
         def _sample_parallelism_for_cluster(cluster_name: str, m: int) -> list:
             """Sample m valid parallelism tuples for one cluster using self.sampler."""
             space = valid_parallelism_by_cluster[cluster_name]
             if m <= 0:
                 return []
 
-            base = self.sampler.sample(space, min(m, len(space)))
+            # Stage 1: enforce diversity across (dp, mp) first to avoid
+            # collapsing to low-dp/low-mp regions.
+            by_dp_mp = {}
+            for cfg in space:
+                key = (cfg['dp'], cfg['mp'])
+                by_dp_mp.setdefault(key, []).append(cfg)
 
-            # Top-up with replacement if the sampler returned fewer than needed.
-            while len(base) < m:
-                base.append(space[int(rng.randint(0, len(space)))])
+            group_keys = list(by_dp_mp.keys())
+            np.random.shuffle(group_keys)
 
-            return base[:m]
+            selected = []
+            for key in group_keys[:min(m, len(group_keys))]:
+                group = by_dp_mp[key]
+                selected.append(group[int(np.random.randint(0, len(group)))])
+
+            # Stage 2: use configured sampler on a shuffled candidate pool
+            # so order-sensitive samplers (e.g., grid/lhs) do not bias to dp=1.
+            remaining = m - len(selected)
+            if remaining > 0:
+                selected_keys = {(c['dp'], c['mp'], c['sp'], c['pp']) for c in selected}
+                perm = np.random.permutation(len(space))
+                shuffled_space = [space[i] for i in perm]
+                sampler_pool = [
+                    c for c in shuffled_space
+                    if (c['dp'], c['mp'], c['sp'], c['pp']) not in selected_keys
+                ]
+                if sampler_pool:
+                    selected.extend(self.sampler.sample(sampler_pool, min(remaining, len(sampler_pool))))
+
+            # Top-up with replacement if still short.
+            while len(selected) < m:
+                selected.append(space[int(np.random.randint(0, len(space)))])
+
+            np.random.shuffle(selected)
+            return selected[:m]
+
+        # Precompute cluster weights proportional to number of valid tuples,
+        # so each individual valid config has equal probability of being sampled
+        # regardless of how many valid tuples each cluster exposes.
+        _cluster_weights = np.array(
+            [len(valid_parallelism_by_cluster[c]) for c in active_clusters], dtype=float
+        )
+        _cluster_weights /= _cluster_weights.sum()
 
         def sampling_fn(n: int) -> list:
             samples = []
-            # First choose clusters (uniform), then sample valid parallelism tuples
-            # per cluster with the configured strategy.
-            cluster_picks = [active_clusters[int(rng.randint(0, len(active_clusters)))] for _ in range(n)]
+            # Choose clusters weighted by their valid-tuple count so that every
+            # (cluster, dp, mp, sp, pp) combination has equal sampling probability.
+            cluster_picks = np.random.choice(active_clusters, size=n, p=_cluster_weights).tolist()
             per_cluster_counts = {}
             for c in cluster_picks:
                 per_cluster_counts[c] = per_cluster_counts.get(c, 0) + 1
@@ -642,7 +685,7 @@ class DeepHyperOptimizer(BaseOptimizer):
                 # Then sample every remaining parameter independently.
                 for param_name, values in other_params.items():
                     if values:
-                        config[param_name] = values[int(rng.randint(0, len(values)))]
+                        config[param_name] = values[int(np.random.randint(0, len(values)))]
 
                 samples.append(config)
 
