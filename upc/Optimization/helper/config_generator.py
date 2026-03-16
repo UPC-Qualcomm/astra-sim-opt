@@ -62,6 +62,44 @@ def _map_topology_to_network_type(topology: str) -> str:
     return topology_map.get(topology, 'Switch')
 
 
+def _normalize_values_per_dimension(values: Any, num_dims: int, default_value: Any) -> list:
+    """Normalize scalar/list values to exactly num_dims entries.
+
+    - Scalar -> repeated for all dims
+    - List with exact length -> unchanged
+    - List longer than dims -> truncated
+    - List shorter than dims -> padded with its last value
+    - Empty/invalid -> default repeated
+    """
+    if num_dims <= 0:
+        return []
+
+    if isinstance(values, list):
+        if not values:
+            return [default_value] * num_dims
+        if len(values) >= num_dims:
+            return values[:num_dims]
+        return values + [values[-1]] * (num_dims - len(values))
+
+    if isinstance(values, str):
+        return [values] * num_dims
+
+    return [default_value] * num_dims
+
+
+def _enforce_system_collective_dimensions(system_config: Dict[str, Any], num_dims: int) -> Dict[str, Any]:
+    """Ensure all collective implementation arrays exactly match num_dims."""
+    fixed = dict(system_config)
+    for collective in ['all-reduce', 'all-gather', 'reduce-scatter', 'all-to-all']:
+        impl_key = f'{collective}-implementation'
+        fixed[impl_key] = _normalize_values_per_dimension(
+            fixed.get(impl_key, ['halvingDoubling']),
+            num_dims,
+            'halvingDoubling'
+        )
+    return fixed
+
+
 def _build_collective_implementations(config: Dict[str, Any], num_dims: int) -> Dict[str, list]:
     """Build collective implementation arrays for each dimension.
     
@@ -82,19 +120,11 @@ def _build_collective_implementations(config: Dict[str, Any], num_dims: int) -> 
     for collective in collectives:
         key = f'{collective}-implementation'
         if collective in config:
-            value = config[collective]
-            # If it's already a list with correct length, use it
-            if isinstance(value, list) and len(value) == num_dims:
-                result[key] = value
-            # If it's a single value, replicate for all dimensions
-            elif isinstance(value, str):
-                result[key] = [value] * num_dims
-            # If it's a list but wrong length, use first value for all dims
-            elif isinstance(value, list):
-                result[key] = [value[0]] * num_dims
-            else:
-                # Default fallback
-                result[key] = ['halvingDoubling'] * num_dims
+            result[key] = _normalize_values_per_dimension(
+                config[collective],
+                num_dims,
+                'halvingDoubling'
+            )
         else:
             # Not specified, use default
             result[key] = ['halvingDoubling'] * num_dims
@@ -201,6 +231,7 @@ def generate_system_config(config: Dict[str, Any]) -> str:
     # Build collective implementations for each dimension
     collective_impls = _build_collective_implementations(config, num_dims)
     system_config.update(collective_impls)
+    system_config = _enforce_system_collective_dimensions(system_config, num_dims)
     
     # Override with custom values from config if present
     param_mapping = [
@@ -268,13 +299,14 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     
     # Get network dimensions from npus_per_dim
     if 'npus_per_dim' in config:
-        npus_per_dim = config['npus_per_dim']
+        npus_per_dim = list(config['npus_per_dim'])
         network_config['npus_count'] = npus_per_dim
     elif 'npu_count' in config and isinstance(config['npu_count'], (list, tuple)):
         network_config['npus_count'] = list(config['npu_count'])
+    elif 'npu_count' in config and isinstance(config['npu_count'], int):
+        network_config['npus_count'] = [config['npu_count']]
     
-    num_dims = len(network_config['npus_count'])
-    
+    num_dims = len(network_config['npus_count'])    
     # Map topology to network type for each dimension
     if 'topology' in config:
         topology = config['topology']
@@ -283,6 +315,13 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     else:
         # Default to Switch for all dimensions
         network_config['topology'] = ['Switch'] * num_dims
+
+    # Ensure bandwidth array always matches dimensions
+    network_config['bandwidth'] = _normalize_values_per_dimension(
+        network_config.get('bandwidth', [450.0]),
+        num_dims,
+        450.0
+    )
     
     # Override with bandwidth values from config if present
     if 'intra-node-bw' in config or 'inter-node-bw' in config:
@@ -396,6 +435,7 @@ def generate_g2_system_config(config: Dict[str, Any]) -> str:
     num_dims = len(npus_per_dim)
     collective_impls = _build_collective_implementations(config, num_dims)
     system_config.update(collective_impls)
+    system_config = _enforce_system_collective_dimensions(system_config, num_dims)
     
     # Override with custom values from config if present
     param_mapping = [
@@ -501,7 +541,6 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
         _npus_per_dim = list(config['npu_count'])
     else:
         _npus_per_dim = None  # will fall back to [total_num_npus] later
-
     # If num_npus is not in topology_config, try to get it from config
     if 'num_npus' not in topology_config:
         if _npus_per_dim is not None:
@@ -595,12 +634,18 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
     
     topology_config['bandwidth_config'] = bw_config
     topology_config['bw_unit'] = bw_unit
-    
-    # Create cache key from all parameters
+
+    # Build npus_count: use multi-dim npus_per_dim when available, else fall back to [total]
+    npus_count = _npus_per_dim if _npus_per_dim is not None else [topology_config['num_npus']]
+
+    # Create cache key from all parameters that affect generated files.
+    # npus_count must be included so different dimensional configurations do
+    # not collide on the same hash/path under parallel execution.
     cache_key = {
         'topology': topology,
         'paths_mode': paths_mode,
-        'topology_config': topology_config
+        'topology_config': topology_config,
+        'npus_count': npus_count,
     }
     config_hash = _hash_config(cache_key)
     
@@ -608,11 +653,19 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
     if config_hash in _NETWORK_CONFIG_CACHE:
         cached_path = _NETWORK_CONFIG_CACHE[config_hash]
         if os.path.exists(cached_path):
-            # Also check if the topology file still exists
-            with open(cached_path, 'r') as f:
-                cached_config = yaml.safe_load(f)
-            if os.path.exists(cached_config['topology_file']):
-                return cached_path
+            try:
+                with open(cached_path, 'r') as f:
+                    cached_config = yaml.safe_load(f)
+                # Only reuse when both topology file and requested npus_count match.
+                if (
+                    isinstance(cached_config, dict)
+                    and cached_config.get('npus_count') == npus_count
+                    and os.path.exists(cached_config.get('topology_file', ''))
+                ):
+                    return cached_path
+            except Exception:
+                # Corrupted/partial cache file, regenerate.
+                pass
     
     # Create directory if needed
     os.makedirs(CONFIG_OUTPUT_DIR, exist_ok=True)
@@ -630,9 +683,6 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
         base_filename=topology_file_name
     )
 
-    # Build npus_count: use multi-dim npus_per_dim when available, else fall back to [total]
-    npus_count = _npus_per_dim if _npus_per_dim is not None else [topology_config['num_npus']]
-
     # Create the G2 network config that references this topology file
     g2_network_config = {
         "npus_count": npus_count,
@@ -647,9 +697,11 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
     # Generate network config YML file that points to the topology
     network_config_path = os.path.join(CONFIG_OUTPUT_DIR, f"network_g2_{config_hash}.yml")
     
-    # Write the network config YML file (matching FoldedClos_16_config.yml format)
-    with open(network_config_path, 'w') as f:
+    # Write atomically to avoid readers seeing partial YAML under parallel runs.
+    temp_network_config_path = network_config_path + ".tmp"
+    with open(temp_network_config_path, 'w') as f:
         yaml.dump(g2_network_config, f, default_flow_style=None)
+    os.replace(temp_network_config_path, network_config_path)
     
     # Cache the path
     _NETWORK_CONFIG_CACHE[config_hash] = network_config_path

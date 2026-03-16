@@ -71,9 +71,11 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
                 _bump_cleanup_counter('files_deleted', cleanup_result['total_removed'])
             return "F"
         
-        # Update tracker threshold if exec_time improved
+        # Update tracker threshold only on successful completed runs.
+        # Do not adapt threshold from OOM, killed, or failed simulations.
         tracker = optimizer_state.get('tracker')
-        if tracker and exec_time:
+        sim_failed = bool(metadata.get('sim_failed', False)) if isinstance(metadata, dict) else False
+        if tracker and exec_time is not None and not bool(is_oom) and not was_killed and not sim_failed:
             tracker.update_threshold(exec_time)
         
         # Cache exec_time and config files for enrichment
@@ -94,6 +96,14 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
                 'exec_time': exec_time,
                 'config_files': config_files,
                 'was_killed': bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False,
+                'is_oom': bool(is_oom),
+                'total_power_W': metadata.get('total_power_W') if isinstance(metadata, dict) else None,
+                'total_energy_J': metadata.get('total_energy_J') if isinstance(metadata, dict) else None,
+                'has_power_metrics': bool(
+                    isinstance(metadata, dict)
+                    and metadata.get('total_power_W') is not None
+                    and metadata.get('total_energy_J') is not None
+                ),
             }
             print(f"✓ Cached data for config_key with {len(config_files)} files, exec_time={exec_time}")
         
@@ -205,7 +215,8 @@ class DeepHyperOptimizer(BaseOptimizer):
         tracker_initial_threshold: float = 1e15,
         # Additional kwargs
         problem_kwargs: Optional[Dict] = None,
-        cbo_kwargs: Optional[Dict] = None
+        cbo_kwargs: Optional[Dict] = None,
+        compress_and_clean_is_enabled: bool = True,
     ):
         """
         Args:
@@ -405,7 +416,9 @@ class DeepHyperOptimizer(BaseOptimizer):
                 print(f"✓ Simulation tracker enabled (kill at {tracker_kill_multiplier}x threshold)")
         else:
             self.tracker = None
-    
+
+        self.compress_and_clean_is_enabled = compress_and_clean_is_enabled
+        
     def initialize(self) -> bool:
         """Initialize DeepHyper components (HpProblem, Evaluator, CBO)."""
         if self.verbose:
@@ -478,12 +491,6 @@ class DeepHyperOptimizer(BaseOptimizer):
                     param_values_map[name].append(config[name])
         
         # Sort parameter values for consistency
-        # TODO: Report a bug to DeepHyper about this behavior
-        # Note: we do the sorting because DeepHyper sorts parameters alphabetically but they don't sort values as key value pairs.
-        #for name in param_names:
-        #    param_values_map[name] = sorted(param_values_map[name], key=lambda x: (x is None, x))
-        
-        # Add hyperparameters in alphabetical order (DeepHyper sorts parameters alphabetically)
         for param_name in param_names:
             unique_values = param_values_map[param_name]
             if unique_values:
@@ -621,6 +628,10 @@ class DeepHyperOptimizer(BaseOptimizer):
                     config_data = dict(cached_data.get('config_files', {}))
                     config_data['exec_time'] = cached_data.get('exec_time')
                     config_data['was_killed'] = bool(cached_data.get('was_killed', False))
+                    config_data['is_oom'] = bool(cached_data.get('is_oom', False))
+                    config_data['total_power_W'] = cached_data.get('total_power_W')
+                    config_data['total_energy_J'] = cached_data.get('total_energy_J')
+                    config_data['has_power_metrics'] = bool(cached_data.get('has_power_metrics', False))
                 else:
                     config_data = {}
                 config_file_data.append(config_data)
@@ -641,11 +652,18 @@ class DeepHyperOptimizer(BaseOptimizer):
             # Add exec_time column
             self.deephyper_results['exec_time'] = [data.get('exec_time', None) for data in config_file_data]
             self.deephyper_results['was_killed'] = [bool(data.get('was_killed', False)) for data in config_file_data]
+            self.deephyper_results['is_oom'] = [bool(data.get('is_oom', False)) for data in config_file_data]
+            self.deephyper_results['total_power_W'] = [data.get('total_power_W', None) for data in config_file_data]
+            self.deephyper_results['total_energy_J'] = [data.get('total_energy_J', None) for data in config_file_data]
+            self.deephyper_results['has_power_metrics'] = [bool(data.get('has_power_metrics', False)) for data in config_file_data]
             
             if self.verbose:
                 n_enriched = sum(1 for data in config_file_data if data)
                 print(f"✓ Enriched {n_enriched}/{len(self.deephyper_results)} rows with config file information")
-                print(f"  Added columns: {', '.join(config_file_keys)}, exec_time, was_killed")
+                print(
+                    f"  Added columns: {', '.join(config_file_keys)}, exec_time, was_killed, is_oom, "
+                    "total_power_W, total_energy_J, has_power_metrics"
+                )
     
     def _collect_results_from_deephyper(self):
         """Collect and process results from DeepHyper's output dataframe."""
@@ -951,7 +969,6 @@ class DeepHyperOptimizer(BaseOptimizer):
                     evaluator=self.evaluator,
                     max_evals=self.budget
                 )
-
             # Final cleanup pass to ensure only top-K artifacts remain.
             if self.periodic_cleanup_state is not None:
                 with self.periodic_cleanup_state['lock']:
@@ -964,7 +981,8 @@ class DeepHyperOptimizer(BaseOptimizer):
                 self.cleanup_manager.sync_counters(self.periodic_cleanup_state.get('cleanup_counters'))
 
             # Compress top-K artifacts and delete the originals.
-            self.compress_and_clean()
+            if self.compress_and_clean_is_enabled:
+                self.compress_and_clean()
 
             # Finalize and save results
             with self.time_stats.timer("save_results"):
