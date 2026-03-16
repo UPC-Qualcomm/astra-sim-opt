@@ -281,7 +281,7 @@ class DeepHyperOptimizer(BaseOptimizer):
             cbo_kwargs: Additional CBO arguments (advanced, overrides above)
         """
         if not DEEPHYPER_AVAILABLE:
-            raise ImportError("DeepHyper required: pip install deephyper")
+            raise ImportError("DeepHyper is not installed. Please install it with 'pip install deephyper'")
         
         super().__init__(
             search_space=search_space,
@@ -325,34 +325,11 @@ class DeepHyperOptimizer(BaseOptimizer):
         # Multi-point strategy (CBO only)
         self.multi_point_strategy = multi_point_strategy
         
-        # Initial points parameters
-        # If initial_points not provided and we have constraints, sample from valid configs
-        if initial_points is None and hasattr(search_space, 'design_space') and search_space.design_space:
-            # Sample initial points from pre-computed valid configurations
-            import random as py_random
-            # Seed Python's random module for reproducibility
-            if random_state is not None:
-                py_random.seed(random_state)
-            
-            # For RandomSearch, don't provide initial_points - let it sample randomly
-            if search_type.lower() == "random":
-                self.initial_points = None
-                self.n_initial_points = 0
-                if self.verbose:
-                    print(f"✓ Random search will sample from {len(search_space.design_space)} valid configurations")
-            else:
-                # Sample initial points for CBO
-                n_init = min(init_samples if n_initial_points is None else n_initial_points, len(search_space.design_space))
-                self.initial_points = py_random.sample(search_space.design_space, n_init)
-                self.n_initial_points = len(self.initial_points)
-                if self.verbose:
-                    print(f"✓ Sampled {n_init} initial points from valid configurations")
-        else:
-            self.initial_points = initial_points
-            self.n_initial_points = n_initial_points if n_initial_points is not None else init_samples
-        
+        # Initial points parameters — DeepHyper handles sampling internally
+        self.initial_points = initial_points
+        self.n_initial_points = n_initial_points if n_initial_points is not None else init_samples
         self.initial_point_generator = initial_point_generator
-        
+
         # Multi-objective optimization parameters
         self.moo_lower_bounds = moo_lower_bounds
         self.moo_scalarization_strategy = moo_scalarization_strategy
@@ -362,6 +339,7 @@ class DeepHyperOptimizer(BaseOptimizer):
         # Additional kwargs
         self.problem_kwargs = problem_kwargs or {}
         self.cbo_kwargs = cbo_kwargs or {}
+        self.compress_and_clean_is_enabled = compress_and_clean_is_enabled
         
         # Results filename - use model name if not specified
         if results_filename is None:
@@ -377,12 +355,18 @@ class DeepHyperOptimizer(BaseOptimizer):
             self.log_dir = log_dir
             os.makedirs(self.log_dir, exist_ok=True)
         
-        # DeepHyper components
+        # Simulation tracking
+        self.enable_tracker = enable_tracker
+        self.tracker_kill_multiplier = tracker_kill_multiplier
+        self.tracker_initial_threshold = tracker_initial_threshold
+
+        # DeepHyper components — created during initialize()
         self.hp_problem = None
         self.evaluator = None
-        self.cbo = None
+        self.search = None
         self.deephyper_results = None
-        # Use Manager dict for multiprocess-safe cache sharing
+
+        # Multiprocess-safe structures for parallel worker evaluations
         from multiprocessing import Manager
         self._manager = Manager()
         self.extra_data_cache = self._manager.dict()
@@ -400,68 +384,61 @@ class DeepHyperOptimizer(BaseOptimizer):
                 'verbose': self.verbose,
                 'print_deleted_files': self.cleanup_print_deleted_files,
             }
-        # Note: self.file_paths is already initialized as [] in BaseOptimizer
-        
-        # Initialize simulation tracker for early termination
-        self.enable_tracker = enable_tracker
+
+        # Simulation tracker for early termination
         if enable_tracker:
             self.tracker = SimulationTracker(
                 initial_threshold=tracker_initial_threshold,
                 kill_multiplier=tracker_kill_multiplier,
-                verbose=verbose
+                verbose=verbose,
             )
-            # Set tracker in simulation runner
             self.simulation_runner.tracker = self.tracker
             if self.verbose:
                 print(f"✓ Simulation tracker enabled (kill at {tracker_kill_multiplier}x threshold)")
         else:
             self.tracker = None
 
-        self.compress_and_clean_is_enabled = compress_and_clean_is_enabled
-        
     def initialize(self) -> bool:
-        """Initialize DeepHyper components (HpProblem, Evaluator, CBO)."""
+        """Initialize DeepHyper components (HpProblem, Evaluator, Search)."""
         if self.verbose:
             print("\n" + "="*70)
             print("DEEPHYPER BAYESIAN OPTIMIZATION")
             print("="*70)
             print(f"Model: {self.simulation_runner.model_name}")
-            print(f"NPUs: {self.simulation_runner.num_npus}")
-            print(f"Network: {self.simulation_runner.network_name}")
             print(f"Budget: {self.budget} evaluations")
             print(f"Initial samples: {self.init_samples}")
             print(f"Workers: {self.n_workers}")
-            print(f"Acquisition function: {self.acq_func}")
-            print(f"Design space: {self.search_space.get_design_space_size()} configurations")
+            search_label = "CBO" if self.search_type == "cbo" else "Random Search"
+            print(f"Search type: {search_label}")
+            print(f"Parallelism sampler: {self.sampler}")
+            print(f"Search space: {len(self.search_space.parameters)} parameters, "
+                  f"{len(self.search_space.constraints)} constraints")
             print(f"Log directory: {self.log_dir}")
             print("="*70 + "\n")
-        
+
         try:
             with self.time_stats.timer("hp_problem_creation"):
                 self.hp_problem = self._create_hp_problem()
             if self.verbose:
                 print(f"✓ Created HpProblem with {len(self.hp_problem.space)} hyperparameters")
-            
+
             with self.time_stats.timer("evaluator_creation"):
                 self.evaluator = self._create_evaluator()
             if self.verbose:
                 print(f"✓ Created evaluator with {self.n_workers} workers ({self.evaluator_method} method)")
-            
+
             with self.time_stats.timer("search_creation"):
                 if self.search_type == "cbo":
                     self.search = self._create_cbo()
                     search_name = "CBO optimizer"
-                else:  # random
+                else:
                     self.search = self._create_random_search()
                     search_name = "RandomSearch optimizer"
             if self.verbose:
                 print(f"✓ Created {search_name}\n")
-            
-            # Keep backward compatibility
-            self.cbo = self.search
-            
+
             return True
-            
+
         except Exception as e:
             self._log(f"Initialization failed: {e}", "error")
             import traceback
@@ -470,90 +447,208 @@ class DeepHyperOptimizer(BaseOptimizer):
             return False
     
     def _create_hp_problem(self) -> HpProblem:
-        """Convert SearchSpace to DeepHyper HpProblem with constraint function."""
-        problem = HpProblem(**self.problem_kwargs)
-        problem.set_seed(self.random_state)
-        if self.search_space.design_space is None or len(self.search_space.design_space) == 0:
-            raise ValueError("Search space design_space is empty or not built.")
-        
-        valid_configs = self.search_space.design_space
-        
-        if self.verbose:
-            print(f"✓ Using {len(valid_configs)} valid configurations for reference")
-        
-        # Get all unique parameter values from valid configs
-        param_names = list(valid_configs[0].keys())
-        param_values_map = {name: [] for name in param_names}
-        
-        for config in valid_configs:
-            for name in param_names:
-                if config[name] not in param_values_map[name]:
-                    param_values_map[name].append(config[name])
-        
-        # Sort parameter values for consistency
-        for param_name in param_names:
-            unique_values = param_values_map[param_name]
-            if unique_values:
-                problem.add_hyperparameter(unique_values, param_name, default_value=unique_values[0])
-        
+        """Create HpProblem directly from search space parameters and constraints.
 
-        def constraint_fn(s: pd.DataFrame):
-            """Validate parallelism constraint: dp * mp * sp * pp = npu_count"""
-            is_valid = np.ones(len(s), dtype=bool)
-            
-            for idx, row in s.iterrows():
-                # Get NPU count for this specific cluster
-                # DeepHyper prefixes parameter names with 'p:' in the DataFrame
-                cluster_name = row['cluster']  # Access by column name with 'p:' prefix
-                if cluster_name and hasattr(self.search_space, 'clusters'):
-                    npu_count = self.search_space.clusters[cluster_name]['npu_count']
-                else:
-                    npu_count = self.search_space.num_npus
-                    print("⚠️  Warning: 'cluster' not specified or clusters not defined; using total num_npus")
-                
-                # Check constraint - DataFrame columns are prefixed with 'p:'
-                product = row['dp'] * row['mp'] * row['sp'] * row['pp']
-                is_valid[idx] = (product == npu_count)
-            
-            # Return as pandas Series to avoid AttributeError in DeepHyper
-            return pd.Series(is_valid, index=s.index)
-        
-        def custom_sampling_fn(n_samples: int):
-            """Sample directly from valid configurations to avoid constraint violations.
-            
-            This function is used by:
-            1. CBO's acquisition optimizer (mixedga) for constraint-satisfying sampling
-            2. RandomSearch's overridden _ask() method for uniform random sampling
-            
-            Uses numpy's RandomState for reproducibility with thread-safety.
-            """
-            # Use numpy for reproducible random sampling
-            # Each call advances the state, giving different samples while maintaining reproducibility
-            sampled = []
-            for _ in range(n_samples):
-                # Randomly select a valid configuration using numpy
-                idx = np.random.randint(0, len(valid_configs))
-                config = valid_configs[idx]
-                sampled.append(config)
-            return sampled
-        
-        # Seed numpy's global random state for reproducibility
+        Parameters are taken from search_space.parameters (dict of name → list of values).
+        Constraints are applied via DeepHyper's set_constraint_fn using the callable
+        functions already compiled in search_space.constraints.
+        """
+        problem = HpProblem(**self.problem_kwargs)
         if self.random_state is not None:
-            np.random.seed(self.random_state)
-        
-        # Set constraint and sampling functions
-        problem.set_constraint_fn(constraint_fn)
-        problem.set_sampling_fn(custom_sampling_fn)
-        
-        # Store custom_sampling_fn for reuse in RandomSearch
-        self._custom_sampling_fn = custom_sampling_fn
-        
+            problem.set_seed(self.random_state)
+
+        if not self.search_space.parameters:
+            raise ValueError(
+                "Search space has no parameters. Call parse_parameters() first."
+            )
+
+        # Add every parameter directly from the search space definition
+        for param_name, values in self.search_space.parameters.items():
+            if values:
+                problem.add_hyperparameter(values, param_name, default_value=values[0])
+
         if self.verbose:
-            total_combinations = 1
-            for values in param_values_map.values():
-                total_combinations *= len(values)
-        
+            total_unconstrained = 1
+            for v in self.search_space.parameters.values():
+                total_unconstrained *= len(v)
+            print(f"✓ Added {len(self.search_space.parameters)} parameters to HpProblem")
+            print(f"  Unconstrained combinations: {total_unconstrained:,}")
+
+        # Translate search_space.constraints into a single DeepHyper constraint function
+        if self.search_space.constraints:
+            clusters = getattr(self.search_space, 'clusters', None)
+            constraint_fns = list(self.search_space.constraints)
+
+            def constraint_fn(s: pd.DataFrame) -> pd.Series:
+                """Validate all constraints from search space configuration."""
+                is_valid = np.ones(len(s), dtype=bool)
+                for i, (_, row) in enumerate(s.iterrows()):
+                    config = dict(row)
+                    # Resolve npu_count from cluster so parallelism constraints work.
+                    if clusters and 'cluster' in config and isinstance(config['cluster'], str):
+                        cluster_name = config['cluster']
+                        if cluster_name in clusters:
+                            config['npu_count'] = clusters[cluster_name]['npu_count']
+                    for fn in constraint_fns:
+                        if not fn(config):
+                            is_valid[i] = False
+                            break
+                return pd.Series(is_valid, index=s.index)
+
+            problem.set_constraint_fn(constraint_fn)
+
+            if self.verbose:
+                print(f"✓ Added {len(self.search_space.constraints)} constraint(s):")
+                for cs in self.search_space.constraint_strings:
+                    print(f"  - {cs}")
+
+        # Install smart constraint-aware sampler (first sample valid parallelism,
+        # then sample all remaining parameters).
+        smart_fn = self._make_constrained_sampling_fn()
+        if smart_fn is not None:
+            problem.set_sampling_fn(smart_fn)
+            if self.verbose:
+                print("✓ Smart constraint-aware sampling function installed "
+                      "(parallelism-first sampling)")
+
         return problem
+
+    def _make_constrained_sampling_fn(self):
+        """Build a parallelism-first sampler from JSON constraints.
+
+        Strategy:
+        1. Generate valid (dp, mp, sp, pp) tuples per cluster which satisfy:
+           - dp * mp * sp * pp = npu_count
+           - dp <= npu_count, mp <= npu_count, sp <= npu_count, pp <= npu_count
+        2. Sample one valid tuple.
+        3. Sample all remaining parameters independently.
+        """
+        params = self.search_space.parameters
+        clusters = getattr(self.search_space, 'clusters', {})
+        constraint_strings = [str(c) for c in getattr(self.search_space, 'constraint_strings', [])]
+
+        required_keys = {'dp', 'mp', 'sp', 'pp'}
+        if not required_keys.issubset(params.keys()):
+            return None
+
+        # Enable only when the expected JSON constraints are present.
+        has_product = any('dp * mp * sp * pp = npu_count' in c for c in constraint_strings)
+        has_dp_max = any('dp <= npu_count' in c for c in constraint_strings)
+        has_mp_max = any('mp <= npu_count' in c for c in constraint_strings)
+        has_sp_max = any('sp <= npu_count' in c for c in constraint_strings)
+        has_pp_max = any('pp <= npu_count' in c for c in constraint_strings)
+        if not (has_product and has_dp_max and has_mp_max and has_sp_max and has_pp_max):
+            return None
+
+        cluster_names = list(params.get('cluster', clusters.keys()))
+        if not cluster_names:
+            return None
+
+        dp_vals = list(params['dp'])
+        mp_vals = list(params['mp'])
+        sp_vals = list(params['sp'])
+        pp_vals = list(params['pp'])
+
+        # Precompute valid parallelism tuples per cluster (small and cheap; no full-space build).
+        # Store as dicts so they can be fed directly into core.sampler strategies.
+        valid_parallelism_by_cluster = {}
+        for cluster_name in cluster_names:
+            if cluster_name not in clusters:
+                continue
+            npu_count = int(clusters[cluster_name]['npu_count'])
+            valid_tuples = []
+            for dp in dp_vals:
+                if dp > npu_count:
+                    continue
+                for mp in mp_vals:
+                    if mp > npu_count:
+                        continue
+                    for sp in sp_vals:
+                        if sp > npu_count:
+                            continue
+                        prefix = dp * mp * sp
+                        if prefix == 0:
+                            continue
+                        if npu_count % prefix != 0:
+                            continue
+                        pp = npu_count // prefix
+                        if pp > npu_count:
+                            continue
+                        if pp in pp_vals:
+                            valid_tuples.append({
+                                'dp': dp,
+                                'mp': mp,
+                                'sp': sp,
+                                'pp': pp,
+                            })
+            if valid_tuples:
+                valid_parallelism_by_cluster[cluster_name] = valid_tuples
+
+        if not valid_parallelism_by_cluster:
+            return None
+
+        active_clusters = sorted(valid_parallelism_by_cluster.keys())
+
+        # Sample all non-parallelism parameters afterwards.
+        other_params = {
+            k: list(v)
+            for k, v in params.items()
+            if k not in {'cluster', 'dp', 'mp', 'sp', 'pp'}
+        }
+
+        rng = np.random.RandomState(self.random_state if self.random_state is not None else 42)
+
+        def _sample_parallelism_for_cluster(cluster_name: str, m: int) -> list:
+            """Sample m valid parallelism tuples for one cluster using self.sampler."""
+            space = valid_parallelism_by_cluster[cluster_name]
+            if m <= 0:
+                return []
+
+            base = self.sampler.sample(space, min(m, len(space)))
+
+            # Top-up with replacement if the sampler returned fewer than needed.
+            while len(base) < m:
+                base.append(space[int(rng.randint(0, len(space)))])
+
+            return base[:m]
+
+        def sampling_fn(n: int) -> list:
+            samples = []
+            # First choose clusters (uniform), then sample valid parallelism tuples
+            # per cluster with the configured strategy.
+            cluster_picks = [active_clusters[int(rng.randint(0, len(active_clusters)))] for _ in range(n)]
+            per_cluster_counts = {}
+            for c in cluster_picks:
+                per_cluster_counts[c] = per_cluster_counts.get(c, 0) + 1
+
+            sampled_parallelism = {}
+            for c, m in per_cluster_counts.items():
+                sampled_parallelism[c] = _sample_parallelism_for_cluster(c, m)
+
+            consumed = {c: 0 for c in per_cluster_counts.keys()}
+            for c in cluster_picks:
+                idx = consumed[c]
+                consumed[c] += 1
+                par = sampled_parallelism[c][idx]
+
+                config = {
+                    'cluster': c,
+                    'dp': par['dp'],
+                    'mp': par['mp'],
+                    'sp': par['sp'],
+                    'pp': par['pp'],
+                }
+
+                # Then sample every remaining parameter independently.
+                for param_name, values in other_params.items():
+                    if values:
+                        config[param_name] = values[int(rng.randint(0, len(values)))]
+
+                samples.append(config)
+
+            return samples
+
+        return sampling_fn
     
     def _create_evaluator(self) -> Evaluator:
         """Create DeepHyper evaluator for parallel execution."""
@@ -855,21 +950,14 @@ class DeepHyperOptimizer(BaseOptimizer):
     
     def _create_random_search(self) -> RandomSearch:
         """Create DeepHyper RandomSearch instance.
-        
-        Note: RandomSearch doesn't support multi-objective scalarization parameters.
-        For multi-objective optimization with random search, the objective function
-        should handle scalarization internally.
-        
-        Important: RandomSearch samples from the ConfigSpace, which may generate
-        invalid combinations even if we restrict individual parameter values.
-        To ensure only valid configurations are evaluated, we:
-        1. Set initial_points to all valid configurations (done in __init__)
-        2. Override the _ask method to sample from initial_points only
+
+        RandomSearch samples configurations uniformly at random from the
+        HpProblem's ConfigSpace, with constraint filtering applied via the
+        constraint_fn set on the problem.  No custom _ask override is needed
+        because the constraint function handles invalid proposals.
         """
         random_args = {
-            # Required
             "problem": self.hp_problem,
-            # Core parameters
             "random_state": self.random_state,
             "log_dir": self.log_dir,
             "verbose": 1 if self.verbose else 0,
@@ -877,30 +965,18 @@ class DeepHyperOptimizer(BaseOptimizer):
             "checkpoint_history_to_csv": self.checkpoint_history_to_csv,
             "solution_selection": self.solution_selection,
         }
-        
-        # Apply additional overrides from cbo_kwargs (reused for random search)
-        # Filter out CBO-specific parameters
+
+        # Forward any compatible overrides from cbo_kwargs
         if self.cbo_kwargs:
-            valid_params = {"problem", "random_state", "log_dir", "verbose", "stopper", 
-                          "checkpoint_history_to_csv", "solution_selection"}
-            filtered_kwargs = {k: v for k, v in self.cbo_kwargs.items() if k in valid_params}
-            random_args.update(filtered_kwargs)
-        
-        search = RandomSearch(**random_args)
-        
-        # Override _ask to sample only from valid configurations
-        # Reuse the same custom_sampling_fn that CBO uses (stored during _create_hp_problem)
-        # This ensures RandomSearch and CBO sample from the same valid design space
-        if hasattr(self, '_custom_sampling_fn'):
-            original_ask = search._ask
-            
-            def custom_ask(n: int = 1):
-                """Sample from valid configurations using the same logic as CBO."""
-                return self._custom_sampling_fn(n)
-            
-            search._ask = custom_ask
-        
-        return search
+            valid_params = {
+                "random_state", "log_dir", "verbose", "stopper",
+                "checkpoint_history_to_csv", "solution_selection",
+            }
+            random_args.update(
+                {k: v for k, v in self.cbo_kwargs.items() if k in valid_params}
+            )
+
+        return RandomSearch(**random_args)
     
     def _finalize_and_save_results(self, enrichment_verbosity: bool = True) -> bool:
         """Finalize results by enriching with config files and saving to CSV.
@@ -967,8 +1043,9 @@ class DeepHyperOptimizer(BaseOptimizer):
             with self.time_stats.timer("search"):
                 self.deephyper_results = self.search.search(
                     evaluator=self.evaluator,
-                    max_evals=self.budget
+                    max_evals=self.budget,
                 )
+            
             # Final cleanup pass to ensure only top-K artifacts remain.
             if self.periodic_cleanup_state is not None:
                 with self.periodic_cleanup_state['lock']:

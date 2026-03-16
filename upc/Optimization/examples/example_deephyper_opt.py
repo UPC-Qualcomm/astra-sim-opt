@@ -72,7 +72,6 @@ def main():
         search_space_path,
         include_categories=['parallelism_strategy', 'network']
     )
-    print(f"   Design space size: {search_space.get_design_space_size()}")
     
     # 2. Choose sampler (for fallback if needed)
     print("\n2. Creating sampler...")

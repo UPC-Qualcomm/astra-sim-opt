@@ -63,7 +63,6 @@ class SearchSpaceBuilder:
         self.parameters: Dict[str, List[Any]] = {}
         self.constraints: List[Callable] = []
         self.constraint_strings: List[str] = []
-        self.design_space: Optional[List[Dict[str, Any]]] = None
         
     def _load_config(self, config_path: str) -> Dict:
         """Load JSON configuration file."""
@@ -134,10 +133,15 @@ class SearchSpaceBuilder:
         
         if 'collective-implementation' in params:
             impl = params['collective-implementation']
-            # Determine number of dimensions from first cluster
-            first_cluster = next(iter(self.clusters.values()))
-            npus_per_dim = first_cluster.get('npus_per_dim', [8, 8])
-            num_dims = len(npus_per_dim)
+            # Determine max dimensions across clusters so all clusters are representable.
+            # Per-cluster trimming is applied later during config enrichment.
+            cluster_dims = [
+                len(cluster.get('npus_per_dim', []))
+                for cluster in self.clusters.values()
+            ]
+            num_dims = max(cluster_dims) if cluster_dims else 2
+            if num_dims <= 0:
+                num_dims = 2
             
             # Parse each collective type with per-dimension parameters
             for collective_type, algorithms in impl.items():
@@ -230,251 +234,65 @@ class SearchSpaceBuilder:
         """
         # Store original constraint string
         self.constraint_strings.append(constraint_str)
-        
-        # Note: npu_count replacement will be done per-configuration in constraint_func
-        # since it may vary by cluster selection
-        
-        # Create constraint function
+
+        # Normalize single '=' to '==' while preserving <=, >=, !=, ==
+        normalized_expr = re.sub(r'(?<![<>=!])=(?!=)', '==', constraint_str)
+
+        # Validate expression syntax once at parse time
+        try:
+            compiled_expr = compile(normalized_expr, '<constraint>', 'eval')
+        except SyntaxError as e:
+            raise SyntaxError(f"Invalid constraint syntax '{constraint_str}': {e}") from e
+
+        # Create a function that evaluates the expression
         def constraint_func(config: Dict[str, Any]) -> bool:
+            # Create a local scope for eval, including config and built-ins
+            local_scope = config.copy()
+
+            # Special handling for 'npu_count' - resolve from cluster if needed
+            if 'npu_count' in normalized_expr and 'cluster' in local_scope:
+                cluster_name = local_scope['cluster']
+                local_scope['npu_count'] = self.get_cluster_npu_count(cluster_name)
+
             try:
-                # Get npu_count for this specific configuration
-                if 'cluster' in config:
-                    cluster_name = config['cluster']
-                    # Cluster should be a name (string), look it up
-                    cluster_config = self.clusters.get(cluster_name, {})
-                    npu_count = cluster_config.get('npu_count', self.num_npus)
-                else:
-                    npu_count = self.num_npus
-                
-                # Replace 'npu_count' with actual value
-                expr = constraint_str.replace('npu_count', str(npu_count))
-                
-                # Replace parameter names with values from config
-                for param, value in config.items():
-                    if param != 'cluster':  # Don't replace 'cluster' parameter
-                        # Use word boundaries to avoid partial replacements
-                        expr = re.sub(r'\b' + re.escape(param) + r'\b', str(value), expr)
-                
-                # Handle comparison operators
-                if '=' in expr and not any(op in expr for op in ['<=', '>=', '==', '!=']):
-                    # Convert '=' to '=='
-                    expr = expr.replace('=', '==')
-                
-                # Evaluate the expression
-                result = eval(expr)
-                return bool(result)
-            except Exception:
-                # If evaluation fails, assume constraint doesn't apply
+                return eval(compiled_expr, {"__builtins__": {}}, local_scope)
+            except (NameError, TypeError) as e:
+                # This can happen if a parameter in the constraint is not in the config
+                # For now, we treat this as a non-violation (or could be strict)
+                # print(f"Warning: Constraint '{constraint_str}' could not be evaluated: {e}")
                 return True
         
         self.constraints.append(constraint_func)
-    
-    def build(self, max_configs: Optional[int] = None) -> 'SearchSpaceBuilder':
-        """
-        Build the design space by generating all valid configurations.
-        
-        Args:
-            max_configs: Maximum number of configurations to generate (for large spaces)
-        
-        Returns:
-            Self for method chaining
-        """
-        if not self.parameters:
-            raise ValueError("No parameters parsed. Call parse_parameters() first.")
-        
-        # Generate all combinations
-        param_names = list(self.parameters.keys())
-        param_values = [self.parameters[name] for name in param_names]
-        
-        self.design_space = []
-        
-        # Use product to generate all combinations
-        count = 0
-        for values in product(*param_values):
-            if max_configs and count >= max_configs:
-                break
-            
-            # Create configuration dictionary
-            config = dict(zip(param_names, values))
-            
-            # Apply constraints
-            if self._validate_config(config):
-                self.design_space.append(config)
-                count += 1
-        
-        return self
-    
-    def _validate_config(self, config: Dict[str, Any]) -> bool:
-        """
-        Validate a configuration against all constraints.
-        
-        Args:
-            config: Configuration dictionary
-        
-        Returns:
-            True if valid, False otherwise
-        """
-        for constraint in self.constraints:
-            if not constraint(config):
-                return False
-        return True
-    
-    def sample(self, n_samples: int, strategy: str = 'random', 
-               seed: Optional[int] = None, **kwargs) -> List[Dict[str, Any]]:
-        """
-        Sample configurations from the design space.
-        
-        Args:
-            n_samples: Number of samples to generate
-            strategy: Sampling strategy ('random', 'lhs', 'sobol', 'grid', 'stratified')
-            seed: Random seed for reproducibility
-            **kwargs: Additional arguments for sampler
-        
-        Returns:
-            List of sampled configuration dictionaries
-        """
-        if self.design_space is None:
-            raise ValueError("Design space not built. Call build() first.")
-        
-        if len(self.design_space) == 0:
-            raise ValueError("Design space is empty. Check your constraints.")
-        
-        # Convert design space to list of tuples for sampler
-        param_names = list(self.design_space[0].keys())
-        design_space_tuples = [
-            tuple(config[name] for name in param_names)
-            for config in self.design_space
-        ]
-        
-        # Get sampler
-        sampler = get_sampler(strategy, seed=seed, **kwargs)
-        
-        # Sample
-        sampled_tuples = sampler.sample(design_space_tuples, n_samples)
-        
-        # Convert back to dictionaries
-        sampled_configs = [
-            dict(zip(param_names, values))
-            for values in sampled_tuples
-        ]
-        
-        return sampled_configs
-    
-    def get_design_space(self) -> List[Dict[str, Any]]:
-        """
-        Get the full design space.
-        
-        Returns:
-            List of all valid configuration dictionaries
-        """
-        if self.design_space is None:
-            raise ValueError("Design space not built. Call build() first.")
-        
-        return self.design_space.copy()
-    
-    def get_design_space_size(self) -> int:
-        """
-        Get the size of the design space.
-        
-        Returns:
-            Number of valid configurations
-        """
-        if self.design_space is None:
-            return 0
-        return len(self.design_space)
     
     def get_parameter_info(self) -> Dict[str, Dict[str, Any]]:
         """
         Get information about parsed parameters.
         
         Returns:
-            Dictionary with parameter info (name, type, range, count)
+            Dictionary with parameter names as keys and their info as values.
         """
         info = {}
-        
-        for param, values in self.parameters.items():
-            param_type = type(values[0]).__name__ if values else 'unknown'
-            info[param] = {
-                'type': param_type,
-                'values': values,
+        for name, values in self.parameters.items():
+            info[name] = {
                 'count': len(values),
-                'min': min(values) if all(isinstance(v, (int, float)) for v in values) else None,
-                'max': max(values) if all(isinstance(v, (int, float)) for v in values) else None,
+                'values': values,
+                'type': type(values[0]).__name__ if values else 'N/A'
             }
-        
         return info
-    
-    def summary(self) -> str:
-        """
-        Get a summary of the search space.
-        
-        Returns:
-            Human-readable summary string
-        """
-        lines = [
-            "=" * 70,
-            "SEARCH SPACE SUMMARY",
-            "=" * 70,
-        ]
-        
-        # Configuration info
-        lines.append(f"\n📁 Configuration: {self.config_path}")
-        if self.num_npus:
-            lines.append(f"🖥️  NPUs: {self.num_npus}")
-        
-        # Parameters
-        lines.append(f"\n📊 Parameters ({len(self.parameters)}):")
-        for param, values in self.parameters.items():
-            lines.append(f"   {param}: {len(values)} values")
-        
-        # Constraints
-        lines.append(f"\n🔒 Constraints ({len(self.constraint_strings)}):")
-        for i, constraint in enumerate(self.constraint_strings, 1):
-            lines.append(f"   {i}. {constraint}")
-        
-        # Design space
-        if self.design_space is not None:
-            lines.append(f"\n🌌 Design Space Size: {len(self.design_space):,} configurations")
-            
-            # Show theoretical size without constraints
-            theoretical_size = 1
-            for values in self.parameters.values():
-                theoretical_size *= len(values)
-            lines.append(f"   Theoretical size: {theoretical_size:,}")
-            lines.append(f"   Reduction: {100 * (1 - len(self.design_space) / theoretical_size):.1f}%")
-        
-        lines.append("=" * 70)
-        
-        return "\n".join(lines)
-    
-    def save_design_space(self, output_path: str) -> None:
-        """
-        Save design space to JSON file.
-        
-        Args:
-            output_path: Path to output JSON file
-        """
-        if self.design_space is None:
-            raise ValueError("Design space not built. Call build() first.")
-        
-        with open(output_path, 'w') as f:
-            json.dump(self.design_space, f, indent=2)
-        
-        print(f"Design space saved to: {output_path}")
-    
+
     def get_cluster_config(self, cluster_name: str) -> Dict[str, Any]:
         """
-        Get configuration for a specific cluster.
+        Get the full configuration for a specific cluster.
         
         Args:
-            cluster_name: Name of the cluster
-        
+            cluster_name: The name of the cluster (e.g., 'cl1')
+            
         Returns:
-            Dictionary with cluster configuration (npu_count, npus_per_dim, etc.)
+            Dictionary with cluster configuration
         """
         if cluster_name not in self.clusters:
             raise ValueError(f"Cluster '{cluster_name}' not found. Available: {list(self.clusters.keys())}")
-        return self.clusters[cluster_name].copy()
+        return self.clusters[cluster_name]
     
     def get_cluster_npu_count(self, cluster_name: str) -> int:
         """
@@ -524,7 +342,7 @@ class SearchSpaceBuilder:
         """
         return self.clusters.copy()
     
-    def reconstruct_collective_implementations(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def reconstruct_collective_implementations(self, config: Dict[str, Any], num_dims: Optional[int] = None) -> Dict[str, Any]:
         """
         Reconstruct collective implementation arrays from per-dimension parameters.
         
@@ -533,6 +351,8 @@ class SearchSpaceBuilder:
         
         Args:
             config: Configuration dictionary with per-dimension parameters
+            num_dims: Optional dimension cap. If provided, only dim0..dim(num_dims-1)
+                     are reconstructed and higher-dimension parameters are discarded.
         
         Returns:
             Configuration with reconstructed collective arrays
@@ -549,12 +369,27 @@ class SearchSpaceBuilder:
         # Reconstruct arrays for each collective type
         for collective_type in collective_types:
             algorithms = []
-            dim = 0
-            while f'{collective_type}-dim{dim}' in config:
-                algorithms.append(config[f'{collective_type}-dim{dim}'])
-                # Remove the per-dimension parameter
-                del enriched[f'{collective_type}-dim{dim}']
-                dim += 1
+            # Gather all available dimension indices for this collective.
+            available_dims = []
+            for key in list(config.keys()):
+                prefix = f'{collective_type}-dim'
+                if key.startswith(prefix):
+                    suffix = key[len(prefix):]
+                    if suffix.isdigit():
+                        available_dims.append(int(suffix))
+
+            if not available_dims:
+                continue
+
+            limit = (max(available_dims) + 1) if num_dims is None else max(0, num_dims)
+
+            for dim in sorted(available_dims):
+                param_key = f'{collective_type}-dim{dim}'
+                if dim < limit:
+                    algorithms.append(config[param_key])
+                # Remove per-dimension parameters regardless; they are internal search params.
+                if param_key in enriched:
+                    del enriched[param_key]
             
             # Add the reconstructed array
             if algorithms:
@@ -576,12 +411,15 @@ class SearchSpaceBuilder:
         Returns:
             Enriched configuration dictionary with cluster info added
         """
-        # First reconstruct collective implementations
-        enriched = self.reconstruct_collective_implementations(config)
-        
+        enriched = config.copy()
+
         if 'cluster' in enriched:
             cluster_name = enriched['cluster']
             cluster_config = self.get_cluster_config(cluster_name)
+            cluster_dims = len(cluster_config.get('npus_per_dim', []))
+
+            # Reconstruct collectives constrained to this cluster's dimensions.
+            enriched = self.reconstruct_collective_implementations(config, num_dims=cluster_dims)
             
             # Add cluster info to config
             enriched['npu_count'] = cluster_config.get('npu_count')
@@ -591,22 +429,35 @@ class SearchSpaceBuilder:
             # If only one cluster and no cluster key, use the single cluster's info
             cluster_name = next(iter(self.clusters.keys()))
             cluster_config = self.get_cluster_config(cluster_name)
+            cluster_dims = len(cluster_config.get('npus_per_dim', []))
+
+            # Reconstruct collectives constrained to this cluster's dimensions.
+            enriched = self.reconstruct_collective_implementations(config, num_dims=cluster_dims)
             
             enriched['npu_count'] = cluster_config.get('npu_count')
             enriched['npus_per_dim'] = cluster_config.get('npus_per_dim', [])
             enriched['num_dimensions'] = len(enriched['npus_per_dim'])
+        else:
+            # No cluster context: preserve all reconstructed dimensions.
+            enriched = self.reconstruct_collective_implementations(config)
         
         return enriched
     
     def __repr__(self) -> str:
         """String representation."""
         return (f"SearchSpaceBuilder(params={len(self.parameters)}, "
-                f"constraints={len(self.constraints)}, "
-                f"space_size={self.get_design_space_size()})")
-    
+                f"constraints={len(self.constraints)})")
+
     def __str__(self) -> str:
         """Human-readable string."""
-        return self.summary()
+        lines = ["Search Space Summary:", "="*25]
+        for name, values in self.parameters.items():
+            lines.append(f"  - {name}: {len(values)} values")
+        if self.constraint_strings:
+            lines.append("Constraints:")
+            for cs in self.constraint_strings:
+                lines.append(f"  - {cs}")
+        return "\n".join(lines)
 
 
 # Convenience function for quick usage
@@ -632,6 +483,5 @@ def create_search_space(config_path: str,
     builder = SearchSpaceBuilder(config_path)
     builder.parse_parameters(include_categories, exclude_categories)
     builder.apply_constraints(custom_constraints)
-    builder.build(max_configs)
     
     return builder
