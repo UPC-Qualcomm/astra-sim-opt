@@ -755,13 +755,12 @@ def create_objective(objective_type: str, **kwargs) -> ObjectiveFunction:
         'energy': MinimizeEnergy,
         'power_and_time': MinimizePowerAndTime,
         'energy_and_time': MinimizeEnergyAndTime,
-        'edp': MinimizeEDP,
         'edp_and_network_bw': MinimizeEDPAndNetworkBW,
         'ed2p_and_network_bw': MinimizeED2PAndNetworkBW,
         'e2d_and_network_bw': MinimizeE2DAndNetworkBW,
         'energy_cycles_and_network_bw': MinimizeEnergyCyclesAndNetworkBW,
         'power_cycles_network_bw': MinimizePowerCyclesAndNetworkBW,
-        'weighted_edp': MinimizeWeightedEDP,          # E^alpha x D^beta, default ED2P
+        'edp': MinimizeWeightedEDP,          # E^alpha x D^beta, default ED2P
         'ed2p': lambda: MinimizeWeightedEDP(1, 2),    # performance-oriented shortcut
         'e2d':  lambda: MinimizeWeightedEDP(2, 1),    # efficiency-oriented shortcut
         'weighted': WeightedMultiObjective,

@@ -16,7 +16,6 @@ OBJECTIVES=(
   #"ed2p_and_network_bw"
   #"e2d_and_network_bw"
   #"energy_cycles_and_network_bw"
-  #"weighted_edp"
   #"ed2p"
   #"e2d"
 )
