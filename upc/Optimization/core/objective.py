@@ -615,46 +615,6 @@ class MinimizeWeightedEDP(ObjectiveFunction):
                 + self.beta  * math.log10(max(1.0, exec_time)))
 
 
-class MinimizeEnergyAndCycles(ObjectiveFunction):
-    """
-    Multi-objective: expose energy (J) and execution cycles as **independent**
-    objectives.
-
-    This is the *true* fix for the EDP symmetry problem.  Any scalar
-    combination of E and D (EDP, ED²P, E²D …) collapses the 2-D Pareto front
-    into a single number, which means the optimizer can always trade one for
-    the other along a level-set without any penalty.  Treating them as
-    separate objectives forces the surrogate model and acquisition function to
-    explore the *entire* front and lets the user inspect the trade-off
-    post-hoc.
-
-    Objective 0: ``log10(total_energy_J)``  — minimize energy.
-    Objective 1: ``log10(exec_cycles)``     — minimize delay.
-
-    Compared to :class:`MinimizeEnergyAndTime`, which was introduced together
-    with the power-model objectives, this class is semantically identical but
-    uses the same ``exec_time`` (cycles) units throughout, making it the
-    natural power-model counterpart to :class:`MinimizeEDP`.
-
-    **Requires** ``estimate_power=1`` in ``net_sim_config``.
-    Returns ``(PENALTY, PENALTY)`` if energy metric is absent or OOM.
-    """
-
-    def __init__(self):
-        super().__init__("Minimize Energy (J) and Cycles independently [Mode D, MOO]")
-        self.is_multi_objective = True
-
-    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
-                config: Optional[Dict[str, Any]] = None):
-        
-        if is_oom:
-            return PENALTY, PENALTY
-        total_energy_J = metadata.get('total_energy_J')
-        if total_energy_J is None or exec_time is None:
-            return PENALTY, PENALTY
-        return math.log10(max(1.0, total_energy_J)), math.log10(max(1.0, exec_time))
-
-
 class WeightedMultiObjective(ObjectiveFunction):
     """
     Weighted combination of multiple objectives.
@@ -804,7 +764,6 @@ def create_objective(objective_type: str, **kwargs) -> ObjectiveFunction:
         'weighted_edp': MinimizeWeightedEDP,          # E^alpha x D^beta, default ED2P
         'ed2p': lambda: MinimizeWeightedEDP(1, 2),    # performance-oriented shortcut
         'e2d':  lambda: MinimizeWeightedEDP(2, 1),    # efficiency-oriented shortcut
-        'energy_and_cycles': MinimizeEnergyAndCycles, # true MOO, no symmetry issue
         'weighted': WeightedMultiObjective,
         'custom': CustomObjective
     }

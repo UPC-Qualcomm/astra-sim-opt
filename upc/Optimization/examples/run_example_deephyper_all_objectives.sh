@@ -6,8 +6,8 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 EXAMPLE_SCRIPT="${SCRIPT_DIR}/example_deephyper_opt_sweep.py"
 
 OBJECTIVES=(
-  "power_cycles_network_bw"
-  #"power"
+  #"power_cycles_network_bw"
+  "power"
   #"energy"
   #"power_and_time"
   #"energy_and_time"
@@ -15,11 +15,10 @@ OBJECTIVES=(
   #"edp_and_network_bw"
   #"ed2p_and_network_bw"
   #"e2d_and_network_bw"
-  "energy_cycles_and_network_bw"
+  #"energy_cycles_and_network_bw"
   #"weighted_edp"
   #"ed2p"
   #"e2d"
-  #"energy_and_cycles"
 )
 
 cd "$SCRIPT_DIR" || exit 1
@@ -42,3 +41,4 @@ for objective in "${OBJECTIVES[@]}"; do
  done
 
 exit "$failed"
+echo "All objectives completed. Check log files for details."
