@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Flexible histogram generator for exec_cycles data with maximum value filtering capabilities
-Usage: python gen_hist.py <csv_path> <output_name> [--dp MAX_VALUE] [--mp MAX_VALUE] [--sp MAX_VALUE] [--pp MAX_VALUE] [--sharding MAX_VALUE]
-Note: All filters use <= (less than or equal) comparison
+Usage: python gen_hist.py <csv_path> <output_name> [--dp MAX_VALUE] [--mp MAX_VALUE] [--sp MAX_VALUE] [--pp MAX_VALUE] [--sharding MAX_VALUE] [--oom true|false]
+Note: All filters use <= (less than or equal) comparison. The --oom filter includes/excludes records based on is_oom field.
 """
 
 import pandas as pd
@@ -19,11 +19,12 @@ def create_hist_folder():
     return hist_folder
 
 
-def apply_filters(df, filters):
-    """Apply filters to the dataframe based on maximum values (<=)"""
+def apply_filters(df, filters, oom_filter=None):
+    """Apply filters to the dataframe based on maximum values (<=) and boolean filters"""
     filtered_df = df.copy()
     applied_filters = []
     
+    # Apply numeric filters
     for column, max_value in filters.items():
         if max_value is not None:
             if column in df.columns:
@@ -34,10 +35,20 @@ def apply_filters(df, filters):
             else:
                 print(f"Warning: Column '{column}' not found in the data")
     
+    # Apply is_oom filter if specified
+    if oom_filter is not None:
+        if 'is_oom' in df.columns:
+            initial_count = len(filtered_df)
+            filtered_df = filtered_df[filtered_df['is_oom'] == oom_filter]
+            final_count = len(filtered_df)
+            applied_filters.append(f"is_oom=={oom_filter} (kept {final_count}/{initial_count})")
+        else:
+            print(f"Warning: Column 'is_oom' not found in the data")
+    
     return filtered_df, applied_filters
 
 
-def generate_histogram(csv_path, output_name, filters=None, bins=None):
+def generate_histogram(csv_path, output_name, filters=None, bins=None, oom_filter=None):
     """Generate histogram with optional filters"""
     
     # Load the data
@@ -62,8 +73,8 @@ def generate_histogram(csv_path, output_name, filters=None, bins=None):
     filtered_df = df
     filter_description = "No filters applied"
     
-    if filters:
-        filtered_df, applied_filters = apply_filters(df, filters)
+    if filters or oom_filter is not None:
+        filtered_df, applied_filters = apply_filters(df, filters if filters else {}, oom_filter)
         if applied_filters:
             filter_description = "; ".join(applied_filters)
         else:
@@ -125,8 +136,10 @@ def generate_histogram(csv_path, output_name, filters=None, bins=None):
     
     # Formatting
     title = f'Distribution of simulation time (sec) - {output_name}'
-    if filters and any(v is not None for v in filters.values()):
+    if (filters and any(v is not None for v in filters.values())) or oom_filter is not None:
         active_filters = [f"{k}<={v}" for k, v in filters.items() if v is not None]
+        if oom_filter is not None:
+            active_filters.append(f"is_oom=={oom_filter}")
         title += f'\nFilters: {", ".join(active_filters)}'
     
     plt.title(title, fontsize=14, fontweight='bold')
@@ -223,6 +236,7 @@ def main():
     parser.add_argument('--sp', type=int, help='Filter by maximum sp (sequence parallelism) value (<=)')
     parser.add_argument('--pp', type=int, help='Filter by maximum pp (pipeline parallelism) value (<=)')
     parser.add_argument('--sharding', type=int, help='Filter by maximum sharding value (<= 0 or 1)')
+    parser.add_argument('--oom', type=str, choices=['true', 'false'], help='Filter by is_oom field (true or false)')
     parser.add_argument('--bins', type=int, default=None, help='Number of bins for histogram (default: adaptive)')
     
     args = parser.parse_args()
@@ -239,12 +253,19 @@ def main():
     # Remove None values from filters
     filters = {k: v for k, v in filters.items() if v is not None}
     
+    # Parse oom filter
+    oom_filter = None
+    if args.oom is not None:
+        oom_filter = (args.oom.lower() == 'true')
+    
     print(f"Generating histogram for: {args.csv_path}")
     print(f"Output name: {args.output_name}")
     if filters:
         print(f"Applying filters: {filters}")
+    if oom_filter is not None:
+        print(f"OOM filter: is_oom == {oom_filter}")
     
-    success = generate_histogram(args.csv_path, args.output_name, filters, args.bins)
+    success = generate_histogram(args.csv_path, args.output_name, filters, args.bins, oom_filter)
     
     if success:
         print("\nHistogram generation completed successfully!")
