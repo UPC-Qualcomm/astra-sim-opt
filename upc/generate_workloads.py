@@ -81,6 +81,46 @@ class Model(Enum):
 
 
     @staticmethod
+    def get_model_type(model) -> str:
+        """Returns the model architecture type string expected by main.py --model_type.
+
+        GPT-family models use the 'gpt' graph builder; LLaMA/dense models use
+        'dense'.  Everything else defaults to 'dense' as a safe fallback.
+        """
+        _GPT_MODELS = {
+            Model.GPT_2_Small,
+            Model.GPT_2_Medium,
+            Model.GPT_3_1300M,
+            Model.GPT_Neo_2700M,
+            Model.GPT_13B,
+            Model.GPT_NeoX_20B,
+            Model.GPT_3_175B,
+            Model.GPT_4_Estimated_over_1T,
+            Model.GPT_30B,
+            Model.GPT_40B,
+            Model.GPT_8B,
+            Model.GPT_70B,
+            Model.Default,
+            Model.Simple,
+        }
+        _LLAMA_MODELS = {
+            Model.LLaMA_3_70B,
+            Model.llama_8B,
+            Model.LLaMA_2_30B,
+            Model.LLaMA_2_405B,
+            Model.Model_100B,
+            Model.Model_120B,
+            Model.T5_Small,
+            Model.T5_Base,
+            Model.T5_Large,
+            Model.FLAN_T5_XXL_11B,
+            Model.PaLM_540B,
+        }
+        if model in _GPT_MODELS:
+            return "gpt"
+        return "llama"
+
+    @staticmethod
     def get_model_params(model):
         """Returns parameters as
         [din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks]
@@ -175,23 +215,22 @@ def generate_instance(design_point, model=Model.Default, folder_name="default", 
         f"--head {head} "
         f"--num_stacks {num_stacks} "
         f"--weight_sharded {weight_sharded} "
+        f"--model_type {Model.get_model_type(model)} "
     )
     
     if custom_args is not None:
         activation_recompute = custom_args[0]
         tpsp = custom_args[1]
-        model_type = custom_args[2]
-        mixed_precision = custom_args[3]
-        print_gpu_vram = custom_args[4]
-        ep = custom_args[5]
-        kvhead = custom_args[6]
-        experts = custom_args[7]
-        kexperts = custom_args[8]
+        mixed_precision = custom_args[2]
+        print_gpu_vram = custom_args[3]
+        ep = custom_args[4]
+        kvhead = custom_args[5]
+        experts = custom_args[6]
+        kexperts = custom_args[7]
         
         cmd += (
             f"--activation_recompute {activation_recompute} "
             f"--tpsp {tpsp} "
-            f"--model_type {model_type} "
             f"--mixed_precision {mixed_precision} "
             f"--print_gpu_vram {print_gpu_vram} "
             f"--ep {ep} "

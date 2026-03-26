@@ -27,11 +27,11 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
     ssp = design_point['sp']
     pp = design_point['pp']
     sharded = design_point['sharded']
-    print("Generating workload for model:", model)
     din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = Model.get_model_params(model)
+    model_type = Model.get_model_type(model)
 
     print("Generating workload for model:", model)
-    print(f"Parameters: din={din}, dmodel={dmodel}, dff={dff}, batch={batch}, micro_batch={micro_batch}, seq={seq}, head={head}, num_stacks={num_stacks}, dp={dp}, mp={mp}, sp={ssp}, pp={pp}, sharded={sharded}")
+    print(f"Parameters: din={din}, dmodel={dmodel}, dff={dff}, batch={batch}, micro_batch={micro_batch}, seq={seq}, head={head}, num_stacks={num_stacks}, dp={dp}, mp={mp}, sp={ssp}, pp={pp}, sharded={sharded}, model_type={model_type}")
     # Note: Having if the micro batch is much smaller than the global batch, the generator will be much slower.
     cmd = (
         f"{os.environ['ASTRA_SIM_PYTHON']} main.py "
@@ -50,6 +50,7 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
         f"--head {head} "
         f"--num_stacks {num_stacks} "
         f"--weight_sharded {sharded} "
+        f"--model_type {model_type} "
         f"--chakra_schema_version v0.0.4 "
         f"--suffix {suffix}"
     )
