@@ -5,22 +5,18 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 EXAMPLE_SCRIPT="${SCRIPT_DIR}/example_deephyper_opt_sweep.py"
 
-OBJECTIVES=(
-  #"power_cycles_network_bw"
-  "power"
-  #"energy"
-  #"power_and_time"
-  #"energy_and_time"
-  #"edp"
-  #"edp_and_network_bw"
-  #"ed2p_and_network_bw"
-  #"e2d_and_network_bw"
-  #"energy_cycles_and_network_bw"
-  #"ed2p"
-  #"e2d"
-)
-
 cd "$SCRIPT_DIR" || exit 1
+
+if [[ "$#" -gt 0 ]]; then
+  OBJECTIVES=("$@")
+else
+  mapfile -t OBJECTIVES < <("$PYTHON_BIN" "$EXAMPLE_SCRIPT" --list-objectives)
+fi
+
+if [[ "${#OBJECTIVES[@]}" -eq 0 ]]; then
+  echo "No objectives found to sweep."
+  exit 1
+fi
 
 failed=0
 for objective in "${OBJECTIVES[@]}"; do
@@ -39,5 +35,5 @@ for objective in "${OBJECTIVES[@]}"; do
   echo
  done
 
-exit "$failed"
 echo "All objectives completed. Check log files for details."
+  exit "$failed"

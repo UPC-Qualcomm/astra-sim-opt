@@ -17,48 +17,63 @@ from Optimization import (
     SimulationRunner,
     DeepHyperOptimizer,
     create_objective,
+    get_available_objective_types,
 )
 from Optimization.core.base_optimizer import format_score
 
 
 OBJECTIVE_METADATA = {
+    "time": {"plot_labels": []},
+    "time_and_network_bw": {"plot_labels": []},
     "power": {"plot_labels": []},
     "energy": {"plot_labels": []},
     "power_and_time": {"plot_labels": ["Total Power (W)", "Execution Cycles"]},
     "energy_and_time": {"plot_labels": ["Total Energy (J)", "Execution Cycles"]},
+    "latency_total_network": {"plot_labels": ["Execution Cycles", "Network Total BW (GB/s)"]},
+    "latency_network": {"plot_labels": ["log10(Execution Cycles)", "log10(Network Total BW (GB/s))"]},
+    "latency_memory": {"plot_labels": ["log10(Execution Cycles)", "log10(Total Memory (GB))"]},
+    "network_memory": {"plot_labels": ["log10(Network Total BW (GB/s))", "log10(Total Memory (GB))"]},
+    "latency_network_memory": {"plot_labels": ["log10(Execution Cycles)", "log10(Network Total BW (GB/s))", "log10(Total Memory (GB))"]},
+    "latency_network_raw": {"plot_labels": ["Execution Cycles", "Network Total BW (GB/s)"]},
+    "latency_network_minmax": {"plot_labels": ["Normalized Time", "Normalized Network BW"]},
+    "latency_network_sqrt": {"plot_labels": ["sqrt(Time)", "sqrt(Network BW)"]},
+    "latency_network_power": {"plot_labels": ["Time^p", "Network BW^p"]},
     "edp": {"plot_labels": []},
     "edp_and_network_bw": {"plot_labels": ["EDP (J * cycles)", "Network Total BW (GB/s)"]},
     "ed2p_and_network_bw": {"plot_labels": ["ED²P (J * cycles²)", "Network Total BW (GB/s)"]},
     "e2d_and_network_bw": {"plot_labels": ["E²D (J² * cycles)", "Network Total BW (GB/s)"]},
     "energy_cycles_and_network_bw": {"plot_labels": ["Total Energy (J)", "Execution Cycles", "Network Total BW (GB/s)"]},
     "power_cycles_network_bw": {"plot_labels": ["Total Power (W)", "Execution Cycles", "Network Total BW (GB/s)"]},
-    "weighted_edp": {"plot_labels": []},
     "ed2p": {"plot_labels": []},
     "e2d": {"plot_labels": []},
-    "energy_and_cycles": {"plot_labels": ["Total Energy (J)", "Execution Cycles"]},
 }
 
 DEFAULT_OBJECTIVE = "e2d_and_network_bw"
 
 
 def get_objective_key() -> str:
+    available_objectives = get_available_objective_types()
+    if len(sys.argv) > 1 and sys.argv[1] == "--list-objectives":
+        print("\n".join(available_objectives))
+        sys.exit(0)
+
     objective_key = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_OBJECTIVE
-    if objective_key not in OBJECTIVE_METADATA:
-        available = ", ".join(sorted(OBJECTIVE_METADATA.keys()))
+    if objective_key not in available_objectives:
+        available = ", ".join(sorted(available_objectives))
         raise ValueError(f"Unknown objective '{objective_key}'. Available: {available}")
     return objective_key
 
 
 def main():
     objective_key = get_objective_key()
-    objective_meta = OBJECTIVE_METADATA[objective_key]
+    objective_meta = OBJECTIVE_METADATA.get(objective_key, {"plot_labels": []})
 
     MODEL_NUM = 19
     MODEL_NAME = f"GPT_40B_{objective_key}"
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
-    BUDGET = 300
-    INIT_SAMPLES = 50
+    BUDGET = 100
+    INIT_SAMPLES = 20
     N_WORKERS = 8
     TOP_K = 10
     CLEANUP_BATCH_SIZE = 20

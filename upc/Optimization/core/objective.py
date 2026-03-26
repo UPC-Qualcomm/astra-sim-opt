@@ -300,6 +300,244 @@ def _compute_total_network_bw(config: Dict[str, Any], npus_per_node: int = 8) ->
             + inter_node_bw * (num_nodes - 1))
 
 
+class MinimizeLatencyAndTotalNetworkBW(ObjectiveFunction):
+    """
+    Multi-objective: jointly minimize execution latency and total network BW.
+
+    Returns raw values ``(exec_time, total_network_bw_GBps)``.
+    """
+
+    def __init__(self, npus_per_node: int = 8):
+        super().__init__("Minimize Latency and Total Network BW [Raw, MOO]")
+        self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
+        self.npus_per_node = npus_per_node
+
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None):
+        if is_oom or exec_time is None or config is None:
+            return PENALTY, PENALTY
+
+        total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
+        return float(exec_time), float(total_network_bw)
+
+
+class MinimizeLatencyAndNetworkBW(ObjectiveFunction):
+    """
+    Multi-objective: jointly minimize latency and network BW (log-scaled).
+
+    Returns ``(log10(exec_time), log10(total_network_bw_GBps))``.
+    """
+
+    def __init__(self, npus_per_node: int = 8):
+        super().__init__("Minimize Latency and Network BW [Log, MOO]")
+        self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
+        self.npus_per_node = npus_per_node
+
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None):
+        if is_oom or exec_time is None or config is None:
+            return PENALTY, PENALTY
+
+        total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
+        log_exec_time = math.log10(max(1.0, exec_time))
+        log_network_bw = math.log10(max(1.0, total_network_bw))
+        return log_exec_time, log_network_bw
+
+
+class MinimizeLatencyAndMemory(ObjectiveFunction):
+    """
+    Multi-objective: jointly minimize latency and total memory footprint.
+
+    Returns ``(log10(exec_time), log10(total_memory_GB))``.
+    """
+
+    def __init__(self):
+        super().__init__("Minimize Latency and Memory [Log, MOO]")
+        self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
+
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None):
+        if is_oom or exec_time is None or config is None:
+            return PENALTY, PENALTY
+
+        npu_count = config.get('npu_count', 1)
+        local_mem_size = config.get('local-mem-size', 0)
+        total_memory_usage = local_mem_size * npu_count
+
+        log_exec_time = math.log10(max(1.0, exec_time))
+        log_memory_usage = math.log10(max(1.0, total_memory_usage))
+        return log_exec_time, log_memory_usage
+
+
+class MinimizeNetworkBWAndMemory(ObjectiveFunction):
+    """
+    Multi-objective: jointly minimize network BW and total memory footprint.
+
+    Returns ``(log10(total_network_bw_GBps), log10(total_memory_GB))``.
+    """
+
+    def __init__(self, npus_per_node: int = 8):
+        super().__init__("Minimize Network BW and Memory [Log, MOO]")
+        self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
+        self.npus_per_node = npus_per_node
+
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None):
+        if is_oom or config is None:
+            return PENALTY, PENALTY
+
+        total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
+        npu_count = config.get('npu_count', 1)
+        local_mem_size = config.get('local-mem-size', 0)
+        total_memory_usage = local_mem_size * npu_count
+
+        log_network_bw = math.log10(max(1.0, total_network_bw))
+        log_memory_usage = math.log10(max(1.0, total_memory_usage))
+        return log_network_bw, log_memory_usage
+
+
+class MinimizeLatencyNetworkBWAndMemory(ObjectiveFunction):
+    """
+    Three-objective optimization on latency, network BW, and memory.
+
+    Returns ``(log10(exec_time), log10(total_network_bw_GBps), log10(total_memory_GB))``.
+    """
+
+    def __init__(self, npus_per_node: int = 8):
+        super().__init__("Minimize Latency, Network BW, and Memory [Log, 3-MOO]")
+        self.is_multi_objective = True
+        self.objective_directions = ["min", "min", "min"]
+        self.npus_per_node = npus_per_node
+
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None):
+        if is_oom or exec_time is None or config is None:
+            return PENALTY, PENALTY, PENALTY
+
+        total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
+        npu_count = config.get('npu_count', 1)
+        local_mem_size = config.get('local-mem-size', 0)
+        total_memory_usage = local_mem_size * npu_count
+
+        log_exec_time = math.log10(max(1.0, exec_time))
+        log_network_bw = math.log10(max(1.0, total_network_bw))
+        log_memory_usage = math.log10(max(1.0, total_memory_usage))
+        return log_exec_time, log_network_bw, log_memory_usage
+
+
+class MinimizeLatencyAndNetworkBWRaw(MinimizeLatencyAndTotalNetworkBW):
+    """Compatibility alias for raw latency-network BW objective."""
+
+    def __init__(self, npus_per_node: int = 8):
+        super().__init__(npus_per_node=npus_per_node)
+        self.name = "Minimize Latency and Network BW [Raw, MOO]"
+
+
+class MinimizeLatencyAndNetworkBWMinMax(ObjectiveFunction):
+    """
+    Multi-objective with min-max normalization for latency and network BW.
+
+    Returns ``(norm_latency, norm_network_bw)`` in ``[0, 1]`` (clipped).
+    """
+
+    def __init__(
+        self,
+        npus_per_node: int = 8,
+        time_min: float = 1.0,
+        time_max: float = 100.0,
+        bw_min: float = 100.0,
+        bw_max: float = 2000.0,
+        exec_time_scale: float = 1e9,
+    ):
+        super().__init__("Minimize Latency and Network BW [MinMax, MOO]")
+        self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
+        self.npus_per_node = npus_per_node
+        self.time_min = time_min
+        self.time_max = time_max
+        self.bw_min = bw_min
+        self.bw_max = bw_max
+        self.exec_time_scale = exec_time_scale
+
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None):
+        if is_oom or exec_time is None or config is None:
+            return PENALTY, PENALTY
+
+        scaled_exec_time = exec_time / self.exec_time_scale if self.exec_time_scale else exec_time
+        total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
+
+        time_span = self.time_max - self.time_min
+        bw_span = self.bw_max - self.bw_min
+        if time_span <= 0 or bw_span <= 0:
+            return PENALTY, PENALTY
+
+        norm_time = (scaled_exec_time - self.time_min) / time_span
+        norm_network = (total_network_bw - self.bw_min) / bw_span
+        norm_time = min(1.0, max(0.0, norm_time))
+        norm_network = min(1.0, max(0.0, norm_network))
+        return norm_time, norm_network
+
+
+class MinimizeLatencyAndNetworkBWSqrt(ObjectiveFunction):
+    """
+    Multi-objective with square-root compression for latency and network BW.
+
+    Returns ``(sqrt(scaled_latency), sqrt(network_bw))``.
+    """
+
+    def __init__(self, npus_per_node: int = 8, exec_time_scale: float = 1e9):
+        super().__init__("Minimize Latency and Network BW [Sqrt, MOO]")
+        self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
+        self.npus_per_node = npus_per_node
+        self.exec_time_scale = exec_time_scale
+
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None):
+        if is_oom or exec_time is None or config is None:
+            return PENALTY, PENALTY
+
+        scaled_exec_time = exec_time / self.exec_time_scale if self.exec_time_scale else exec_time
+        total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
+
+        sqrt_time = math.sqrt(max(0.0, scaled_exec_time))
+        sqrt_network = math.sqrt(max(0.0, total_network_bw))
+        return sqrt_time, sqrt_network
+
+
+class MinimizeLatencyAndNetworkBWPower(ObjectiveFunction):
+    """
+    Multi-objective with configurable power transform for latency/network BW.
+
+    Returns ``(scaled_latency ** power, network_bw ** power)``.
+    """
+
+    def __init__(self, npus_per_node: int = 8, power: float = 0.5, exec_time_scale: float = 1e9):
+        super().__init__(f"Minimize Latency and Network BW [Power={power}, MOO]")
+        self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
+        self.npus_per_node = npus_per_node
+        self.power = power
+        self.exec_time_scale = exec_time_scale
+
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None):
+        if is_oom or exec_time is None or config is None:
+            return PENALTY, PENALTY
+
+        scaled_exec_time = exec_time / self.exec_time_scale if self.exec_time_scale else exec_time
+        total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
+
+        power_time = math.pow(max(0.0, scaled_exec_time), self.power)
+        power_network = math.pow(max(0.0, total_network_bw), self.power)
+        return power_time, power_network
+
+
 class MinimizeEDPAndNetworkBW(ObjectiveFunction):
     """
     Multi-objective: minimize EDP **and** total network bandwidth jointly.
@@ -715,6 +953,15 @@ def create_objective(objective_type: str, **kwargs) -> ObjectiveFunction:
         'energy': MinimizeEnergy,
         'power_and_time': MinimizePowerAndTime,
         'energy_and_time': MinimizeEnergyAndTime,
+        'latency_total_network': MinimizeLatencyAndTotalNetworkBW,
+        'latency_network': MinimizeLatencyAndNetworkBW,
+        'latency_memory': MinimizeLatencyAndMemory,
+        'network_memory': MinimizeNetworkBWAndMemory,
+        'latency_network_memory': MinimizeLatencyNetworkBWAndMemory,
+        'latency_network_raw': MinimizeLatencyAndNetworkBWRaw,
+        'latency_network_minmax': MinimizeLatencyAndNetworkBWMinMax,
+        'latency_network_sqrt': MinimizeLatencyAndNetworkBWSqrt,
+        'latency_network_power': MinimizeLatencyAndNetworkBWPower,
         'edp_and_network_bw': MinimizeEDPAndNetworkBW,
         'ed2p_and_network_bw': MinimizeED2PAndNetworkBW,
         'e2d_and_network_bw': MinimizeE2DAndNetworkBW,
@@ -732,3 +979,41 @@ def create_objective(objective_type: str, **kwargs) -> ObjectiveFunction:
                         f"Available: {list(objectives.keys())}")
     
     return objectives[objective_type](**kwargs)
+
+
+def get_available_objective_types(include_non_sweepable: bool = False) -> List[str]:
+    """
+    Return objective types supported by ``create_objective``.
+
+    Args:
+        include_non_sweepable: Include objective types that require extra
+            mandatory kwargs (currently ``weighted`` and ``custom``).
+    """
+    objective_types = [
+        'time',
+        'time_and_network_bw',
+        'power',
+        'energy',
+        'power_and_time',
+        'energy_and_time',
+        'latency_total_network',
+        'latency_network',
+        'latency_memory',
+        'network_memory',
+        'latency_network_memory',
+        'latency_network_raw',
+        'latency_network_minmax',
+        'latency_network_sqrt',
+        'latency_network_power',
+        'edp_and_network_bw',
+        'ed2p_and_network_bw',
+        'e2d_and_network_bw',
+        'energy_cycles_and_network_bw',
+        'power_cycles_network_bw',
+        'edp',
+        'ed2p',
+        'e2d',
+    ]
+    if include_non_sweepable:
+        objective_types.extend(['weighted', 'custom'])
+    return objective_types

@@ -25,6 +25,15 @@ from .objective import (
     MinimizeEnergy,
     MinimizePowerAndTime,
     MinimizeEnergyAndTime,
+    MinimizeLatencyAndTotalNetworkBW,
+    MinimizeLatencyAndNetworkBW,
+    MinimizeLatencyAndMemory,
+    MinimizeNetworkBWAndMemory,
+    MinimizeLatencyNetworkBWAndMemory,
+    MinimizeLatencyAndNetworkBWRaw,
+    MinimizeLatencyAndNetworkBWMinMax,
+    MinimizeLatencyAndNetworkBWSqrt,
+    MinimizeLatencyAndNetworkBWPower,
     MinimizeEDPAndNetworkBW,
     MinimizeED2PAndNetworkBW,
     MinimizeE2DAndNetworkBW,
@@ -32,7 +41,8 @@ from .objective import (
     MinimizePowerCyclesAndNetworkBW,
     MinimizeWeightedEDP,
     CustomObjective,
-    create_objective
+    create_objective,
+    get_available_objective_types,
 )
 
 __all__ = [
@@ -58,6 +68,15 @@ __all__ = [
     'MinimizeEnergy',
     'MinimizePowerAndTime',
     'MinimizeEnergyAndTime',
+    'MinimizeLatencyAndTotalNetworkBW',
+    'MinimizeLatencyAndNetworkBW',
+    'MinimizeLatencyAndMemory',
+    'MinimizeNetworkBWAndMemory',
+    'MinimizeLatencyNetworkBWAndMemory',
+    'MinimizeLatencyAndNetworkBWRaw',
+    'MinimizeLatencyAndNetworkBWMinMax',
+    'MinimizeLatencyAndNetworkBWSqrt',
+    'MinimizeLatencyAndNetworkBWPower',
     'MinimizeEDPAndNetworkBW',
     'MinimizeED2PAndNetworkBW',
     'MinimizeE2DAndNetworkBW',
@@ -66,4 +85,5 @@ __all__ = [
     'MinimizeWeightedEDP',
     'CustomObjective',
     'create_objective',
+    'get_available_objective_types',
 ]
