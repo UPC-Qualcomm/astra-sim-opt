@@ -118,7 +118,8 @@ def predict_peak_memory(config, model_dir, model_name='best'):
     X = pd.DataFrame([features])[feature_names]
     
     # Scale features
-    X_scaled = scaler.transform(X)
+    X_scaled_array = scaler.transform(X)
+    X_scaled = pd.DataFrame(X_scaled_array, columns=feature_names)
     
     # Predict (model predicts log(peak_memory + 1))
     log_prediction = model.predict(X_scaled)[0]

@@ -181,6 +181,8 @@ def load_and_prepare_data(csv_path_or_dir):
 
 def train_multiple_models(X_train, X_test, y_train, y_test):
     """Train multiple models and compare performance."""
+    y_train_actual = np.expm1(y_train)
+    y_test_actual = np.expm1(y_test)
     
     # Base models with optimized hyperparameters
     rf = RandomForestRegressor(
@@ -296,18 +298,26 @@ def train_multiple_models(X_train, X_test, y_train, y_test):
         # Cross-validation on training set
         cv_scores = cross_val_score(model, X_train, y_train, cv=5, 
                                      scoring='neg_mean_squared_error', n_jobs=-1)
-        cv_rmse = np.sqrt(-cv_scores.mean())
-        cv_rmse_std = np.sqrt(cv_scores.std())
+        cv_rmse_log = np.sqrt(-cv_scores.mean())
+        cv_rmse_std_log = np.sqrt(cv_scores.std())
         
         model.fit(X_train, y_train)
         
         # Predictions (in log scale)
         y_train_pred = model.predict(X_train)
         y_test_pred = model.predict(X_test)
+
+        # Metrics in log space (comparable to CV scores)
+        train_mse_log = mean_squared_error(y_train, y_train_pred)
+        test_mse_log = mean_squared_error(y_test, y_test_pred)
+        train_mae_log = mean_absolute_error(y_train, y_train_pred)
+        test_mae_log = mean_absolute_error(y_test, y_test_pred)
+        train_r2_log = r2_score(y_train, y_train_pred)
+        test_r2_log = r2_score(y_test, y_test_pred)
+        train_rmse_log = np.sqrt(train_mse_log)
+        test_rmse_log = np.sqrt(test_mse_log)
         
         # Convert predictions back to original scale for metrics
-        y_train_actual = np.expm1(y_train)
-        y_test_actual = np.expm1(y_test)
         y_train_pred_actual = np.expm1(y_train_pred)
         y_test_pred_actual = np.expm1(y_test_pred)
         
@@ -328,28 +338,48 @@ def train_multiple_models(X_train, X_test, y_train, y_test):
             'test_mae': test_mae,
             'train_r2': train_r2,
             'test_r2': test_r2,
-            'cv_rmse': cv_rmse,
-            'cv_rmse_std': cv_rmse_std,
-            'predictions': y_test_pred,  # Keep in log scale for internal use
-            'overfitting_gap': np.sqrt(test_mse) - np.sqrt(train_mse)  # How much worse on test
+            'train_mse_log': train_mse_log,
+            'test_mse_log': test_mse_log,
+            'train_rmse_log': train_rmse_log,
+            'test_rmse_log': test_rmse_log,
+            'train_mae_log': train_mae_log,
+            'test_mae_log': test_mae_log,
+            'train_r2_log': train_r2_log,
+            'test_r2_log': test_r2_log,
+            'cv_rmse_log': cv_rmse_log,
+            'cv_rmse_std_log': cv_rmse_std_log,
+            'predictions_log': y_test_pred,
+            'predictions_actual': y_test_pred_actual,
+            'overfitting_gap_log': test_rmse_log - train_rmse_log,
+            'overfitting_gap': np.sqrt(test_mse) - np.sqrt(train_mse)
         }
         
         trained_models[name] = model
         
-        print(f"  CV RMSE: {cv_rmse:.3f} ± {cv_rmse_std:.3f} GB")
-        print(f"  Train RMSE: {np.sqrt(train_mse):.3f} GB")
-        print(f"  Test RMSE: {np.sqrt(test_mse):.3f} GB")
-        print(f"  Overfitting Gap: {results[name]['overfitting_gap']:.3f} GB")
-        print(f"  Train MAE: {train_mae:.3f} GB")
-        print(f"  Test MAE: {test_mae:.3f} GB")
-        print(f"  Train R²: {train_r2:.4f}")
-        print(f"  Test R²: {test_r2:.4f}")
+        print("  Testing summary (log space; directly comparable to CV):")
+        print(f"    CV RMSE (log): {cv_rmse_log:.4f} +- {cv_rmse_std_log:.4f}")
+        print(f"    Train RMSE (log): {train_rmse_log:.4f}")
+        print(f"    Test RMSE (log): {test_rmse_log:.4f}")
+        print(f"    Overfitting Gap (log): {results[name]['overfitting_gap_log']:.4f}")
+        print(f"    Train MAE (log): {train_mae_log:.4f}")
+        print(f"    Test MAE (log): {test_mae_log:.4f}")
+        print(f"    Train R2 (log): {train_r2_log:.4f}")
+        print(f"    Test R2 (log): {test_r2_log:.4f}")
+        print("  Testing summary (original GB scale):")
+        print(f"    Train RMSE: {np.sqrt(train_mse):.3f} GB")
+        print(f"    Test RMSE: {np.sqrt(test_mse):.3f} GB")
+        print(f"    Overfitting Gap: {results[name]['overfitting_gap']:.3f} GB")
+        print(f"    Train MAE: {train_mae:.3f} GB")
+        print(f"    Test MAE: {test_mae:.3f} GB")
+        print(f"    Train R2: {train_r2:.4f}")
+        print(f"    Test R2: {test_r2:.4f}")
     
     return results, trained_models
 
 def plot_results(results, y_test, output_dir):
     """Generate visualizations of model performance."""
     os.makedirs(output_dir, exist_ok=True)
+    y_test_actual = np.expm1(y_test)
     
     # 1. Compare model performance
     fig, axes = plt.subplots(2, 2, figsize=(15, 12))
@@ -394,13 +424,13 @@ def plot_results(results, y_test, output_dir):
             break
         
         ax = axes[idx]
-        y_pred = result['predictions']
+        y_pred = result['predictions_actual']
         
-        ax.scatter(y_test, y_pred, alpha=0.5)
+        ax.scatter(y_test_actual, y_pred, alpha=0.5)
         
         # Perfect prediction line
-        min_val = min(y_test.min(), y_pred.min())
-        max_val = max(y_test.max(), y_pred.max())
+        min_val = min(y_test_actual.min(), y_pred.min())
+        max_val = max(y_test_actual.max(), y_pred.max())
         ax.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2)
         
         ax.set_xlabel('Actual Peak Memory (GB)')
@@ -438,6 +468,38 @@ def analyze_feature_importance(model, feature_names, output_dir):
         print("\nTop 10 Most Important Features:")
         for i in range(min(10, len(importances))):
             print(f"  {feature_names[indices[i]]}: {importances[indices[i]]:.4f}")
+
+def print_model_rankings(results):
+    """Print compact rankings for key test metrics."""
+    summary_df = pd.DataFrame([
+        {
+            'Model': model_name,
+            'Test_RMSE_Log': metrics['test_rmse_log'],
+            'Test_RMSE_GB': metrics['test_rmse'],
+            'Test_MAE_GB': metrics['test_mae']
+        }
+        for model_name, metrics in results.items()
+    ])
+
+    def _print_rank_table(df, metric_col, title):
+        ranked = df.sort_values(metric_col, ascending=True).reset_index(drop=True)
+        ranked.insert(0, 'Rank', ranked.index + 1)
+        print(f"\n{title}")
+        print(ranked[['Rank', 'Model', 'Test_RMSE_Log', 'Test_RMSE_GB', 'Test_MAE_GB']].to_string(
+            index=False,
+            formatters={
+                'Test_RMSE_Log': '{:.4f}'.format,
+                'Test_RMSE_GB': '{:.3f}'.format,
+                'Test_MAE_GB': '{:.3f}'.format,
+            }
+        ))
+
+    print("\n" + "=" * 60)
+    print("Model Rankings")
+    print("=" * 60)
+    _print_rank_table(summary_df, 'Test_RMSE_Log', 'Ranking by Test RMSE (log)')
+    _print_rank_table(summary_df, 'Test_RMSE_GB', 'Ranking by Test RMSE (GB)')
+    _print_rank_table(summary_df, 'Test_MAE_GB', 'Ranking by Test MAE (GB)')
 
 def main():
     parser = argparse.ArgumentParser(description='Train ML model for AstraSim peak memory prediction')
@@ -498,13 +560,17 @@ def main():
     
     # Train models
     results, trained_models = train_multiple_models(X_train_scaled, X_test_scaled, y_train, y_test)
+
+    # Print ranked summaries for quick model comparison
+    print_model_rankings(results)
     
     # Find best model
-    best_model_name = min(results.keys(), key=lambda k: results[k]['test_rmse'])
+    best_model_name = min(results.keys(), key=lambda k: results[k]['test_rmse_log'])
     best_model = trained_models[best_model_name]
     
     print(f"\n{'='*60}")
     print(f"Best Model: {best_model_name}")
+    print(f"Test RMSE (log): {results[best_model_name]['test_rmse_log']:.4f}")
     print(f"Test RMSE: {results[best_model_name]['test_rmse']:.3f} GB")
     print(f"Test MAE: {results[best_model_name]['test_mae']:.3f} GB")
     print(f"Test R²: {results[best_model_name]['test_r2']:.4f}")
@@ -542,11 +608,19 @@ def main():
     # Save results summary
     results_df = pd.DataFrame({
         'Model': list(results.keys()),
-        'CV_RMSE': [results[m]['cv_rmse'] for m in results.keys()],
-        'CV_RMSE_Std': [results[m]['cv_rmse_std'] for m in results.keys()],
+        'CV_RMSE_Log': [results[m]['cv_rmse_log'] for m in results.keys()],
+        'CV_RMSE_Std_Log': [results[m]['cv_rmse_std_log'] for m in results.keys()],
+        'Train_RMSE_Log': [results[m]['train_rmse_log'] for m in results.keys()],
+        'Test_RMSE_Log': [results[m]['test_rmse_log'] for m in results.keys()],
+        'Overfitting_Gap_Log': [results[m]['overfitting_gap_log'] for m in results.keys()],
+        'Train_MAE_Log': [results[m]['train_mae_log'] for m in results.keys()],
+        'Test_MAE_Log': [results[m]['test_mae_log'] for m in results.keys()],
+        'Train_R2_Log': [results[m]['train_r2_log'] for m in results.keys()],
+        'Test_R2_Log': [results[m]['test_r2_log'] for m in results.keys()],
         'Train_RMSE': [results[m]['train_rmse'] for m in results.keys()],
         'Test_RMSE': [results[m]['test_rmse'] for m in results.keys()],
         'Overfitting_Gap': [results[m]['overfitting_gap'] for m in results.keys()],
+        'Train_MAE': [results[m]['train_mae'] for m in results.keys()],
         'Test_MAE': [results[m]['test_mae'] for m in results.keys()],
         'Test_R2': [results[m]['test_r2'] for m in results.keys()],
         'Train_R2': [results[m]['train_r2'] for m in results.keys()]
