@@ -61,11 +61,11 @@ python ml_model/generate_training_data_old.py \
     --batch_size "$BATCH_SIZE" \
     --strategy_sample_rate "$STRATEGY_SAMPLE_RATE" \
     --sim_type "$SIM_TYPE" \
-    --output_csv ml_model/training_data1.csv \
+    --output_csv ml_model/data/training_data1.csv \
     $APPEND_FLAG \
     $TEST_FLAG
 
-if [ ! -f ml_model/training_data1.csv ]; then
+if [ ! -f ml_model/data/training_data1.csv ]; then
     echo "Error: Training data not generated!"
     exit 1
 fi
@@ -79,7 +79,7 @@ echo "Step 2: Training ML models..."
 echo ""
 
 python ml_model/train_model.py \
-    --input_csv ml_model/training_data1.csv \
+    --input_csv ml_model/data \
     --output_dir ml_model/trained_models
 
 if [ ! -f ml_model/trained_models/best_model.pkl ]; then
@@ -118,7 +118,7 @@ echo "Pipeline completed successfully!"
 echo "========================================"
 echo ""
 echo "Generated files:"
-echo "  - Training data: ml_model/training_data1.csv"
+echo "  - Training data: ml_model/data/training_data1.csv"
 echo "  - Trained model: ml_model/trained_models/best_model.pkl"
 echo "  - Model results: ml_model/trained_models/model_results.csv"
 echo "  - Visualizations: ml_model/trained_models/*.png"

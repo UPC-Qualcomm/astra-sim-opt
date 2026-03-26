@@ -22,9 +22,37 @@ from catboost import CatBoostRegressor
 from sklearn.model_selection import RandomizedSearchCV
 from scipy.stats import randint, uniform
 
-def load_and_prepare_data(csv_path):
-    """Load training data and prepare features."""
-    df = pd.read_csv(csv_path)
+def load_and_prepare_data(csv_path_or_dir):
+    """Load training data from single file or all files in directory and prepare features."""
+    
+    # Determine if input is a file or directory
+    if os.path.isdir(csv_path_or_dir):
+        data_dir = csv_path_or_dir
+        print(f"\n📁 Loading data from directory: {data_dir}")
+        
+        # Find all CSV files in the directory
+        csv_files = sorted([f for f in os.listdir(data_dir) if f.endswith('.csv')])
+        
+        if not csv_files:
+            raise ValueError(f"No CSV files found in {data_dir}")
+        
+        print(f"Found {len(csv_files)} data file(s):")
+        dfs = []
+        
+        for csv_file in csv_files:
+            csv_path = os.path.join(data_dir, csv_file)
+            print(f"  - {csv_file}", end="")
+            df_chunk = pd.read_csv(csv_path)
+            print(f" ({len(df_chunk)} rows)")
+            dfs.append(df_chunk)
+        
+        # Combine all data files
+        df = pd.concat(dfs, ignore_index=True)
+        print(f"\n✓ Combined {len(csv_files)} files → {len(df)} total rows")
+    else:
+        # Single file
+        print(f"\n📄 Loading data from file: {csv_path_or_dir}")
+        df = pd.read_csv(csv_path_or_dir)
     
     # Feature columns
     feature_cols = [
@@ -34,6 +62,59 @@ def load_and_prepare_data(csv_path):
     
     # Target column - use log transform for better prediction
     target_col = 'avg_peak_memory_gb'
+    
+    # Report initial state
+    initial_rows = len(df)
+    print(f"\n📊 Initial dataset: {initial_rows} rows")
+    
+    # Check for missing values
+    missing_counts = df[feature_cols + [target_col]].isnull().sum()
+    if missing_counts.sum() > 0:
+        print(f"\n⚠️  Missing values found:")
+        for col, count in missing_counts[missing_counts > 0].items():
+            print(f"   {col}: {count} NaN values")
+        
+        # Remove rows with NaN values
+        df_cleaned = df.dropna(subset=feature_cols + [target_col])
+        removed_nan = initial_rows - len(df_cleaned)
+        print(f"   → Removed {removed_nan} rows with NaN values")
+        df = df_cleaned
+    
+    # Identify odd num_npus values (not powers of 2)
+    valid_npus = {16, 32, 64, 128, 256, 512, 1024, 2048}
+    odd_npu_mask = ~df['num_npus'].isin(valid_npus)
+    
+    if odd_npu_mask.sum() > 0:
+        print(f"\n⚠️  Found {odd_npu_mask.sum()} rows with odd/non-standard num_npus values:")
+        odd_npu_values = df[odd_npu_mask]['num_npus'].unique()
+        print(f"   Values: {sorted(odd_npu_values)}")
+        
+        # Separate odd and even (valid) records
+        df_valid = df[~odd_npu_mask].copy()
+        df_odd = df[odd_npu_mask].copy()
+        
+        print(f"   → Keeping {len(df_valid)} rows with valid num_npus")
+        print(f"   → Replicating {len(df_odd)} odd-npu rows to nearest valid num_npus")
+        
+        # Replicate odd-npu records to nearest valid NPU counts
+        replicated_dfs = [df_valid]
+        for _, row in df_odd.iterrows():
+            odd_npu = row['num_npus']
+            # Find nearest valid NPU count
+            nearest_npu = min(valid_npus, key=lambda x: abs(x - odd_npu))
+            row_copy = row.copy()
+            row_copy['num_npus'] = nearest_npu
+            replicated_dfs.append(pd.DataFrame([row_copy]))
+        
+        df_replicated = pd.concat(replicated_dfs, ignore_index=True)
+        
+        for odd_val in sorted(odd_npu_values):
+            nearest = min(valid_npus, key=lambda x: abs(x - odd_val))
+            count = (df_odd['num_npus'] == odd_val).sum()
+            print(f"     {int(odd_val)} → {int(nearest)} ({count} records)")
+        
+        df = df_replicated
+        print(f"   → Total after replication: {len(df)} rows")
     
     X = df[feature_cols].copy()  # Create explicit copy to avoid warnings
     y = df[target_col]
@@ -360,8 +441,8 @@ def analyze_feature_importance(model, feature_names, output_dir):
 
 def main():
     parser = argparse.ArgumentParser(description='Train ML model for AstraSim peak memory prediction')
-    parser.add_argument('--input_csv', type=str, default='ml_model/training_data.csv',
-                        help='Input CSV file with training data')
+    parser.add_argument('--input_csv', type=str, default='ml_model/data',
+                        help='Input CSV file or directory with training data files')
     parser.add_argument('--output_dir', type=str, default='ml_model/trained_models',
                         help='Output directory for trained models and plots')
     parser.add_argument('--test_size', type=float, default=0.2,

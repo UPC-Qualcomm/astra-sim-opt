@@ -66,7 +66,7 @@ python ml_model/generate_training_data.py \
     $MICRO_BATCH_FLAG \
     $TEST_FLAG
 
-if [ ! -f ml_model/training_data.csv ]; then
+if [ ! -f ml_model/data/training_data.csv ]; then
     echo "Error: Training data not generated!"
     exit 1
 fi
@@ -80,7 +80,7 @@ echo "Step 2: Training ML models..."
 echo ""
 
 python ml_model/train_model.py \
-    --input_csv ml_model/training_data.csv \
+    --input_csv ml_model/data \
     --output_dir ml_model/trained_models
 
 if [ ! -f ml_model/trained_models/best_model.pkl ]; then
@@ -119,7 +119,7 @@ echo "Pipeline completed successfully!"
 echo "========================================"
 echo ""
 echo "Generated files:"
-echo "  - Training data: ml_model/training_data.csv"
+echo "  - Training data: ml_model/data/training_data.csv"
 echo "  - Trained model: ml_model/trained_models/best_model.pkl"
 echo "  - Model results: ml_model/trained_models/model_results.csv"
 echo "  - Visualizations: ml_model/trained_models/*.png"

@@ -17,10 +17,10 @@ echo " Training ML models..."
 echo ""
 
 python ml_model/train_model.py \
-    --input_csv ml_model/training_data.csv \
-    --output_dir ml_model/trained_models
+    --input_csv ml_model/data \
+    --output_dir ml_model/trained_models_big_data
 
-if [ ! -f ml_model/trained_models/best_model.pkl ]; then
+if [ ! -f ml_model/trained_models_big_data/best_model.pkl ]; then
     echo "Error: Model training failed!"
     exit 1
 fi
@@ -34,7 +34,7 @@ echo "Step 3: Testing prediction..."
 echo ""
 
 python ml_model/predict.py \
-    --model_dir ml_model/trained_models \
+    --model_dir ml_model/trained_models_big_data \
     --din 50000 \
     --dmodel 4096 \
     --dff 16384 \
@@ -56,11 +56,11 @@ echo "Pipeline completed successfully!"
 echo "========================================"
 echo ""
 echo "Generated files:"
-echo "  - Training data: ml_model/training_data.csv"
-echo "  - Trained model: ml_model/trained_models/best_model.pkl"
-echo "  - Model results: ml_model/trained_models/model_results.csv"
-echo "  - Visualizations: ml_model/trained_models/*.png"
+echo "  - Training data: ml_model/data/training_data.csv"
+echo "  - Trained model: ml_model/trained_models_big_data/best_model.pkl"
+echo "  - Model results: ml_model/trained_models_big_data/model_results.csv"
+echo "  - Visualizations: ml_model/trained_models_big_data/*.png"
 echo ""
 echo "To make predictions, use:"
-echo "  python ml_model/predict.py --model_dir ml_model/trained_models [OPTIONS]"
+echo "  python ml_model/predict.py --model_dir ml_model/trained_models_big_data [OPTIONS]"
 echo ""
