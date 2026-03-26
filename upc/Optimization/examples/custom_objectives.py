@@ -16,6 +16,17 @@ import math
 import numpy as np
 
 
+def _set_objective_directions(fn, directions):
+    """
+    Annotate objective callables with per-objective optimization directions.
+
+    Tracker uses this metadata for per-objective threshold pruning in MOO.
+    True/"min" -> minimize, False/"max" -> maximize.
+    """
+    fn.objective_directions = list(directions)
+    return fn
+
+
 def obj_latency_total_network(exec_time, is_oom, metadata, config):
     """
     Multi-objective function optimizing both execution time and network bandwidth.
@@ -255,7 +266,7 @@ def obj_latency_network_raw(exec_time, is_oom, metadata, config):
         return float('inf'), float('inf')
     
     # Convert to more reasonable units
-    exec_time_seconds = exec_time / 1e9  # nanoseconds -> seconds
+    exec_time_seconds = exec_time  # nanoseconds -> seconds
     
     npu_count = config.get('npu_count', 1)
     intra_node_bw = config.get('intra-node-bw', 0)
@@ -273,6 +284,7 @@ def obj_latency_network_raw(exec_time, is_oom, metadata, config):
         inter_bw_total = inter_node_bw * (num_nodes - 1)  # Inter-node links
         total_network_bw = intra_bw_total + inter_bw_total
     
+    print(f"exec_time_seconds: {exec_time_seconds}, total_network_bw: {total_network_bw}")
     # Return raw values - DeepHyper will scale them
     return exec_time_seconds, total_network_bw
 
@@ -418,6 +430,18 @@ def obj_latency_network_power(exec_time, is_oom, metadata, config, power=0.5):
     power_network = np.power(max(0, total_network_bw), power)
     
     return power_time, power_network
+
+
+# Per-objective direction metadata used by SimulationTracker in multi-objective runs.
+_set_objective_directions(obj_latency_total_network, ["min", "min"])
+_set_objective_directions(obj_latency_network, ["min", "min"])
+_set_objective_directions(obj_latency_memory, ["min", "min"])
+_set_objective_directions(obj_network_memory, ["min", "min"])
+_set_objective_directions(obj_latency_network_memory, ["min", "min", "min"])
+_set_objective_directions(obj_latency_network_raw, ["min", "min"])
+_set_objective_directions(obj_latency_network_minmax, ["min", "min"])
+_set_objective_directions(obj_latency_network_sqrt, ["min", "min"])
+_set_objective_directions(obj_latency_network_power, ["min", "min"])
 
 
 # ============================================================================

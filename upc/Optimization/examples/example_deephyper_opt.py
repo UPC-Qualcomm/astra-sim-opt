@@ -150,13 +150,14 @@ def main():
         moo_scalarization_strategy="AugChebyshev",
         moo_scalarization_weight=[0.5, 0.5],
         # Use DeepHyper's built-in scaler for normalization
-        #objective_scaler="minmax"  # Options: "minmax", "standardize", "identity"
+        objective_scaler="minmax",  # Options: 'identity', 'minmax', 'minmaxlog', 'log', 'quantile-uniform'
         # Tracker for early termination (enabled by default)
         enable_tracker=True,
         tracker_kill_multiplier=1.5,
         tracker_initial_threshold=1e15,
         cleanup_batch_size=CLEANUP_BATCH_SIZE,
-        compress_and_clean_is_enabled=COMPRESS_AND_CLEAN_IS_ENABLED
+        compress_and_clean_is_enabled=COMPRESS_AND_CLEAN_IS_ENABLED,
+        search_type = "cbo",  # "cbo" or "random"
     )
     print(f"   Using: {optimizer}")
     if optimizer.tracker:

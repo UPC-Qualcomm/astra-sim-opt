@@ -27,10 +27,10 @@ RUN apt -y install \
 ## Install Python 3.9 from deadsnakes PPA
 RUN add-apt-repository ppa:deadsnakes/ppa -y
 RUN apt -y update
-RUN apt -y install python3.9 python3.9-venv python3.9-dev python3-pip
+RUN apt -y install python3.11 python3.11-venv python3.11-dev python3-pip
 
-## Create Python venv with Python 3.9
-RUN python3.9 -m venv /opt/venv/astra-sim
+## Create Python venv with Python 3.11
+RUN python3.11 -m venv /opt/venv/astra-sim
 ENV PATH="/opt/venv/astra-sim/bin:$PATH"
 RUN pip3 install --upgrade pip
 

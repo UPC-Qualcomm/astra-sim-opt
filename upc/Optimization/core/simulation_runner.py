@@ -220,40 +220,22 @@ class SimulationRunner:
                 print(f"    Running simulation: {workload_file}")
             
             sim_start_time = time.time()  # Track wall clock time
-            result, was_killed = self._run_astrasim(workload_file, suffix=suffix)
+            result, was_killed = self._run_astrasim(workload_file, suffix=suffix, config=config)
             sim_walltime = time.time() - sim_start_time  # Actual wall clock duration
             
             if was_killed:
-                # Simulation was killed early - extract partial results
-                #print(f"\n    🛑 Simulation killed early (exceeded threshold)")
-                if self.verbose:
-                    print(f"       Extracting partial results...")
-                
-                # Try to extract partial execution time from log
-                exec_time, is_oom = self._output_log_parser(workload_file, suffix=suffix)
-                
-                if exec_time is None:
-                    # Use kill threshold as execution time
-                    exec_time = self.tracker.get_kill_threshold() if self.tracker else None
-                    is_oom = False
-                    
-                    if exec_time is None:
-                        if self.verbose:
-                            print("    ⚠️  Could not extract partial execution time")
-                        return None
-                
-                #print(f"    📊 Partial execution time: {exec_time:.2f}s (KILLED)")
-                if self.verbose:
-                    print(f"       (Used as upper bound for optimization)")
-                
-                # Return partial results
+                # The tracker decided this simulation is too slow to be useful.
+                # Do NOT read the partial log — that value is an underestimate of
+                # the true full-run cost and would mislead the optimizer.
+                # Return float('inf') as exec_time: a clear penalty sentinel.
+                print(f"    [Tracker] Simulation killed — PENALTY exec_time=inf")
                 if return_paths:
                     metadata = self._get_simulation_metadata()
                     metadata['was_killed'] = True
                     metadata['sim_walltime'] = sim_walltime
-                    return exec_time, is_oom, file_paths, metadata
+                    return float('inf'), False, file_paths, metadata
                 else:
-                    return exec_time, is_oom
+                    return float('inf'), False
             
             if result != "":
                 if self.verbose:
@@ -384,7 +366,12 @@ class SimulationRunner:
         
         return None
     
-    def _run_astrasim(self, workload_path: str, suffix: Optional[str] = None) -> tuple:
+    def _run_astrasim(
+        self,
+        workload_path: str,
+        suffix: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> tuple:
         """
         Run AstraSim simulation with optional early termination.
         
@@ -456,7 +443,7 @@ class SimulationRunner:
             time.sleep(check_interval)
             
             # Check if simulation should be killed based on issue ticks
-            if self.tracker.should_kill_simulation(trace_file):
+            if self.tracker.should_kill_simulation(trace_file, config=config):
                 if process.poll() is None:
                     # Process is still running — kill it
                     result['killed'] = True

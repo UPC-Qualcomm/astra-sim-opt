@@ -21,7 +21,7 @@ Example:
 """
 import math
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List, Union
 
 PENALTY = float('inf')
 
@@ -664,7 +664,8 @@ class CustomObjective(ObjectiveFunction):
         compute_fn: Callable[[float, Dict[str, Any]], float], 
         name: str = "Custom Objective",
         minimize: bool = True,
-        is_multi_objective: bool = False
+        is_multi_objective: bool = False,
+        objective_directions: Optional[List[Union[bool, str]]] = None,
     ):
         """
         Initialize custom objective.
@@ -674,10 +675,17 @@ class CustomObjective(ObjectiveFunction):
             name: Name for this objective
             minimize: Whether to minimize (True) or maximize (False)
             is_multi_objective: Whether this objective returns multiple values (tuple)
+            objective_directions: Optional per-objective directions for MOO.
+                                 Use booleans (True=minimize, False=maximize)
+                                 or strings ("min"/"max"). If omitted, this
+                                 will be inferred from compute_fn.objective_directions
+                                 when present.
         """
         super().__init__(name, minimize)
         self.compute_fn = compute_fn
         self.is_multi_objective = is_multi_objective
+        inferred_directions = getattr(compute_fn, "objective_directions", None)
+        self.objective_directions = objective_directions if objective_directions is not None else inferred_directions
     
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any], config: Optional[Dict[str, Any]] = None):
         """Call user-provided compute function with all parameters including config."""

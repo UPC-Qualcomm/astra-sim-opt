@@ -24,6 +24,11 @@ try:
 except ImportError:
     DEEPHYPER_AVAILABLE = False
 
+# Sentinel returned to DeepHyper for any run that must not influence the
+# surrogate model or Pareto front (killed, OOM, or otherwise invalid).
+# DeepHyper treats this as the worst possible score in maximisation space.
+PENALTY = -1e10
+
 
 def _deephyper_evaluate_wrapper(job, optimizer_state):
     """Wrapper for DeepHyper evaluation. Returns objective value or 'F' for failures."""
@@ -73,13 +78,6 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
             print("    ⚠️  exec_time error")
             return "F"
         
-        # Update tracker threshold only on successful completed runs.
-        # Do not adapt threshold from OOM, killed, or failed simulations.
-        tracker = optimizer_state.get('tracker')
-        sim_failed = bool(metadata.get('sim_failed', False)) if isinstance(metadata, dict) else False
-        if tracker and exec_time is not None and not bool(is_oom) and not was_killed and not sim_failed:
-            tracker.update_threshold(exec_time)
-        
         # Cache exec_time and config files for enrichment
         if 'extra_data_cache' in optimizer_state:
             config_files = {}
@@ -115,6 +113,13 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
             print("    ⚠️  objective error")
             return "F"
 
+        # Update tracker threshold only on successful completed runs.
+        # Do not adapt threshold from OOM, killed, failed, or penalty scores.
+        tracker = optimizer_state.get('tracker')
+        sim_failed = bool(metadata.get('sim_failed', False)) if isinstance(metadata, dict) else False
+        if tracker and exec_time is not None and not bool(is_oom) and not was_killed and not sim_failed:
+            tracker.update_threshold(score)
+
         cleanup_state = optimizer_state.get('periodic_cleanup')
         if cleanup_state is not None:
             with cleanup_state['lock']:
@@ -142,22 +147,35 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
                     force=False,
                 )
         
-        # Handle multi-objective returns (tuple of scores)
+        # Killed simulations: the runner returned exec_time=float('inf'), so
+        # objective.compute() produced inf scores.  Return PENALTY explicitly
+        # as an unconditional guard — regardless of how the objective handles
+        # inf — so killed runs never reach the Pareto front or bias the
+        # surrogate model.
+        if was_killed:
+            if isinstance(score, (tuple, list)):
+                return tuple(PENALTY for _ in score)
+            else:
+                return PENALTY
+
+        # Handle multi-objective returns (tuple of scores).
+        # float() casts are critical: DeepHyper's internal Pareto
+        # computation silently fails when objectives are Python ints
+        # that propagate as int64 in the results CSV.
         if isinstance(score, (tuple, list)):
             objective_values = []
             for s in score:
                 if objective.minimize:
-                    obj_val = -s if s != float('inf') else -1e10
+                    obj_val = float(-s) if s != float('inf') else PENALTY
                 else:
-                    obj_val = s if s != float('inf') else -1e10
+                    obj_val = float(s) if s != float('inf') else PENALTY
                 objective_values.append(obj_val)
             return tuple(objective_values)
         else:
-            # Single objective
             if objective.minimize:
-                objective_value = -score if score != float('inf') else -1e10
+                objective_value = float(-score) if score != float('inf') else PENALTY
             else:
-                objective_value = score if score != float('inf') else -1e10
+                objective_value = float(score) if score != float('inf') else PENALTY
             return objective_value
         
     except Exception as e:
@@ -303,10 +321,29 @@ class DeepHyperOptimizer(BaseOptimizer):
         import random as py_random
         if random_state is not None:
             py_random.seed(random_state)
+            np.random.seed(random_state)
         
         # Framework parameters
         self.n_workers = max(1, n_workers)
         self.evaluator_method = evaluator_method
+
+        # Warn when parallel workers are used, because the order in which they
+        # complete is non-deterministic (OS scheduling, simulation runtime
+        # variance).  Even with a fixed random_state, DeepHyper's surrogate
+        # model updates after each completed batch, so different completion
+        # orderings produce different subsequent samples.  For fully
+        # reproducible runs use n_workers=1.
+        if n_workers > 1 and random_state is not None:
+            import warnings
+            warnings.warn(
+                f"DeepHyperOptimizer: random_state={random_state} is set but "
+                f"n_workers={n_workers} > 1.  Parallel worker completion order "
+                "is non-deterministic, so runs will NOT be exactly reproducible "
+                "even with the same seed.  Set n_workers=1 for fully "
+                "reproducible results (slower).",
+                UserWarning,
+                stacklevel=2,
+            )
         self.search_type = search_type.lower()
         
         if self.search_type not in ["cbo", "random"]:
@@ -394,10 +431,16 @@ class DeepHyperOptimizer(BaseOptimizer):
 
         # Simulation tracker for early termination
         if enable_tracker:
+            tracker_initial = tracker_initial_threshold
+            if not bool(getattr(objective, "minimize", True)) and tracker_initial > 0:
+                tracker_initial = -tracker_initial
+
             self.tracker = SimulationTracker(
-                initial_threshold=tracker_initial_threshold,
+                initial_threshold=tracker_initial,
                 kill_multiplier=tracker_kill_multiplier,
                 verbose=verbose,
+                minimize=bool(getattr(objective, "minimize", True)),
+                objective=objective,
             )
             self.simulation_runner.tracker = self.tracker
             if self.verbose:
@@ -511,9 +554,11 @@ class DeepHyperOptimizer(BaseOptimizer):
 
         # Install smart constraint-aware sampler (first sample valid parallelism,
         # then sample all remaining parameters).
+        rng = None
         if self.random_state is not None:
             np.random.seed(self.random_state)
-        smart_fn = self._make_constrained_sampling_fn()
+            rng = np.random.default_rng(self.random_state)
+        smart_fn = self._make_constrained_sampling_fn(rng)
         if smart_fn is not None:
             problem.set_sampling_fn(smart_fn)
             if self.verbose:
@@ -522,7 +567,7 @@ class DeepHyperOptimizer(BaseOptimizer):
 
         return problem
 
-    def _make_constrained_sampling_fn(self):
+    def _make_constrained_sampling_fn(self, rng):
         """Build a parallelism-first sampler from JSON constraints.
 
         Strategy:
@@ -605,7 +650,7 @@ class DeepHyperOptimizer(BaseOptimizer):
             if k not in {'cluster', 'dp', 'mp', 'sp', 'pp'}
         }
 
-        def _sample_parallelism_for_cluster(cluster_name: str, m: int) -> list:
+        def _sample_parallelism_for_cluster(cluster_name: str, m: int, rng: np.random.Generator) -> list:
             """Sample m valid parallelism tuples for one cluster using self.sampler."""
             space = valid_parallelism_by_cluster[cluster_name]
             if m <= 0:
@@ -619,19 +664,19 @@ class DeepHyperOptimizer(BaseOptimizer):
                 by_dp_mp.setdefault(key, []).append(cfg)
 
             group_keys = list(by_dp_mp.keys())
-            np.random.shuffle(group_keys)
+            rng.shuffle(group_keys)
 
             selected = []
             for key in group_keys[:min(m, len(group_keys))]:
                 group = by_dp_mp[key]
-                selected.append(group[int(np.random.randint(0, len(group)))])
+                selected.append(group[int(rng.integers(0, len(group)))])
 
             # Stage 2: use configured sampler on a shuffled candidate pool
             # so order-sensitive samplers (e.g., grid/lhs) do not bias to dp=1.
             remaining = m - len(selected)
             if remaining > 0:
                 selected_keys = {(c['dp'], c['mp'], c['sp'], c['pp']) for c in selected}
-                perm = np.random.permutation(len(space))
+                perm = rng.permutation(len(space))
                 shuffled_space = [space[i] for i in perm]
                 sampler_pool = [
                     c for c in shuffled_space
@@ -642,9 +687,9 @@ class DeepHyperOptimizer(BaseOptimizer):
 
             # Top-up with replacement if still short.
             while len(selected) < m:
-                selected.append(space[int(np.random.randint(0, len(space)))])
+                selected.append(space[int(rng.integers(0, len(space)))])
 
-            np.random.shuffle(selected)
+            rng.shuffle(selected)
             return selected[:m]
 
         # Precompute cluster weights proportional to number of valid tuples,
@@ -659,14 +704,14 @@ class DeepHyperOptimizer(BaseOptimizer):
             samples = []
             # Choose clusters weighted by their valid-tuple count so that every
             # (cluster, dp, mp, sp, pp) combination has equal sampling probability.
-            cluster_picks = np.random.choice(active_clusters, size=n, p=_cluster_weights).tolist()
+            cluster_picks = rng.choice(active_clusters, size=n, p=_cluster_weights).tolist()
             per_cluster_counts = {}
             for c in cluster_picks:
                 per_cluster_counts[c] = per_cluster_counts.get(c, 0) + 1
 
             sampled_parallelism = {}
             for c, m in per_cluster_counts.items():
-                sampled_parallelism[c] = _sample_parallelism_for_cluster(c, m)
+                sampled_parallelism[c] = _sample_parallelism_for_cluster(c, m, rng)
 
             consumed = {c: 0 for c in per_cluster_counts.keys()}
             for c in cluster_picks:
@@ -685,7 +730,7 @@ class DeepHyperOptimizer(BaseOptimizer):
                 # Then sample every remaining parameter independently.
                 for param_name, values in other_params.items():
                     if values:
-                        config[param_name] = values[int(np.random.randint(0, len(values)))]
+                        config[param_name] = values[int(rng.integers(0, len(values)))]
 
                 samples.append(config)
 
@@ -1021,6 +1066,71 @@ class DeepHyperOptimizer(BaseOptimizer):
 
         return RandomSearch(**random_args)
     
+    def _recompute_pareto_efficient(self) -> None:
+        """Recompute the pareto_efficient column from raw objective values.
+
+        DeepHyper stores objectives in maximisation form (negated for minimise
+        problems) and computes its internal Pareto column incrementally during
+        the search.  That incremental computation can miss true Pareto points
+        when the objective range is skewed (e.g. very slow configs coexisting
+        with fast ones in no-tracker runs).
+
+        This method recomputes the column post-hoc using the final, complete set
+        of evaluated points.
+        """
+        df = self.deephyper_results
+        if df is None or len(df) == 0:
+            return
+
+        if self.objective.is_multi_objective:
+            obj_cols = [c for c in df.columns if c.startswith("objective_")]
+            if len(obj_cols) < 2:
+                return
+        else:
+            obj_cols = ["objective"] if "objective" in df.columns else []
+            if not obj_cols:
+                return
+
+        # Convert to float, filtering out failure markers ("F", NaN, -1e10).
+        objs = df[obj_cols].copy()
+        for col in obj_cols:
+            objs[col] = pd.to_numeric(objs[col], errors="coerce")
+
+        valid_mask = objs.notna().all(axis=1) & (objs.abs() < 9e9).all(axis=1)
+
+        if valid_mask.sum() == 0:
+            df["pareto_efficient"] = False
+            return
+
+        raw = objs[valid_mask].values.astype(float)
+        # Negate back from DeepHyper's maximisation space to minimisation space.
+        minimise_raw = -raw
+
+        n = len(minimise_raw)
+        is_eff = np.ones(n, dtype=bool)
+        for i in range(n):
+            if not is_eff[i]:
+                continue
+            point = minimise_raw[i]
+            other_mask = is_eff.copy()
+            other_mask[i] = False
+            if not other_mask.any():
+                break
+            others = minimise_raw[other_mask]
+            # i is dominated if any other point is ≤ in all dims and < in at least one.
+            if np.any(np.all(others <= point, axis=1) & np.any(others < point, axis=1)):
+                is_eff[i] = False
+
+        pareto_col = np.zeros(len(df), dtype=bool)
+        pareto_col[df.index[valid_mask]] = is_eff
+        df["pareto_efficient"] = pareto_col
+
+        n_pareto = int(pareto_col.sum())
+        n_valid = int(valid_mask.sum())
+        if self.verbose:
+            print(f"   Pareto front recomputed: {n_pareto}/{n_valid} "
+                  f"({n_pareto/max(n_valid,1)*100:.1f}%) Pareto-efficient points")
+
     def _finalize_and_save_results(self, enrichment_verbosity: bool = True) -> bool:
         """Finalize results by enriching with config files and saving to CSV.
         
@@ -1041,6 +1151,13 @@ class DeepHyperOptimizer(BaseOptimizer):
                 print("\n" + "-"*70 + "\nENRICHING RESULTS WITH CONFIG FILES\n" + "-"*70)
             self._enrich_results_with_config_files()
             
+            # Recompute Pareto-efficient flags from the final objective values.
+            # DeepHyper's internal column silently fails when objectives
+            # reach it as int64 (all non-killed runs).  The float() cast in
+            # _deephyper_evaluate_wrapper is the primary fix; this
+            # recomputation is a safety net.
+            #self._recompute_pareto_efficient()
+
             # Save to CSV
             dh_results_path = os.path.join(self.save_dir, self.results_filename)
             self.deephyper_results.to_csv(dh_results_path, index=False)
