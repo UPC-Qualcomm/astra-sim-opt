@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#SBATCH -q large
 set -euo pipefail
 
 EXP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

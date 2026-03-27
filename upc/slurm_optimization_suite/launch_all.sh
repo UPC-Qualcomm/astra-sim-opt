@@ -233,6 +233,7 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
     --chdir "$exp_dir"
     --nodelist "$node"
     --partition "$submit_partition"
+    --qos "large"
     --cpus-per-task "$cpus_per_task"
     --mem-per-cpu "$mem_per_cpu_slurm"
     --output "$logs_dir/slurm-%j.out"
