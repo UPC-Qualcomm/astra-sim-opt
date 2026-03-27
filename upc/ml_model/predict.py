@@ -74,6 +74,47 @@ def prepare_features(config):
     
     features['model_size_ratio'] = features['dmodel'] / features['din']
     features['ff_expansion_ratio'] = features['dff'] / features['dmodel']
+
+    # Domain-informed memory/communication proxies
+    features['tokens_global'] = features['batch'] * features['seq']
+    features['tokens_per_dp_rank'] = features['tokens_global'] / features['dp']
+    features['attention_matrix_proxy'] = features['batch'] * features['head'] * (features['seq'] ** 2)
+
+    # Approximate transformer parameter components
+    features['attn_params_proxy'] = 4 * features['dmodel'] * features['dmodel'] * features['num_stacks']
+    features['ffn_params_proxy'] = 8 * features['dmodel'] * features['dmodel'] * features['num_stacks']
+    features['embedding_params_proxy'] = features['din'] * features['dmodel']
+    features['model_params_proxy'] = (
+        features['attn_params_proxy'] + features['ffn_params_proxy'] + features['embedding_params_proxy']
+    )
+
+    # Parallelism-aware per-rank memory pressure
+    features['per_npu_params_dp_mp_pp'] = features['model_params_proxy'] / (features['dp'] * features['mp'] * features['pp'])
+    features['per_npu_activation_dp'] = features['activation_size_estimate'] / features['dp']
+    features['optimizer_state_proxy'] = 2.0 * features['per_npu_params_dp_mp_pp']
+
+    # Communication/buffering pressure
+    features['allreduce_volume_proxy'] = features['model_params_proxy'] / features['dp']
+    features['pipeline_buffer_proxy'] = (features['micro_batch'] * features['seq'] * features['dmodel']) / features['pp']
+    features['comm_compute_pressure'] = features['allreduce_volume_proxy'] / (features['tokens_global'] + 1.0)
+
+    # Regime and interaction features
+    features['log_num_npus'] = np.log1p(features['num_npus'])
+    features['large_cluster_flag'] = int(features['num_npus'] >= 256)
+    features['seq_per_pipeline_stage'] = features['seq'] / features['pp']
+    features['batch_seq_per_dp'] = (features['batch'] * features['seq']) / features['dp']
+    features['parallelism_imbalance'] = max(features['dp'], features['mp'], features['sp'], features['pp']) / min(features['dp'], features['mp'], features['sp'], features['pp'])
+
+    # Log transforms for new skewed proxies
+    features['log_tokens_global'] = np.log1p(features['tokens_global'])
+    features['log_attention_matrix_proxy'] = np.log1p(features['attention_matrix_proxy'])
+    features['log_model_params_proxy'] = np.log1p(features['model_params_proxy'])
+    features['log_per_npu_params_dp_mp_pp'] = np.log1p(features['per_npu_params_dp_mp_pp'])
+    features['log_per_npu_activation_dp'] = np.log1p(features['per_npu_activation_dp'])
+    features['log_allreduce_volume_proxy'] = np.log1p(features['allreduce_volume_proxy'])
+    features['log_pipeline_buffer_proxy'] = np.log1p(features['pipeline_buffer_proxy'])
+    features['log_comm_compute_pressure'] = np.log1p(features['comm_compute_pressure'])
+    features['log_batch_seq_per_dp'] = np.log1p(features['batch_seq_per_dp'])
     
     return features
 

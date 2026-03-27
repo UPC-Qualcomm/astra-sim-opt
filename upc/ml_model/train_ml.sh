@@ -11,6 +11,17 @@ echo "========================================"
 
 cd "$(dirname "$0")/.."
 
+TUNE_PEAK_PER_NPU_THRESHOLD=${TUNE_PEAK_PER_NPU_THRESHOLD:-true}
+MIN_KEEP_RATIO=${MIN_KEEP_RATIO:-0.85}
+
+if [ "$TUNE_PEAK_PER_NPU_THRESHOLD" = "true" ]; then
+    OUTLIER_FLAGS="--tune_peak_per_npu_threshold --min_keep_ratio $MIN_KEEP_RATIO"
+    echo "Outlier filter threshold: AUTO-TUNED (min_keep_ratio=$MIN_KEEP_RATIO)"
+else
+    OUTLIER_FLAGS=""
+    echo "Outlier filter threshold: DISABLED"
+fi
+
 #  Train model
 echo ""
 echo " Training ML models..."
@@ -18,7 +29,8 @@ echo ""
 
 python ml_model/train_model.py \
     --input_csv ml_model/data \
-    --output_dir ml_model/trained_models_big_data
+    --output_dir ml_model/trained_models_big_data \
+    $OUTLIER_FLAGS
 
 if [ ! -f ml_model/trained_models_big_data/best_model.pkl ]; then
     echo "Error: Model training failed!"

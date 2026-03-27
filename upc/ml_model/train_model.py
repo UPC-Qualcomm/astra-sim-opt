@@ -22,9 +22,16 @@ from catboost import CatBoostRegressor
 from sklearn.model_selection import RandomizedSearchCV
 from scipy.stats import randint, uniform
 
-def load_and_prepare_data(csv_path_or_dir):
-    """Load training data from single file or all files in directory and prepare features."""
-    
+BASE_FEATURE_COLS = [
+    'din', 'dmodel', 'dff', 'batch', 'micro_batch', 'seq', 'head', 'num_stacks',
+    'dp', 'mp', 'sp', 'pp', 'fsdp', 'num_npus'
+]
+TARGET_COL = 'avg_peak_memory_gb'
+VALID_NPUS = {16, 32, 64, 128, 256, 512, 1024, 2048}
+
+def load_and_clean_dataframe(csv_path_or_dir):
+    """Load data from file/dir and apply NaN + odd-num_npus cleanup."""
+
     # Determine if input is a file or directory
     if os.path.isdir(csv_path_or_dir):
         data_dir = csv_path_or_dir
@@ -54,35 +61,25 @@ def load_and_prepare_data(csv_path_or_dir):
         print(f"\n📄 Loading data from file: {csv_path_or_dir}")
         df = pd.read_csv(csv_path_or_dir)
     
-    # Feature columns
-    feature_cols = [
-        'din', 'dmodel', 'dff', 'batch', 'micro_batch', 'seq', 'head', 'num_stacks',
-        'dp', 'mp', 'sp', 'pp', 'fsdp', 'num_npus'
-    ]
-    
-    # Target column - use log transform for better prediction
-    target_col = 'avg_peak_memory_gb'
-    
     # Report initial state
     initial_rows = len(df)
     print(f"\n📊 Initial dataset: {initial_rows} rows")
     
     # Check for missing values
-    missing_counts = df[feature_cols + [target_col]].isnull().sum()
+    missing_counts = df[BASE_FEATURE_COLS + [TARGET_COL]].isnull().sum()
     if missing_counts.sum() > 0:
         print(f"\n⚠️  Missing values found:")
         for col, count in missing_counts[missing_counts > 0].items():
             print(f"   {col}: {count} NaN values")
         
         # Remove rows with NaN values
-        df_cleaned = df.dropna(subset=feature_cols + [target_col])
+        df_cleaned = df.dropna(subset=BASE_FEATURE_COLS + [TARGET_COL])
         removed_nan = initial_rows - len(df_cleaned)
         print(f"   → Removed {removed_nan} rows with NaN values")
         df = df_cleaned
     
     # Identify odd num_npus values (not powers of 2)
-    valid_npus = {16, 32, 64, 128, 256, 512, 1024, 2048}
-    odd_npu_mask = ~df['num_npus'].isin(valid_npus)
+    odd_npu_mask = ~df['num_npus'].isin(VALID_NPUS)
     
     if odd_npu_mask.sum() > 0:
         print(f"\n⚠️  Found {odd_npu_mask.sum()} rows with odd/non-standard num_npus values:")
@@ -101,7 +98,7 @@ def load_and_prepare_data(csv_path_or_dir):
         for _, row in df_odd.iterrows():
             odd_npu = row['num_npus']
             # Find nearest valid NPU count
-            nearest_npu = min(valid_npus, key=lambda x: abs(x - odd_npu))
+            nearest_npu = min(VALID_NPUS, key=lambda x: abs(x - odd_npu))
             row_copy = row.copy()
             row_copy['num_npus'] = nearest_npu
             replicated_dfs.append(pd.DataFrame([row_copy]))
@@ -109,15 +106,31 @@ def load_and_prepare_data(csv_path_or_dir):
         df_replicated = pd.concat(replicated_dfs, ignore_index=True)
         
         for odd_val in sorted(odd_npu_values):
-            nearest = min(valid_npus, key=lambda x: abs(x - odd_val))
+            nearest = min(VALID_NPUS, key=lambda x: abs(x - odd_val))
             count = (df_odd['num_npus'] == odd_val).sum()
             print(f"     {int(odd_val)} → {int(nearest)} ({count} records)")
         
         df = df_replicated
         print(f"   → Total after replication: {len(df)} rows")
-    
-    X = df[feature_cols].copy()  # Create explicit copy to avoid warnings
-    y = df[target_col]
+
+    return df
+
+def filter_outliers_by_peak_per_npu(df, threshold):
+    """Keep rows where peak_memory/num_npus <= threshold."""
+    before = len(df)
+    ratio = df[TARGET_COL] / df['num_npus']
+    filtered = df[ratio <= threshold].copy()
+    removed = before - len(filtered)
+    print(f"\n🧹 Outlier filtering enabled")
+    print(f"   Condition: {TARGET_COL}/num_npus <= {threshold:.6f}")
+    print(f"   Kept: {len(filtered)} / {before} rows ({len(filtered)/before*100:.2f}%)")
+    print(f"   Removed outliers: {removed}")
+    return filtered
+
+def build_features_from_dataframe(df):
+    """Build training features and log-transformed target from cleaned dataframe."""
+    X = df[BASE_FEATURE_COLS].copy()  # Create explicit copy to avoid warnings
+    y = df[TARGET_COL]
     
     # Apply log1p transform to target (log(1 + x) to handle zeros)
     y = np.log1p(y)
@@ -176,8 +189,135 @@ def load_and_prepare_data(csv_path_or_dir):
     # Memory scaling factors
     X.loc[:, 'model_size_ratio'] = X['dmodel'] / X['din']
     X.loc[:, 'ff_expansion_ratio'] = X['dff'] / X['dmodel']
-    
+
+    # Domain-informed memory/communication proxies
+    X.loc[:, 'tokens_global'] = X['batch'] * X['seq']
+    X.loc[:, 'tokens_per_dp_rank'] = X['tokens_global'] / X['dp']
+    X.loc[:, 'attention_matrix_proxy'] = X['batch'] * X['head'] * (X['seq'] ** 2)
+
+    # Approximate transformer parameter components
+    X.loc[:, 'attn_params_proxy'] = 4 * X['dmodel'] * X['dmodel'] * X['num_stacks']
+    X.loc[:, 'ffn_params_proxy'] = 8 * X['dmodel'] * X['dmodel'] * X['num_stacks']
+    X.loc[:, 'embedding_params_proxy'] = X['din'] * X['dmodel']
+    X.loc[:, 'model_params_proxy'] = (
+        X['attn_params_proxy'] + X['ffn_params_proxy'] + X['embedding_params_proxy']
+    )
+
+    # Parallelism-aware per-rank memory pressure
+    X.loc[:, 'per_npu_params_dp_mp_pp'] = X['model_params_proxy'] / (X['dp'] * X['mp'] * X['pp'])
+    X.loc[:, 'per_npu_activation_dp'] = X['activation_size_estimate'] / X['dp']
+    X.loc[:, 'optimizer_state_proxy'] = 2.0 * X['per_npu_params_dp_mp_pp']
+
+    # Communication/buffering pressure
+    X.loc[:, 'allreduce_volume_proxy'] = X['model_params_proxy'] / X['dp']
+    X.loc[:, 'pipeline_buffer_proxy'] = (X['micro_batch'] * X['seq'] * X['dmodel']) / X['pp']
+    X.loc[:, 'comm_compute_pressure'] = X['allreduce_volume_proxy'] / (X['tokens_global'] + 1.0)
+
+    # Regime and interaction features
+    X.loc[:, 'log_num_npus'] = np.log1p(X['num_npus'])
+    X.loc[:, 'large_cluster_flag'] = (X['num_npus'] >= 256).astype(int)
+    X.loc[:, 'seq_per_pipeline_stage'] = X['seq'] / X['pp']
+    X.loc[:, 'batch_seq_per_dp'] = (X['batch'] * X['seq']) / X['dp']
+    X.loc[:, 'parallelism_imbalance'] = X[['dp', 'mp', 'sp', 'pp']].max(axis=1) / X[['dp', 'mp', 'sp', 'pp']].min(axis=1)
+
+    # Log transforms for new skewed proxies
+    X.loc[:, 'log_tokens_global'] = np.log1p(X['tokens_global'])
+    X.loc[:, 'log_attention_matrix_proxy'] = np.log1p(X['attention_matrix_proxy'])
+    X.loc[:, 'log_model_params_proxy'] = np.log1p(X['model_params_proxy'])
+    X.loc[:, 'log_per_npu_params_dp_mp_pp'] = np.log1p(X['per_npu_params_dp_mp_pp'])
+    X.loc[:, 'log_per_npu_activation_dp'] = np.log1p(X['per_npu_activation_dp'])
+    X.loc[:, 'log_allreduce_volume_proxy'] = np.log1p(X['allreduce_volume_proxy'])
+    X.loc[:, 'log_pipeline_buffer_proxy'] = np.log1p(X['pipeline_buffer_proxy'])
+    X.loc[:, 'log_comm_compute_pressure'] = np.log1p(X['comm_compute_pressure'])
+    X.loc[:, 'log_batch_seq_per_dp'] = np.log1p(X['batch_seq_per_dp'])
+
+    return X, y
+
+def load_and_prepare_data(csv_path_or_dir, peak_per_npu_threshold=None):
+    """Load training data, optionally filter outliers, and prepare features."""
+    df = load_and_clean_dataframe(csv_path_or_dir)
+
+    if peak_per_npu_threshold is not None:
+        df = filter_outliers_by_peak_per_npu(df, peak_per_npu_threshold)
+
+    X, y = build_features_from_dataframe(df)
+
     return X, y, df
+
+def tune_peak_per_npu_threshold(csv_path_or_dir, test_size=0.2, min_keep_ratio=0.85):
+    """Tune outlier threshold using validation RMSE in log-space on a proxy model."""
+    print("\n🔍 Tuning peak_per_npu outlier threshold...")
+    df = load_and_clean_dataframe(csv_path_or_dir)
+
+    ratio = df[TARGET_COL] / df['num_npus']
+    quantiles = [0.90, 0.92, 0.94, 0.95, 0.96, 0.97, 0.98, 0.985, 0.99, 0.995, 0.999]
+    candidates = sorted(set([float(np.quantile(ratio, q)) for q in quantiles] + [float(ratio.max())]))
+
+    tuning_rows = []
+    for threshold in candidates:
+        df_filtered = df[ratio <= threshold].copy()
+        keep_ratio = len(df_filtered) / len(df)
+
+        if keep_ratio < min_keep_ratio:
+            continue
+        if len(df_filtered) < 500:
+            continue
+        npu_counts = df_filtered['num_npus'].value_counts()
+        if (npu_counts < 2).any():
+            continue
+
+        X, y = build_features_from_dataframe(df_filtered)
+
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42, stratify=X['num_npus']
+            )
+        except ValueError:
+            continue
+
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+
+        X_train_scaled = pd.DataFrame(X_train_scaled, columns=X.columns, index=X_train.index)
+        X_test_scaled = pd.DataFrame(X_test_scaled, columns=X.columns, index=X_test.index)
+
+        proxy_model = GradientBoostingRegressor(
+            n_estimators=150,
+            max_depth=4,
+            learning_rate=0.05,
+            random_state=42
+        )
+        proxy_model.fit(X_train_scaled, y_train)
+        y_pred = proxy_model.predict(X_test_scaled)
+        rmse_log = np.sqrt(mean_squared_error(y_test, y_pred))
+
+        tuning_rows.append({
+            'threshold': threshold,
+            'rmse_log': rmse_log,
+            'kept_rows': len(df_filtered),
+            'keep_ratio': keep_ratio,
+        })
+
+    if not tuning_rows:
+        fallback = float(np.quantile(ratio, 0.995))
+        print(f"   No valid threshold candidate satisfied constraints. Using fallback: {fallback:.6f}")
+        return fallback
+
+    tuning_df = pd.DataFrame(tuning_rows).sort_values('rmse_log').reset_index(drop=True)
+    best = tuning_df.iloc[0]
+
+    print("\n   Threshold tuning leaderboard (top 5):")
+    top_n = min(5, len(tuning_df))
+    for i in range(top_n):
+        row = tuning_df.iloc[i]
+        print(
+            f"   {i+1}. thr={row['threshold']:.6f} | rmse_log={row['rmse_log']:.4f} | "
+            f"kept={int(row['kept_rows'])} ({row['keep_ratio']*100:.2f}%)"
+        )
+
+    print(f"\n   ✅ Selected threshold: {best['threshold']:.6f} (proxy rmse_log={best['rmse_log']:.4f})")
+    return float(best['threshold'])
 
 def train_multiple_models(X_train, X_test, y_train, y_test):
     """Train multiple models and compare performance."""
@@ -298,8 +438,9 @@ def train_multiple_models(X_train, X_test, y_train, y_test):
         # Cross-validation on training set
         cv_scores = cross_val_score(model, X_train, y_train, cv=5, 
                                      scoring='neg_mean_squared_error', n_jobs=-1)
-        cv_rmse_log = np.sqrt(-cv_scores.mean())
-        cv_rmse_std_log = np.sqrt(cv_scores.std())
+        cv_rmse_folds = np.sqrt(-cv_scores)
+        cv_rmse_log = cv_rmse_folds.mean()
+        cv_rmse_std_log = cv_rmse_folds.std()
         
         model.fit(X_train, y_train)
         
@@ -509,6 +650,12 @@ def main():
                         help='Output directory for trained models and plots')
     parser.add_argument('--test_size', type=float, default=0.2,
                         help='Fraction of data to use for testing')
+    parser.add_argument('--peak_per_npu_threshold', type=float, default=None,
+                        help='Keep rows with avg_peak_memory_gb/num_npus <= this threshold')
+    parser.add_argument('--tune_peak_per_npu_threshold', action='store_true',
+                        help='Auto-tune peak-per-NPU threshold using validation RMSE in log space')
+    parser.add_argument('--min_keep_ratio', type=float, default=0.85,
+                        help='Minimum data keep ratio when tuning threshold (default: 0.85)')
     
     args = parser.parse_args()
     
@@ -518,9 +665,21 @@ def main():
     output_dir = os.path.join(base_dir, args.output_dir)
     
     os.makedirs(output_dir, exist_ok=True)
+
+    selected_threshold = args.peak_per_npu_threshold
+    if selected_threshold is None and args.tune_peak_per_npu_threshold:
+        selected_threshold = tune_peak_per_npu_threshold(
+            input_path,
+            test_size=args.test_size,
+            min_keep_ratio=args.min_keep_ratio
+        )
+    elif selected_threshold is not None:
+        print(f"\nUsing user-provided peak_per_npu threshold: {selected_threshold:.6f}")
+    else:
+        print("\nOutlier filter: disabled")
     
     print("Loading and preparing data...")
-    X, y, df = load_and_prepare_data(input_path)
+    X, y, df = load_and_prepare_data(input_path, peak_per_npu_threshold=selected_threshold)
     
     print(f"\nDataset shape: {X.shape}")
     print(f"Target: log(peak_memory_gb + 1)")
