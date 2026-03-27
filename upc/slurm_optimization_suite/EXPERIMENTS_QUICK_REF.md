@@ -187,8 +187,8 @@ bash launch_all.sh --max-jobs 10
 ## Default Settings Per Experiment
 
 ```bash
-BUDGET=100              # 100 evaluations per experiment
-INIT_SAMPLES=20         # 20 random initial samples
+BUDGET=500              # 100 evaluations per experiment
+INIT_SAMPLES=50         # 20 random initial samples
 N_WORKERS=8             # 8 parallel workers
 TOP_K=10                # Keep top 10 checkpoints
 CLEANUP_BATCH_SIZE=20   # Cleanup every 20 evaluations

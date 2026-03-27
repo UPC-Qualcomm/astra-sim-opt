@@ -12,8 +12,8 @@ NODE_STATES="idle,mix"
 
 # Global defaults (can be overridden per experiment in config.env)
 DEFAULT_CORES_PERCENT=32
-DEFAULT_MEM_PER_CORE_GB_SMALL=4
-DEFAULT_MEM_PER_CORE_GB_LARGE=10
+DEFAULT_MEM_PER_CORE_GB=2
+MAX_CPUS_PER_EXPERIMENT=8
 
 usage() {
   cat <<USAGE
@@ -23,7 +23,7 @@ Options:
   --dry-run            Print assignments and sbatch commands without submitting.
   --partition PART     Force SLURM partition for all jobs.
   --max-jobs N         Submit at most N experiments (in manifest order).
-  --allow-node-reuse   Reuse nodes round-robin if experiments > available nodes.
+  --allow-node-reuse   Compatibility flag (scheduler already packs multiple jobs per node).
 USAGE
 }
 
@@ -104,13 +104,6 @@ if [[ ${#NODES[@]} -eq 0 ]]; then
   exit 1
 fi
 
-if [[ "$ALLOW_NODE_REUSE" -ne 1 ]] && [[ ${#EXPERIMENT_PATHS[@]} -gt ${#NODES[@]} ]]; then
-  echo "Not enough available nodes for one-to-one assignment." >&2
-  echo "Experiments: ${#EXPERIMENT_PATHS[@]}, nodes: ${#NODES[@]}" >&2
-  echo "Either reduce jobs with --max-jobs or enable --allow-node-reuse." >&2
-  exit 1
-fi
-
 ASSIGNMENT_CSV="$LAUNCH_LOG_DIR/assignments.csv"
 cat > "$ASSIGNMENT_CSV" <<CSV
 experiment,node,partition,node_cores_total,node_mem_total_mb,node_cores_free,node_mem_free_mb,cpus_per_task,mem_per_cpu_gb,mem_per_cpu_slurm,job_name,submit_status,job_id
@@ -145,6 +138,44 @@ declare -i node_idx=0
 submitted=0
 failed=0
 
+NODE_CORES_TOTAL_RUNTIME=()
+NODE_MEM_TOTAL_RUNTIME=()
+NODE_FREE_CORES_INITIAL=()
+NODE_FREE_MEM_INITIAL_MB=()
+NODE_POOL_CPUS=()
+NODE_REMAINING_CPUS=()
+NODE_REMAINING_MEM_MB=()
+NODE_ASSIGNED_JOBS=()
+NODE_ASSIGNED_CPUS=()
+
+# Build per-node scheduling pool based on 32% of currently free CPUs.
+for i in "${!NODES[@]}"; do
+  resource_line="$(get_node_free_resources "${NODES[$i]}")"
+  IFS='|' read -r node_cores_total node_mem_total_mb node_cores_free node_mem_free_mb <<< "$resource_line"
+
+  if [[ "$node_cores_total" -le 0 ]]; then
+    node_cores_total="${NODE_CORES[$i]}"
+    node_cores_free="${NODE_CORES[$i]}"
+  fi
+  if [[ "$node_mem_total_mb" -le 0 ]]; then
+    node_mem_total_mb="${NODE_MEM_MB[$i]}"
+    node_mem_free_mb="${NODE_MEM_MB[$i]}"
+  fi
+
+  pool_cpus=$(( node_cores_free * DEFAULT_CORES_PERCENT / 100 ))
+  (( pool_cpus < 1 )) && pool_cpus=1
+
+  NODE_CORES_TOTAL_RUNTIME+=("$node_cores_total")
+  NODE_MEM_TOTAL_RUNTIME+=("$node_mem_total_mb")
+  NODE_FREE_CORES_INITIAL+=("$node_cores_free")
+  NODE_FREE_MEM_INITIAL_MB+=("$node_mem_free_mb")
+  NODE_POOL_CPUS+=("$pool_cpus")
+  NODE_REMAINING_CPUS+=("$pool_cpus")
+  NODE_REMAINING_MEM_MB+=("$node_mem_free_mb")
+  NODE_ASSIGNED_JOBS+=("0")
+  NODE_ASSIGNED_CPUS+=("0")
+done
+
 for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
   cfg="$exp_dir/config.env"
   run_script="$exp_dir/run_experiment.sh"
@@ -158,62 +189,75 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
   # shellcheck disable=SC1090
   source "$cfg"
 
-  if [[ "$ALLOW_NODE_REUSE" -eq 1 ]]; then
-    node_pos=$((node_idx % ${#NODES[@]}))
-  else
-    node_pos=$node_idx
-  fi
-
-  node="${NODES[$node_pos]}"
-  partition="${PARTITIONS[$node_pos]}"
-  state_cores="${NODE_CORES[$node_pos]}"
-  state_mem_mb="${NODE_MEM_MB[$node_pos]}"
-  ((node_idx+=1))
-
-  resource_line="$(get_node_free_resources "$node")"
-  IFS='|' read -r node_cores_total node_mem_total_mb node_cores_free node_mem_free_mb <<< "$resource_line"
-  if [[ "$node_cores_total" -le 0 ]]; then
-    node_cores_total="$state_cores"
-    node_cores_free="$state_cores"
-  fi
-  if [[ "$node_mem_total_mb" -le 0 ]]; then
-    node_mem_total_mb="$state_mem_mb"
-    node_mem_free_mb="$state_mem_mb"
-  fi
-
-  cores_percent="${CORES_PERCENT:-$DEFAULT_CORES_PERCENT}"
   cpus_override="${CPUS_PER_TASK_OVERRIDE:-}"
   mem_override="${MEM_PER_CPU_GB_OVERRIDE:-}"
-
-  if [[ -n "$cpus_override" ]]; then
-    cpus_per_task="$cpus_override"
-  else
-    cpus_per_task=$(( node_cores_free * cores_percent / 100 ))
-    (( cpus_per_task < 1 )) && cpus_per_task=1
-  fi
 
   if [[ -n "$mem_override" ]]; then
     mem_per_cpu_gb="$mem_override"
   else
-    if [[ "${NUM_NPUS:-0}" -ge 1024 ]]; then
-      mem_per_cpu_gb="$DEFAULT_MEM_PER_CORE_GB_LARGE"
+    mem_per_cpu_gb="$DEFAULT_MEM_PER_CORE_GB"
+  fi
+
+  # Choose a node slot: each node can host multiple experiments,
+  # consuming only 32% of its free CPUs in chunks of up to 8 CPUs/job.
+  selected_node_pos=-1
+  selected_cpus=0
+  selected_req_mem_mb=0
+
+  for ((try_i=0; try_i<${#NODES[@]}; try_i++)); do
+    node_pos=$(( (node_idx + try_i) % ${#NODES[@]} ))
+    remaining_cpus="${NODE_REMAINING_CPUS[$node_pos]}"
+    remaining_mem_mb="${NODE_REMAINING_MEM_MB[$node_pos]}"
+    (( remaining_cpus < 1 )) && continue
+
+    if [[ -n "$cpus_override" ]]; then
+      candidate_cpus="$cpus_override"
+      (( candidate_cpus > remaining_cpus )) && candidate_cpus="$remaining_cpus"
     else
-      mem_per_cpu_gb="$DEFAULT_MEM_PER_CORE_GB_SMALL"
+      candidate_cpus="$remaining_cpus"
+      (( candidate_cpus > MAX_CPUS_PER_EXPERIMENT )) && candidate_cpus="$MAX_CPUS_PER_EXPERIMENT"
     fi
+
+    (( candidate_cpus < 1 )) && continue
+    candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
+
+    if (( candidate_req_mem_mb > remaining_mem_mb )); then
+      max_cpus_by_mem=$(( remaining_mem_mb / (mem_per_cpu_gb * 1024) ))
+      (( max_cpus_by_mem < 1 )) && continue
+      (( max_cpus_by_mem < candidate_cpus )) && candidate_cpus="$max_cpus_by_mem"
+      candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
+    fi
+
+    selected_node_pos="$node_pos"
+    selected_cpus="$candidate_cpus"
+    selected_req_mem_mb="$candidate_req_mem_mb"
+    break
+  done
+
+  if (( selected_node_pos < 0 )); then
+    echo "FAILED scheduling $(basename "$exp_dir"): no remaining 32%-pool capacity on available nodes" >&2
+    echo "$(basename "$exp_dir"),N/A,N/A,0,0,0,0,0,$mem_per_cpu_gb,${mem_per_cpu_gb}G,${JOB_NAME:-$(basename "$exp_dir")},FAILED," >> "$ASSIGNMENT_CSV"
+    ((failed+=1))
+    continue
   fi
 
-  # Ensure request fits node memory. If not, reduce cpus_per_task.
-  requested_mem_mb=$(( cpus_per_task * mem_per_cpu_gb * 1024 ))
-  if (( requested_mem_mb > node_mem_free_mb )); then
-    max_cpus_by_mem=$(( node_mem_free_mb / (mem_per_cpu_gb * 1024) ))
-    (( max_cpus_by_mem < 1 )) && max_cpus_by_mem=1
-    cpus_per_task="$max_cpus_by_mem"
-  fi
+  node_pos="$selected_node_pos"
+  node="${NODES[$node_pos]}"
+  partition="${PARTITIONS[$node_pos]}"
+  node_cores_total="${NODE_CORES_TOTAL_RUNTIME[$node_pos]}"
+  node_mem_total_mb="${NODE_MEM_TOTAL_RUNTIME[$node_pos]}"
+  node_cores_free="${NODE_FREE_CORES_INITIAL[$node_pos]}"
+  node_mem_free_mb="${NODE_FREE_MEM_INITIAL_MB[$node_pos]}"
+  cpus_per_task="$selected_cpus"
+  requested_mem_mb="$selected_req_mem_mb"
 
-  if (( cpus_per_task > node_cores_free )); then
-    cpus_per_task="$node_cores_free"
-    (( cpus_per_task < 1 )) && cpus_per_task=1
-  fi
+  NODE_REMAINING_CPUS[$node_pos]=$(( ${NODE_REMAINING_CPUS[$node_pos]} - cpus_per_task ))
+  NODE_REMAINING_MEM_MB[$node_pos]=$(( ${NODE_REMAINING_MEM_MB[$node_pos]} - requested_mem_mb ))
+  NODE_ASSIGNED_JOBS[$node_pos]=$(( ${NODE_ASSIGNED_JOBS[$node_pos]} + 1 ))
+  NODE_ASSIGNED_CPUS[$node_pos]=$(( ${NODE_ASSIGNED_CPUS[$node_pos]} + cpus_per_task ))
+  (( NODE_REMAINING_CPUS[$node_pos] < 0 )) && NODE_REMAINING_CPUS[$node_pos]=0
+  (( NODE_REMAINING_MEM_MB[$node_pos] < 0 )) && NODE_REMAINING_MEM_MB[$node_pos]=0
+  node_idx=$(( node_pos + 1 ))
 
   mem_per_cpu_slurm="${mem_per_cpu_gb}G"
   job_name="${JOB_NAME:-$(basename "$exp_dir")}"
@@ -236,6 +280,7 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
     --qos "large"
     --cpus-per-task "$cpus_per_task"
     --mem-per-cpu "$mem_per_cpu_slurm"
+    --export "ALL,N_WORKERS_OVERRIDE=$cpus_per_task"
     --output "$logs_dir/slurm-%j.out"
     --error "$logs_dir/slurm-%j.err"
     "$run_script"
@@ -261,6 +306,17 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       ((failed+=1))
     fi
   fi
+done
+
+echo
+echo "Per-node scheduling summary"
+echo "node,partition,jobs_assigned,pool_cpus,cpus_assigned,cpus_remaining,mem_free_initial_mb,mem_used_mb,mem_remaining_mb"
+for i in "${!NODES[@]}"; do
+  mem_free_initial_mb="${NODE_FREE_MEM_INITIAL_MB[$i]}"
+  mem_remaining_mb="${NODE_REMAINING_MEM_MB[$i]}"
+  mem_used_mb=$(( mem_free_initial_mb - mem_remaining_mb ))
+  (( mem_used_mb < 0 )) && mem_used_mb=0
+  echo "${NODES[$i]},${PARTITIONS[$i]},${NODE_ASSIGNED_JOBS[$i]},${NODE_POOL_CPUS[$i]},${NODE_ASSIGNED_CPUS[$i]},${NODE_REMAINING_CPUS[$i]},${mem_free_initial_mb},${mem_used_mb},${mem_remaining_mb}"
 done
 
 echo

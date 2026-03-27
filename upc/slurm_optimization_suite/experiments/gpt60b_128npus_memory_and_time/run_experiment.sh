@@ -62,6 +62,8 @@ if [[ -n "${SLURM_CPUS_PER_TASK:-}" ]]; then
   export NUMEXPR_NUM_THREADS="$SLURM_CPUS_PER_TASK"
 fi
 
+N_WORKERS_EFFECTIVE="${N_WORKERS_OVERRIDE:-${SLURM_CPUS_PER_TASK:-$N_WORKERS}}"
+
 TS="$(date +%Y%m%d_%H%M%S)"
 RUN_PREFIX="$RESULT_FOLDER_PREFIX/run_${TS}"
 mkdir -p "$RUN_PREFIX"
@@ -81,7 +83,7 @@ time python "$SWEEP_SCRIPT" \
   --network-name "FoldedClos" \
   --budget "$BUDGET" \
   --init-samples "$INIT_SAMPLES" \
-  --n-workers "$N_WORKERS" \
+  --n-workers "$N_WORKERS_EFFECTIVE" \
   --top-k "$TOP_K" \
   --cleanup-batch-size "$CLEANUP_BATCH_SIZE" \
   --folder-prefix "$RUN_PREFIX" \
