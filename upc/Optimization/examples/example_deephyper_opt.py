@@ -22,32 +22,23 @@ from Optimization import (
     CustomObjective
 )
 from Optimization.core.base_optimizer import format_score
-from custom_objectives import (
-    obj_latency_network, 
-    obj_latency_network_raw,
-    obj_latency_network_sqrt,
-    obj_latency_network_minmax,
-    obj_latency_memory
-)
-
-
 
 def main():
     """Run DeepHyper Bayesian Optimization example."""
     
     # Configuration
     MODEL_NUM = 5 # GPT_40B (Model enum value)
-    MODEL_NAME = "GPT_40B_e2d_and_network_bw"  # Descriptive name for results folder and plots
+    MODEL_NAME = "GPT_test_new_min_max"  # Descriptive name for results folder and plots
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
-    BUDGET = 300
-    INIT_SAMPLES = 50
-    N_WORKERS = 8
+    BUDGET = 100
+    INIT_SAMPLES = 25
+    N_WORKERS = 10
     TOP_K = 10  # Number of top configurations to keep track of
-    CLEANUP_BATCH_SIZE = 20  # Batch size for parallel evaluation (if supported by sim runner)
+    CLEANUP_BATCH_SIZE = 120  # Batch size for parallel evaluation (if supported by sim runner)
     COMPRESS_AND_CLEAN_IS_ENABLED = True  # Whether to enable artifact compression and cleanup after each batch of evaluations
-    Objective_0_Name = "e2dp (j^2 * s)"
-    Objective_1_Name = "Network Total BW (GB/s)"
+    Objective_0_Name = "time"
+    Objective_1_Name = "samples_per_sec_per_energy"
     
 
     print("="*70)
@@ -66,7 +57,7 @@ def main():
         os.path.dirname(__file__), 
         "..", 
         "search_space", 
-        "parallelism_strategy_params_g2_intra.json" 
+        "parallelism_strategy_params_g2_intra2.json" 
     )
     search_space = create_search_space(
         search_space_path,
@@ -116,7 +107,7 @@ def main():
     print("\n4. Creating objective function...")
     
     objective = create_objective(
-        objective_type='e2d_and_network_bw'
+        objective_type='time_and_throughput_per_energy'
     )
     #objective = CustomObjective(
     #    obj_latency_network,  # Raw values - let DeepHyper normalize

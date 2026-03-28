@@ -147,7 +147,7 @@ DEFAULT_SYSTEM_CONFIG = {
     "local-mem-size": 80,
     "enable_network_logger": 1,
     "boost-mode": 0,
-    "peak-perf": 989,
+    "peak-perf": 67,
     "roofline-enabled": 1,
     "trace-enabled": 1,
     "track-local-mem": 1,
@@ -169,7 +169,7 @@ DEFAULT_G2_SYSTEM_CONFIG = {
     "local-mem-size": 80,
     "enable_network_logger": 0,
     "boost-mode": 0,
-    "peak-perf": 989,
+    "peak-perf": 67,
     "roofline-enabled": 1,
     "trace-enabled": 1,
     "track-local-mem": 1,
@@ -179,8 +179,8 @@ DEFAULT_G2_SYSTEM_CONFIG = {
 
 DEFAULT_NETWORK_CONFIG = {
     "topology": ["Switch", "Switch", "Switch"],
-    "npus_count": [8, 4, 3],
-    "bandwidth": [450.0, 100.0, 100.0],
+    "npus_count": [8, 4, 2],
+    "bandwidth": [900.0, 200.0, 200.0],
     "bandwidth_unit": "GB/s",
     "latency": [0.0, 0.0, 0.0],
     "packet_size": 1500,
@@ -318,14 +318,14 @@ def generate_network_config(config: Dict[str, Any]) -> str:
 
     # Ensure bandwidth array always matches dimensions
     network_config['bandwidth'] = _normalize_values_per_dimension(
-        network_config.get('bandwidth', [450.0]),
+        network_config.get('bandwidth', [900.0]),
         num_dims,
-        450.0
+        900.0
     )
     
     # Override with bandwidth values from config if present
     if 'intra-node-bw' in config or 'inter-node-bw' in config:
-        bandwidth = [network_config['bandwidth'][0]] * num_dims if num_dims > 0 else [450.0]
+        bandwidth = [network_config['bandwidth'][0]] * num_dims if num_dims > 0 else [900.0]
         if 'intra-node-bw' in config:
             bandwidth[0] = config['intra-node-bw']
         if 'inter-node-bw' in config:
@@ -688,7 +688,7 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
         "npus_count": npus_count,
         "bandwidth_unit": bw_unit,
         "packet_size": 1500,
-        "header_size": 44,
+        "header_size": 48,
         "routing_mode": net_sim_config.get("routing_mode", "foldedclos_uniform"),
         "ecmp_seed": 42,
         "topology_file": topology_file_path# + ".json"
@@ -894,7 +894,7 @@ def generate_g2_network_config_old(config: Dict[str, Any], net_sim_config: Dict[
         "npus_count": [64],
         "bandwidth_unit": bw_unit,
         "packet_size": 1500,
-        "header_size": 44,
+        "header_size": 48,
         "topology_file": os.environ['ASTRA_SIM_ROOT'] + "/upc/configuration/g2/FoldedClos_128_topology.json"
     }
     

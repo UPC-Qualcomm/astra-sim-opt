@@ -21,7 +21,8 @@ from ..core import BaseOptimizer
 from ..core.base_optimizer import format_score
 from ..helper import config_to_tuple, evaluate_config_worker
 
-PENALTY_THRESHOLD = float('inf')
+# Matches PENALTY in objective.py (1e20).
+PENALTY_THRESHOLD = 1e20
 
 
 class RandomOptimizer(BaseOptimizer):
@@ -341,7 +342,11 @@ class RandomOptimizer(BaseOptimizer):
             
             # Add job metadata
             record['job_id'] = i
-            record['job_status'] = 'DONE' if score not in [None, float('inf')] else 'FAILED'
+            record['job_status'] = (
+                'DONE' if score is not None and (
+                    isinstance(score, tuple) or abs(score) < PENALTY_THRESHOLD
+                ) else 'FAILED'
+            )
             
             # Read and add config file contents
             if file_paths:

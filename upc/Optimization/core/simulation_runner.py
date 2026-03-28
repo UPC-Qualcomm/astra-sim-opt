@@ -251,8 +251,10 @@ class SimulationRunner:
             # 4. Extract execution time
             if self.verbose:
                 print(f"    Parsing output log...")
-            exec_time, is_oom = self._output_log_parser(workload_file, suffix=suffix)
-            
+            exec_time, is_oom, peak_memory = self._output_log_parser(workload_file, suffix=suffix)
+            # peak_memory is stored in a local; added to metadata below after
+            # _get_simulation_metadata() initialises the dict.
+
             if exec_time is None:
                 if self.verbose:
                     print("    ⚠️  Could not extract execution time", result)
@@ -261,12 +263,13 @@ class SimulationRunner:
                     metadata['was_killed'] = False
                     metadata['sim_failed'] = True
                     metadata['sim_walltime'] = sim_walltime
+                    metadata['peak_memory_gb'] = peak_memory
                     return None, is_oom, file_paths, metadata
                 return None
-            
+
             if self.verbose:
                 print(f"    ✓ Execution time: {exec_time:.2f}s")
-            
+
             # 5. Run power estimation when explicitly requested (estimate_power=1, Mode D)
             power_metrics = {}
             if self.net_sim_config.get('estimate_power') == 1 and not is_oom:
@@ -278,7 +281,7 @@ class SimulationRunner:
                     power_config_path=self.net_sim_config.get('power_config_path'),
                     verbose=self.verbose,
                 )
-            
+
             # 6. Return with file paths and metadata if requested
             if return_paths:
                 # Collect metadata about the actual simulation configuration
@@ -286,8 +289,9 @@ class SimulationRunner:
                 metadata['sim_walltime'] = sim_walltime
                 metadata['was_killed'] = False
                 metadata['sim_failed'] = False
+                metadata['peak_memory_gb'] = peak_memory
                 metadata.update(power_metrics)  # Merge power metrics (empty dict if not g2 or failed)
-                
+
                 return exec_time, is_oom, file_paths, metadata
             else:
                 return exec_time, is_oom
@@ -488,9 +492,9 @@ class SimulationRunner:
             return None, None
         
         # Extract time using output_parser
-        exec_time, is_oom = output_parser.output_log_parser(log_file)
+        exec_time, is_oom, peak_memory  = output_parser.output_log_parser(log_file)
         
-        return exec_time, is_oom
+        return exec_time, is_oom, peak_memory
     
     def batch_run(self, configs: list) -> list:
         """

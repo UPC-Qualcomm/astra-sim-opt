@@ -14,6 +14,10 @@ Multiple normalization strategies are provided:
 
 import math
 import numpy as np
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from core.objective import PENALTY
 
 
 def _set_objective_directions(fn, directions):
@@ -79,7 +83,7 @@ def obj_latency_network(exec_time, is_oom, metadata, config):
     """
     # Handle OOM cases first
     if is_oom:
-        return float('inf'), float('inf')
+        return PENALTY, PENALTY
     
     npu_count = config.get('npu_count', 1)
     intra_node_bw = config.get('intra-node-bw', 0)  # GB/s
@@ -129,7 +133,7 @@ def obj_latency_memory(exec_time, is_oom, metadata, config):
     """
     # Handle OOM cases first
     if is_oom:
-        return float('inf'), float('inf')
+        return PENALTY, PENALTY
     
     npu_count = config.get('npu_count', 1)
     local_mem_size = config.get('local-mem-size', 0)  # GB
@@ -164,7 +168,7 @@ def obj_network_memory(exec_time, is_oom, metadata, config):
     """
     # Handle OOM cases first
     if is_oom:
-        return float('inf'), float('inf')
+        return PENALTY, PENALTY
     
     npu_count = config.get('npu_count', 1)
     intra_node_bw = config.get('intra-node-bw', 0)  # GB/s
@@ -211,7 +215,7 @@ def obj_latency_network_memory(exec_time, is_oom, metadata, config):
     """
     # Handle OOM cases first
     if is_oom:
-        return float('inf'), float('inf'), float('inf')
+        return PENALTY, PENALTY, PENALTY
     
     npu_count = config.get('npu_count', 1)
     intra_node_bw = config.get('intra-node-bw', 0)
@@ -263,7 +267,7 @@ def obj_latency_network_raw(exec_time, is_oom, metadata, config):
         tuple: (exec_time_seconds, total_network_bw_gbps)
     """
     if is_oom:
-        return float('inf'), float('inf')
+        return PENALTY, PENALTY
     
     # Convert to more reasonable units
     exec_time_seconds = exec_time  # nanoseconds -> seconds
@@ -306,7 +310,7 @@ def obj_latency_network_minmax(exec_time, is_oom, metadata, config):
         tuple: (normalized_time, normalized_network) in [0, 1]
     """
     if is_oom:
-        return float('inf'), float('inf')
+        return PENALTY, PENALTY
     
     exec_time_seconds = exec_time / 1e9
     
@@ -358,7 +362,7 @@ def obj_latency_network_sqrt(exec_time, is_oom, metadata, config):
         tuple: (sqrt_time, sqrt_network)
     """
     if is_oom:
-        return float('inf'), float('inf')
+        return PENALTY, PENALTY
     
     exec_time_seconds = exec_time / 1e9
     
@@ -405,7 +409,7 @@ def obj_latency_network_power(exec_time, is_oom, metadata, config, power=0.5):
         tuple: (time^power, network^power)
     """
     if is_oom:
-        return float('inf'), float('inf')
+        return PENALTY, PENALTY
     
     exec_time_seconds = exec_time / 1e9
     

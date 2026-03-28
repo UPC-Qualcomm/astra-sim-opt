@@ -8,6 +8,7 @@ objective functions without modifying `example_deephyper_opt.py`.
 
 import os
 import sys
+import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -51,13 +52,51 @@ OBJECTIVE_METADATA = {
 DEFAULT_OBJECTIVE = "e2d_and_network_bw"
 
 
-def get_objective_key() -> str:
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run DeepHyper optimization sweep with configurable model/objective/search-space settings."
+    )
+    parser.add_argument("objective", nargs="?", default=None, help="Objective key (legacy positional argument support)")
+    parser.add_argument("--objective", dest="objective_flag", default=None, help="Objective key")
+    parser.add_argument("--list-objectives", action="store_true", help="List all available objective keys and exit")
+
+    parser.add_argument("--model-num", type=int, default=19, help="Model enum/index used by SimulationRunner")
+    parser.add_argument("--model-name", default=None, help="Model name for output naming")
+    parser.add_argument("--num-npus", type=int, default=64, help="Number of NPUs")
+    parser.add_argument("--network-name", default="FoldedClos", help="Network name")
+    parser.add_argument("--budget", type=int, default=100, help="Optimization budget")
+    parser.add_argument("--init-samples", type=int, default=20, help="Number of random initial samples")
+    parser.add_argument("--n-workers", type=int, default=8, help="Parallel workers")
+    parser.add_argument("--top-k", type=int, default=10, help="Keep top-k checkpoints")
+    parser.add_argument("--cleanup-batch-size", type=int, default=20, help="Cleanup frequency")
+    parser.add_argument("--folder-prefix", default="EXAMPLE_DEEPHYPER", help="Result directory prefix")
+    parser.add_argument("--search-space-path", default=None, help="Path to search space JSON")
+    parser.add_argument("--compress-and-clean", action="store_true", help="Enable result compression and cleanup")
+
+    parser.add_argument("--sim-type", default="g2", help="Simulation type")
+    parser.add_argument("--topology", default="FoldedClos", help="Topology")
+    parser.add_argument("--paths-mode", default="None", help="Path mode")
+    parser.add_argument("--routing-mode", default="foldedclos_uniform", help="Routing mode")
+    parser.add_argument("--estimate-power", type=int, default=1, help="Enable power estimation")
+    parser.add_argument("--power-config-path", default=None, help="Power model config path")
+    parser.add_argument("--npus-per-node", type=int, default=8, help="NPUs per node")
+    parser.add_argument("--num-nvswitches", type=int, default=4, help="Number of NVSwitches")
+    parser.add_argument("--host-edge-bw", type=int, default=100, help="Host-edge bandwidth")
+    parser.add_argument("--edge-agg-bw", type=int, default=100, help="Edge-aggregation bandwidth")
+    parser.add_argument("--agg-core-bw", type=int, default=100, help="Aggregation-core bandwidth")
+    parser.add_argument("--intra-node-bw", type=int, default=450, help="Intra-node bandwidth")
+    parser.add_argument("--bw-unit", default="GB/s", help="Bandwidth unit")
+
+    return parser.parse_args()
+
+
+def get_objective_key(args: argparse.Namespace) -> str:
     available_objectives = get_available_objective_types()
-    if len(sys.argv) > 1 and sys.argv[1] == "--list-objectives":
+    if args.list_objectives:
         print("\n".join(available_objectives))
         sys.exit(0)
 
-    objective_key = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_OBJECTIVE
+    objective_key = args.objective_flag or args.objective or DEFAULT_OBJECTIVE
     if objective_key not in available_objectives:
         available = ", ".join(sorted(available_objectives))
         raise ValueError(f"Unknown objective '{objective_key}'. Available: {available}")
@@ -65,19 +104,35 @@ def get_objective_key() -> str:
 
 
 def main():
-    objective_key = get_objective_key()
+    args = parse_args()
+    objective_key = get_objective_key(args)
     objective_meta = OBJECTIVE_METADATA.get(objective_key, {"plot_labels": []})
 
-    MODEL_NUM = 19
-    MODEL_NAME = f"GPT_40B_{objective_key}"
-    NUM_NPUS = 64
-    NETWORK_NAME = "FoldedClos"
-    BUDGET = 100
-    INIT_SAMPLES = 20
-    N_WORKERS = 8
-    TOP_K = 10
-    CLEANUP_BATCH_SIZE = 20
-    COMPRESS_AND_CLEAN_IS_ENABLED = False
+    MODEL_NUM = args.model_num
+    MODEL_NAME = args.model_name or f"GPT_40B_{objective_key}"
+    NUM_NPUS = args.num_npus
+    NETWORK_NAME = args.network_name
+    BUDGET = args.budget
+    INIT_SAMPLES = args.init_samples
+    N_WORKERS = args.n_workers
+    TOP_K = args.top_k
+    CLEANUP_BATCH_SIZE = args.cleanup_batch_size
+    COMPRESS_AND_CLEAN_IS_ENABLED = args.compress_and_clean
+
+    default_search_space_path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "search_space",
+        "parallelism_strategy_params_g2_intra.json",
+    )
+    search_space_path = args.search_space_path or default_search_space_path
+    search_space_path = os.path.abspath(search_space_path)
+    if not os.path.isfile(search_space_path):
+        raise FileNotFoundError(f"Search space file not found: {search_space_path}")
+
+    power_config_path = args.power_config_path or os.path.join(
+        os.environ["ASTRA_SIM_ROOT"], "upc", "power_model", "a100_config.json"
+    )
     
     print("=" * 70)
     print("EXAMPLE: DeepHyper Bayesian Optimization Sweep")
@@ -88,43 +143,43 @@ def main():
     print(f"Network: {NETWORK_NAME}")
     print(f"Budget: {BUDGET} evaluations")
     print(f"Workers: {N_WORKERS} (parallel evaluation)")
+    print(f"Search space: {search_space_path}")
     print("Tracker: Enabled (kill at 1.5x threshold)\n")
 
     print("1. Creating search space...")
-    search_space_path = os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "search_space",
-        "parallelism_strategy_params_g2_intra.json",
-    )
     search_space = create_search_space(
         search_space_path,
         include_categories=["parallelism_strategy", "network"],
     )
+    if getattr(search_space, "num_npus", NUM_NPUS) != NUM_NPUS:
+        print(
+            f"⚠️  Warning: num_npus mismatch (arg={NUM_NPUS}, search_space={search_space.num_npus}). "
+            "Using CLI value for simulator topology config."
+        )
 
     print("\n2. Creating sampler...")
     sampler = RandomSampler(seed=42)
     print(f"   Using: {sampler}")
 
     net_sim_config = {
-        "sim_type": "g2",
-        "topology": "FoldedClos",
-        "paths_mode": "None",
-        "routing_mode": "foldedclos_uniform",
-        "estimate_power": 1,
-        "power_config_path": os.path.join(os.environ["ASTRA_SIM_ROOT"], "upc", "power_model", "a100_config.json"),
+        "sim_type": args.sim_type,
+        "topology": args.topology,
+        "paths_mode": args.paths_mode,
+        "routing_mode": args.routing_mode,
+        "estimate_power": args.estimate_power,
+        "power_config_path": power_config_path,
         "topology_config": {
-            "num_npus": search_space.num_npus,
-            "npus_per_node": 8,
+            "num_npus": NUM_NPUS,
+            "npus_per_node": args.npus_per_node,
             "intra_node_topology": "switch",
-            "num_nvswitches": 4,
+            "num_nvswitches": args.num_nvswitches,
             "bandwidth_config": {
-                "host_edge": 100,
-                "edge_agg": 100,
-                "agg_core": 100,
-                "intra_node": 450,
+                "host_edge": args.host_edge_bw,
+                "edge_agg": args.edge_agg_bw,
+                "agg_core": args.agg_core_bw,
+                "intra_node": args.intra_node_bw,
             },
-            "bw_unit": "GB/s",
+            "bw_unit": args.bw_unit,
         },
     }
 
@@ -133,7 +188,7 @@ def main():
         model_num=MODEL_NUM,
         model_name=MODEL_NAME,
         network_name=NETWORK_NAME,
-        folder_prefix="EXAMPLE_DEEPHYPER",
+        folder_prefix=args.folder_prefix,
         verbose=True,
         net_sim_config=net_sim_config,
     )

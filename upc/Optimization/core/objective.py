@@ -23,7 +23,19 @@ import math
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Callable, List, Union
 
-PENALTY = float('inf')
+# Invalid / OOM / missing-metric scores in *natural* (raw) space.
+# A large finite value is used so that comparisons such as ``>`` and sorting
+# always behave predictably (``float('inf')`` can cause subtle issues with
+# ``math.isfinite`` guards being needed everywhere).
+#
+# Rule: any raw score component with ``abs(value) >= PENALTY`` is treated as
+# invalid / worst-in-class regardless of objective direction.
+# For **minimize** objectives the sentinel is ``+PENALTY`` (very large).
+# For **maximize** objectives the sentinel is also ``+PENALTY`` — it is
+# convention, not a real score.  Never use ``PENALTY`` as a genuinely
+# favourable maximize score; use a large but strictly smaller finite value.
+PENALTY = 1e20
+
 
 class ObjectiveFunction(ABC):
     """
@@ -58,53 +70,258 @@ class ObjectiveFunction(ABC):
         """
         pass
     
+    @property
+    def score_directions(self) -> List[bool]:
+        """
+        Per-objective optimization directions as a list of booleans.
+
+        True  = minimize this objective (lower raw score is better).
+        False = maximize this objective (higher raw score is better).
+
+        For single-objective functions this is ``[self.minimize]``.
+        For multi-objective functions it is derived from
+        ``self.objective_directions`` (strings "min"/"max" or booleans)
+        when that attribute is set, otherwise falls back to
+        ``[self.minimize] * n`` where n is inferred at call time.
+        """
+        directions = getattr(self, 'objective_directions', None)
+        if directions is None:
+            return [self.minimize]
+        result: List[bool] = []
+        for d in directions:
+            if isinstance(d, str):
+                result.append(d.strip().lower() != 'max')
+            else:
+                result.append(bool(d))
+        return result if result else [self.minimize]
+
+    def to_optimizer_score(
+        self,
+        raw_score,
+        *,
+        optimizer_bad_value: Optional[float] = None,
+    ):
+        """
+        Convert a raw objective score to the optimizer's maximization space.
+
+        DeepHyper (and the underlying CBO/RandomSearch) always *maximizes*.
+        Per ``score_directions``:
+
+        * **Minimize** → negate raw (lower raw becomes higher optimizer value).
+        * **Maximize** → keep raw (higher raw stays higher in optimizer space).
+
+        Args:
+            raw_score: Scalar or tuple from ``objective.compute()``.
+            optimizer_bad_value: If set, any invalid raw component (NaN, ±inf,
+                or ``abs(value) >= PENALTY``) is replaced by this value *instead
+                of* applying the sign flip.  Use the optimizer's worst-case
+                sentinel (e.g. ``-1e20`` for DeepHyper) so invalid runs do not
+                pollute the surrogate model or Pareto front.
+
+        Returns:
+            Scalar or tuple in optimizer (maximization) space.
+        """
+        directions = self.score_directions
+
+        def _conv(s: float, is_min: bool) -> float:
+            if optimizer_bad_value is not None and (
+                not math.isfinite(s) or abs(s) >= PENALTY
+            ):
+                return float(optimizer_bad_value)
+            return float(-s) if is_min else float(s)
+
+        if isinstance(raw_score, (tuple, list)):
+            out = []
+            for i, s in enumerate(raw_score):
+                is_min = directions[i] if i < len(directions) else directions[-1]
+                try:
+                    sf = float(s)
+                except (TypeError, ValueError):
+                    if optimizer_bad_value is not None:
+                        out.append(float(optimizer_bad_value))
+                    else:
+                        raise
+                else:
+                    out.append(_conv(sf, is_min))
+            return tuple(out)
+
+        try:
+            sf = float(raw_score)
+        except (TypeError, ValueError):
+            if optimizer_bad_value is not None:
+                return float(optimizer_bad_value)
+            raise
+        return _conv(sf, directions[0])
+
+    def from_optimizer_score(
+        self,
+        opt_score,
+        *,
+        optimizer_bad_value: Optional[float] = None,
+    ):
+        """
+        Map optimizer-space values back to natural (raw) objective space.
+
+        Inverts :meth:`to_optimizer_score` for valid values.  Any optimizer
+        value that is non-finite *or* has ``abs(value) >= PENALTY`` (including
+        exact equality to ``optimizer_bad_value``) maps back to ``PENALTY``
+        (``1e20``) in natural space so that it stays clearly invalid for
+        ``is_better`` / bookkeeping.
+
+        Args:
+            opt_score: Scalar or tuple as stored by the optimizer (CSV).
+            optimizer_bad_value: Same sentinel passed to :meth:`to_optimizer_score`
+                (e.g. ``-1e20`` for DeepHyper); equality triggers ``PENALTY``.
+        """
+        directions = self.score_directions
+
+        def _inv(o: float, is_min: bool) -> float:
+            try:
+                o = float(o)
+            except (TypeError, ValueError):
+                return PENALTY
+            if optimizer_bad_value is not None and o == optimizer_bad_value:
+                return PENALTY
+            if not math.isfinite(o) or abs(o) >= PENALTY:
+                return PENALTY
+            return float(-o) if is_min else float(o)
+
+        if isinstance(opt_score, (tuple, list)):
+            return tuple(
+                _inv(o, directions[i] if i < len(directions) else directions[-1])
+                for i, o in enumerate(opt_score)
+            )
+        return _inv(float(opt_score), directions[0])
+
     def is_better(self, score1, score2) -> bool:
         """
         Check if score1 is better than score2.
-        
+
         Args:
             score1: First score (float or tuple for multi-objective)
             score2: Second score (float or tuple for multi-objective)
-        
+
         Returns:
             True if score1 is better than score2
-        
+
         Note:
-            For multi-objective (tuples), uses lexicographic comparison:
-            compares first element, then second if equal, etc.
+            ``PENALTY`` (``1e20``) always represents an invalid / worst-case
+            score **regardless of objective direction**.  For a maximize
+            objective, ``+1e20`` is still treated as "worst".  Any component
+            with ``abs(value) >= PENALTY`` — or that is non-finite — is
+            considered invalid by the ``_invalid`` helper so that penalty
+            tuples like ``(1e20, 1e20)`` can never silently overwrite a valid
+            best score.
+
+            For multi-objective tuples uses lexicographic comparison with
+            per-objective direction from ``score_directions``.
         """
-        # Handle None/infinity cases
-        if score2 is None or score2 == float('inf'):
-            return score1 is not None and score1 != float('inf')
-        if score1 is None or score1 == float('inf'):
+        def _invalid(s) -> bool:
+            """True when s is None, non-finite, or abs(value) >= PENALTY."""
+            if s is None:
+                return True
+            try:
+                f = float(s)
+                return not math.isfinite(f) or abs(f) >= PENALTY
+            except (TypeError, ValueError):
+                return True
+
+        directions = self.score_directions
+
+        # ── Early-exit for scalar sentinel (initial best_score = float('inf')) ──
+        # Handles the mixed-type case where the initial best_score is a scalar
+        # and the incoming score is a tuple (common at the start of MOO runs).
+        if not isinstance(score2, (tuple, list)):
+            if _invalid(score2):
+                # score2 is a scalar invalid/penalty — score1 wins if it has
+                # at least one finite component (tuple) or is itself finite.
+                if isinstance(score1, (tuple, list)):
+                    return not all(_invalid(s) for s in score1)
+                return not _invalid(score1)
+        if not isinstance(score1, (tuple, list)) and _invalid(score1):
+            return False  # scalar invalid score1 is never better
+
+        # ── MOO tuple path ────────────────────────────────────────────────────
+        if isinstance(score1, (tuple, list)) and isinstance(score2, (tuple, list)):
+            s1_all_bad = all(_invalid(s) for s in score1)
+            s2_all_bad = all(_invalid(s) for s in score2)
+            if s2_all_bad:
+                return not s1_all_bad   # any finite score beats all-penalty
+            if s1_all_bad:
+                return False
+
+            for i, (s1, s2) in enumerate(zip(score1, score2)):
+                is_min = directions[i] if i < len(directions) else directions[-1]
+                s1_bad = _invalid(s1)
+                s2_bad = _invalid(s2)
+                if s1_bad and s2_bad:
+                    continue            # both invalid on this axis → tie
+                if s2_bad:
+                    return True         # s2 invalid, s1 finite → s1 wins
+                if s1_bad:
+                    return False        # s1 invalid → s2 wins
+                v1, v2 = float(s1), float(s2)
+                if is_min:
+                    if v1 < v2: return True
+                    if v1 > v2: return False
+                else:
+                    if v1 > v2: return True
+                    if v1 < v2: return False
+            return False  # equal on all objectives
+
+        # ── Scalar path ───────────────────────────────────────────────────────
+        s1_bad = _invalid(score1)
+        s2_bad = _invalid(score2)
+        if s2_bad:
+            return not s1_bad
+        if s1_bad:
             return False
-            
-        # Handle tuple comparison for multi-objective
-        if isinstance(score1, tuple) and isinstance(score2, tuple):
-            if self.minimize:
-                return score1 < score2  # Lexicographic comparison
-            else:
-                return score1 > score2
-        
-        # Handle single value comparison
-        if self.minimize:
-            return score1 < score2
-        else:
-            return score1 > score2
-    
-    def get_best_score(self, scores: list) -> float:
+        is_min = directions[0]
+        return float(score1) < float(score2) if is_min else float(score1) > float(score2)
+
+    def get_best_score(self, scores: list):
         """
         Get the best score from a list.
-        
+
         Args:
-            scores: List of scores
-        
+            scores: List of scores (scalars or tuples).
+
         Returns:
-            Best score (minimum if minimize=True, maximum if minimize=False)
+            Best score according to objective directions.  For MOO tuples the
+            comparison is lexicographic with per-objective direction (the same
+            key used by cleanup ranking), so mixed min/max objectives are
+            handled correctly.
         """
+        directions = self.score_directions
+
+        def _sort_key(s):
+            if isinstance(s, (tuple, list)):
+                key = []
+                for i, v in enumerate(s):
+                    is_min_i = directions[i] if i < len(directions) else directions[-1]
+                    try:
+                        fv = float(v)
+                        if not math.isfinite(fv) or abs(fv) >= PENALTY:
+                            key.append(math.inf)
+                        else:
+                            key.append(fv if is_min_i else -fv)
+                    except (TypeError, ValueError):
+                        key.append(math.inf)
+                return tuple(key) if key else (math.inf,)
+            # Scalar
+            is_min_0 = directions[0]
+            try:
+                fv = float(s)
+                if not math.isfinite(fv) or abs(fv) >= PENALTY:
+                    return math.inf
+                return fv if is_min_0 else -fv
+            except (TypeError, ValueError):
+                return math.inf
+
         if not scores:
-            return PENALTY if self.minimize else -PENALTY
-        return min(scores) if self.minimize else max(scores)
+            is_min = directions[0]
+            return PENALTY if is_min else -PENALTY
+        return min(scores, key=_sort_key)
     
     def __repr__(self) -> str:
         """String representation."""
@@ -881,6 +1098,108 @@ class WeightedMultiObjective(ObjectiveFunction):
         return weighted_sum
 
 
+class MinimizeTimeMaximizeThroughputPerEnergy(ObjectiveFunction):
+    """
+    Multi-objective for cluster size optimization.
+    
+    Objective 0: Minimize execution time (shorter is better).
+    Objective 1: Maximize throughput per unit energy (samples/sec/MJ).
+    
+    Returns tuple: (log10(exec_time), log10(throughput_per_energy))
+    
+    Directions: ["min", "max"]  # minimize time, maximize efficiency
+    
+    This objective helps find cluster configurations that are both fast
+    and energy-efficient. The throughput/energy metric encourages the optimizer
+    to find configurations that deliver high performance without excessive
+    energy consumption.
+    
+    Requires: estimate_power=1 in net_sim_config
+    """
+    
+    def __init__(self, npus_per_node: int = 8):
+        super().__init__("Minimize Time, Maximize Throughput/Energy")
+        self.npus_per_node = npus_per_node
+        self.objective_directions = ["min", "max"]  # minimize time, maximize efficiency
+        self.is_multi_objective = True
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None) -> tuple:
+        """
+        Compute (exec_time, throughput_per_energy).
+        
+        throughput_per_energy = samples_per_sec / (total_energy_MJ)
+                              = batch_size / (exec_time_sec * total_energy_J * 1e-6)
+        """
+        if is_oom:
+            return (PENALTY, PENALTY)
+
+        if metadata is None:
+            metadata = {}
+
+        if exec_time is None or exec_time <= 0:
+            return (PENALTY, PENALTY)
+
+        # Requirement: consume the reported metric from power estimator.
+        samples_per_joule = metadata["samples_per_sec_per_mj"]
+        
+        if samples_per_joule is None or samples_per_joule <= 0 or not math.isfinite(samples_per_joule):
+            return (PENALTY, PENALTY)
+
+        return (
+            math.log10(exec_time),
+            math.log10(samples_per_joule),
+        )
+
+
+class MaximizeMemoryMinimizeTime(ObjectiveFunction):
+    """
+    Multi-objective for batch size optimization.
+    
+    Objective 0: Maximize peak memory usage (higher is better, closer to GPU capacity).
+    Objective 1: Minimize execution time (shorter is better).
+    
+    Returns tuple: (log10(peak_memory_GB), log10(exec_time))
+    
+    Directions: ["max", "min"]  # maximize memory, minimize time
+    
+    This objective helps find batch sizes that efficiently use GPU memory
+    while maintaining reasonable execution times. The optimizer will prefer
+    configurations with higher memory utilization and shorter execution time.
+    
+    The peak memory is extracted from metadata['peak_memory_bytes'] and
+    converted to GB for interpretation.
+    """
+    
+    def __init__(self):
+        super().__init__("Maximize Memory, Minimize Time")
+        self.objective_directions = ["max", "min"]  # maximize memory, minimize time
+        self.is_multi_objective = True
+    def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
+                config: Optional[Dict[str, Any]] = None) -> tuple:
+        """
+        Compute (peak_memory_GB, exec_time).
+        """
+        if is_oom:
+            return (PENALTY, PENALTY)
+
+        if metadata is None:
+            metadata = {}
+        if config is None:
+            config = {}
+
+        if exec_time is None or exec_time <= 0:
+            return (PENALTY, PENALTY)
+
+        peak_memory_gb = metadata["peak_memory_gb"],
+
+        if peak_memory_gb <= 0 or not math.isfinite(peak_memory_gb):
+            return (PENALTY, PENALTY)
+
+        return (
+            math.log10(peak_memory_gb),
+            math.log10(exec_time),
+        )
+
 
 class CustomObjective(ObjectiveFunction):
     """
@@ -970,6 +1289,8 @@ def create_objective(objective_type: str, **kwargs) -> ObjectiveFunction:
         'edp': MinimizeWeightedEDP,          # E^alpha x D^beta, default ED2P
         'ed2p': lambda: MinimizeWeightedEDP(1, 2),    # performance-oriented shortcut
         'e2d':  lambda: MinimizeWeightedEDP(2, 1),    # efficiency-oriented shortcut
+        'time_and_throughput_per_energy': MinimizeTimeMaximizeThroughputPerEnergy,
+        'memory_and_time': MaximizeMemoryMinimizeTime,
         'weighted': WeightedMultiObjective,
         'custom': CustomObjective
     }
@@ -1013,6 +1334,8 @@ def get_available_objective_types(include_non_sweepable: bool = False) -> List[s
         'edp',
         'ed2p',
         'e2d',
+        'time_and_throughput_per_energy',
+        'memory_and_time',
     ]
     if include_non_sweepable:
         objective_types.extend(['weighted', 'custom'])

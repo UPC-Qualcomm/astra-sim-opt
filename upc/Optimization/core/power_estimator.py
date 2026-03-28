@@ -149,6 +149,7 @@ def run_power_estimation(
             'network_energy_J':           float(breakdown.get('network_energy_J', 0.0)),
             'throughput_samples_per_sec': float(breakdown.get('throughput_samples_per_sec', 0.0)),
             'samples_per_joule':          float(breakdown.get('samples_per_joule', 0.0)),
+            'samples_per_sec_per_mj':          float(breakdown.get('samples_per_sec_per_mj', 0.0)),
             'power_mode':                 'D',
         }
 

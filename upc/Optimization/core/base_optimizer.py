@@ -7,6 +7,7 @@ Provides shared functionality for result tracking, logging, and I/O.
 
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Dict, Optional, Any
+import math
 import pandas as pd
 import numpy as np
 import time
@@ -19,9 +20,10 @@ from .objective import ObjectiveFunction, MinimizeExecutionTime
 
 def format_score(score) -> str:
     """Format score for display, handling both floats and tuples."""
+    _PEN = 1e20  # matches PENALTY in objective.py
     if isinstance(score, tuple):
         return f"({', '.join([f'{s:.4f}' for s in score])})"
-    elif score is None or score == float('inf'):
+    elif score is None or (isinstance(score, float) and (not math.isfinite(score) or abs(score) >= _PEN)):
         return "N/A"
     else:
         return f"{score:.4f}"
@@ -97,9 +99,10 @@ class BaseOptimizer(ABC):
         self.file_paths: List[Dict[str, str]] = []  # Track workload and output files
         self.metadata: List[Dict] = []  # Track simulation metadata (model, network, hardware params)
         
-        # Best tracking
+        # Best tracking — initialised to the natural-space PENALTY (1e20) which
+        # is treated as "no best yet" by is_better (abs >= 1e20 → invalid).
         self.best_config: Optional[Dict] = None
-        self.best_score: float = float('inf')
+        self.best_score: float = 1e20
         self.best_iteration: int = -1
         
         # State
@@ -213,7 +216,7 @@ class BaseOptimizer(ABC):
                 self.cleanup_manager.run_periodic_cleanup(
                     scores=self.scores,
                     file_paths=self.file_paths,
-                    minimize=self.objective.minimize,
+                    score_directions=self.objective.score_directions,
                 )
                 
                 return score
@@ -303,7 +306,12 @@ class BaseOptimizer(ABC):
         
         # Objective information
         print(f"\n🎯 OBJECTIVE: {self.objective.name}")
-        print(f"   Direction: {'Minimize' if self.objective.minimize else 'Maximize'}")
+        directions = self.objective.score_directions
+        if len(directions) == 1:
+            print(f"   Direction: {'Minimize' if directions[0] else 'Maximize'}")
+        else:
+            dir_str = ", ".join("Min" if d else "Max" for d in directions)
+            print(f"   Directions: [{dir_str}]  (Obj0 … Obj{len(directions)-1})")
         
         # Statistics
         scores_array = np.array(self.scores)
@@ -398,16 +406,15 @@ class BaseOptimizer(ABC):
         return self.cleanup_manager.run_periodic_cleanup(
             scores=self.scores,
             file_paths=self.file_paths,
-            minimize=self.objective.minimize,
+            score_directions=self.objective.score_directions,
             force=force,
         )
 
     @staticmethod
-    def run_periodic_cleanup_for_state(cleanup_state, minimize: bool, force: bool = False) -> bool:
+    def run_periodic_cleanup_for_state(cleanup_state, force: bool = False) -> bool:
         """Run shared top-K cleanup against a state dict used by worker-based optimizers."""
         return ArtifactCleanupManager.run_periodic_cleanup_for_state(
             cleanup_state=cleanup_state,
-            minimize=minimize,
             force=force,
         )
 
@@ -454,7 +461,7 @@ class BaseOptimizer(ABC):
         scores,
         file_paths,
         keep_top_k: int,
-        minimize: bool = True,
+        score_directions: Optional[List[bool]] = None,
         cleaned_indices=None,
         verbose: bool = False,
         log_fn=None,
@@ -465,10 +472,11 @@ class BaseOptimizer(ABC):
         Remove tracked files for all non-top-K scored records.
 
         Args:
-            scores: Sequence of recorded objective scores.
+            scores: Sequence of recorded objective scores (scalars or tuples for MOO).
             file_paths: Sequence of tracked file-path dictionaries aligned with ``scores``.
             keep_top_k: Number of best-scoring records to preserve.
-            minimize: Whether lower scores are better.
+            score_directions: Per-objective directions (True=minimize, False=maximize).
+                              Defaults to ``[True]`` (minimize) when omitted.
             cleaned_indices: Mutable set-like or dict-like object used to avoid repeated cleanup.
             verbose: Whether to emit cleanup logs.
             log_fn: Optional logger callable ``log_fn(message, level)``.
@@ -477,7 +485,7 @@ class BaseOptimizer(ABC):
             scores=scores,
             file_paths=file_paths,
             keep_top_k=keep_top_k,
-            minimize=minimize,
+            score_directions=score_directions,
             cleaned_indices=cleaned_indices,
             verbose=verbose,
             log_fn=log_fn,

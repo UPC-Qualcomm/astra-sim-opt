@@ -1,5 +1,6 @@
 """DeepHyper Bayesian Optimization wrapper for AstraSim."""
 
+import math
 import sys
 import os
 from typing import Tuple, Optional, Dict
@@ -27,7 +28,9 @@ except ImportError:
 # Sentinel returned to DeepHyper for any run that must not influence the
 # surrogate model or Pareto front (killed, OOM, or otherwise invalid).
 # DeepHyper treats this as the worst possible score in maximisation space.
-PENALTY = -1e10
+# Matches the magnitude of the natural-space PENALTY (1e20) but negated,
+# since DeepHyper maximises and a very large negative score is "worst".
+PENALTY = -1e20
 
 
 def _deephyper_evaluate_wrapper(job, optimizer_state):
@@ -143,40 +146,23 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
 
                 ArtifactCleanupManager.run_periodic_cleanup_for_state(
                     cleanup_state=cleanup_state,
-                    minimize=objective.minimize,
                     force=False,
                 )
         
-        # Killed simulations: the runner returned exec_time=float('inf'), so
-        # objective.compute() produced inf scores.  Return PENALTY explicitly
-        # as an unconditional guard — regardless of how the objective handles
-        # inf — so killed runs never reach the Pareto front or bias the
-        # surrogate model.
+        # Killed simulations: the runner returned exec_time=float('inf') or a
+        # very large value, so objective.compute() produced PENALTY (1e20)
+        # scores.  Return DeepHyper's PENALTY (-1e20) explicitly as an
+        # unconditional guard so killed runs never reach the Pareto front or
+        # bias the surrogate model.
         if was_killed:
             if isinstance(score, (tuple, list)):
                 return tuple(PENALTY for _ in score)
             else:
                 return PENALTY
 
-        # Handle multi-objective returns (tuple of scores).
-        # float() casts are critical: DeepHyper's internal Pareto
-        # computation silently fails when objectives are Python ints
-        # that propagate as int64 in the results CSV.
-        if isinstance(score, (tuple, list)):
-            objective_values = []
-            for s in score:
-                if objective.minimize:
-                    obj_val = float(-s) if s != float('inf') else PENALTY
-                else:
-                    obj_val = float(s) if s != float('inf') else PENALTY
-                objective_values.append(obj_val)
-            return tuple(objective_values)
-        else:
-            if objective.minimize:
-                objective_value = float(-score) if score != float('inf') else PENALTY
-            else:
-                objective_value = float(score) if score != float('inf') else PENALTY
-            return objective_value
+        # Raw → DeepHyper maximization space (per-objective min/max + invalid).
+        # float() casts happen inside to_optimizer_score; int64-safe for Pareto/CSV.
+        return objective.to_optimizer_score(score, optimizer_bad_value=PENALTY)
         
     except Exception as e:
         print(f"    ⚠️  Evaluation error: {e}")
@@ -427,19 +413,21 @@ class DeepHyperOptimizer(BaseOptimizer):
                 'cleanup_batch_size': self.cleanup_batch_size,
                 'verbose': self.verbose,
                 'print_deleted_files': self.cleanup_print_deleted_files,
+                # Per-objective directions so cleanup_records ranks MOO tuples
+                # correctly without needing to pass them at every call site.
+                'score_directions': objective.score_directions,
             }
 
         # Simulation tracker for early termination
         if enable_tracker:
-            tracker_initial = tracker_initial_threshold
-            if not bool(getattr(objective, "minimize", True)) and tracker_initial > 0:
-                tracker_initial = -tracker_initial
-
+            # Pass the raw threshold magnitude; SimulationTracker derives per-
+            # objective directions from objective.score_directions internally and
+            # builds the correct initial threshold vector (positive for minimize,
+            # negative for maximize) without the caller needing to pre-flip signs.
             self.tracker = SimulationTracker(
-                initial_threshold=tracker_initial,
+                initial_threshold=tracker_initial_threshold,
                 kill_multiplier=tracker_kill_multiplier,
                 verbose=verbose,
-                minimize=bool(getattr(objective, "minimize", True)),
                 objective=objective,
             )
             self.simulation_runner.tracker = self.tracker
@@ -849,58 +837,91 @@ class DeepHyperOptimizer(BaseOptimizer):
                 )
     
     def _collect_results_from_deephyper(self):
-        """Collect and process results from DeepHyper's output dataframe."""
+        """Collect and process results from DeepHyper's output dataframe.
+
+        For single-objective runs the score is stored as a scalar.
+        For multi-objective runs ALL ``objective_N`` columns are collected and
+        converted back to natural objective space as a tuple, so that
+        ``self.scores`` holds the full MOO vector and ``is_better`` / cleanup
+        ranking can use every dimension.
+        """
         if self.deephyper_results is None or len(self.deephyper_results) == 0:
             return
         
         param_cols = [col for col in self.deephyper_results.columns if col.startswith('p:')]
         param_names = [col[2:] for col in param_cols]
         
-        # Detect if multi-objective by checking for objective_0 column
-        is_multi_objective = 'objective_0' in self.deephyper_results.columns
-        
-        PENALTY_THRESHOLD = float('inf')
+        # Discover all objective columns (objective_0, objective_1, … for MOO;
+        # or just 'objective' for single-objective).
+        moo_obj_cols = sorted(
+            c for c in self.deephyper_results.columns if c.startswith('objective_')
+        )
+        is_multi_objective = len(moo_obj_cols) > 0
+
+        # Anything at or above this magnitude in natural space is a penalty.
+        # Must match the PENALTY constant in objective.py (1e20).
+        PENALTY_THRESHOLD = 1e20
         n_failed = 0
         n_success = 0
         n_infeasible = 0
-        n_config_files_read = 0
         
         for idx, row in self.deephyper_results.iterrows():
-            # Get objective value(s) - handle both single and multi-objective
+            # ── constraint check ────────────────────────────────────────────
+            if 'constraint' in row and not row['constraint']:
+                n_infeasible += 1
+                continue
+
+            # ── read objective column(s) ─────────────────────────────────────
             if is_multi_objective:
-                # For MOO, use first objective as primary score for tracking "best"
-                objective_value = row.get('objective_0', None)
-                if objective_value is None:
+                # Collect every objective_N value from the row.
+                raw_opt_values = [row.get(c, None) for c in moo_obj_cols]
+                if any(v is None for v in raw_opt_values):
                     n_failed += 1
                     continue
+                # Failure sentinel: DeepHyper stores 'F' or NaN for failed evals.
+                if any(isinstance(v, str) and v.startswith('F') for v in raw_opt_values):
+                    n_failed += 1
+                    continue
+                try:
+                    raw_opt_values = [float(v) for v in raw_opt_values]
+                except (ValueError, TypeError):
+                    n_failed += 1
+                    continue
+                score = self.objective.from_optimizer_score(
+                    tuple(raw_opt_values),
+                    optimizer_bad_value=PENALTY,
+                )
             else:
                 objective_value = row.get('objective', None)
                 if objective_value is None:
                     n_failed += 1
                     continue
-            
-            # Check if configuration is infeasible (constraint violation)
-            if 'constraint' in row and not row['constraint']:
-                n_infeasible += 1
-                continue
-            
-            # Check for evaluation failures
-            if isinstance(objective_value, str):
-                if objective_value == 'F' or objective_value.startswith('F'):
+                if isinstance(objective_value, str) and objective_value.startswith('F'):
                     n_failed += 1
                     continue
-            
+                try:
+                    objective_value = float(objective_value)
+                except (ValueError, TypeError):
+                    n_failed += 1
+                    continue
+                score = self.objective.from_optimizer_score(
+                    objective_value,
+                    optimizer_bad_value=PENALTY,
+                )
+
+            # ── penalty detection ────────────────────────────────────────────
+            # abs() guard catches both +PENALTY (natural space) and any stray
+            # non-finite values that survived from_optimizer_score.
+            if isinstance(score, tuple):
+                is_penalty = any(
+                    not math.isfinite(s) or abs(s) >= PENALTY_THRESHOLD
+                    for s in score
+                )
+            else:
+                is_penalty = not math.isfinite(score) or abs(score) >= PENALTY_THRESHOLD
+
+            # ── store result ─────────────────────────────────────────────────
             config = {name: row[f'p:{name}'] for name in param_names}
-            
-            try:
-                objective_value = float(objective_value)
-            except (ValueError, TypeError):
-                n_failed += 1
-                continue
-            
-            score = -objective_value if self.objective.minimize else objective_value
-            is_penalty = score >= PENALTY_THRESHOLD
-            
             self.configs.append(config)
             self.scores.append(score)
             metadata = self._get_simulation_metadata()
@@ -908,30 +929,26 @@ class DeepHyperOptimizer(BaseOptimizer):
             self.metadata.append(metadata)
             n_success += 1
             
-            # Try to read config files if job_id exists (to retrieve file_paths from job metadata)
-            if 'job_id' in row:
-                try:
-                    # Access job metadata to get file_paths
-                    # Note: This requires DeepHyper to store the file_paths in job metadata
-                    # For now, we'll add this data directly to the dataframe after the search
-                    pass
-                except Exception:
-                    pass
-            
+            # ── verbose progress ─────────────────────────────────────────────
             if self.verbose and n_success <= 10:
                 config_str = ", ".join([f"{k}={v}" for k, v in config.items()])
-                if is_multi_objective and 'objective_1' in row:
-                    obj1_val = -row['objective_1'] if self.objective.minimize else row['objective_1']
-                    print(f"  Iteration {n_success}: {config_str} | Obj0: {score:.4f}, Obj1: {obj1_val:.4f}")
+                if isinstance(score, tuple):
+                    obj_str = ", ".join(f"Obj{i}: {s:.4f}" for i, s in enumerate(score))
+                    print(f"  Iteration {n_success}: {config_str} | {obj_str}")
                 else:
                     print(f"  Iteration {n_success}: {config_str} | Score: {score:.4f}")
             
+            # ── best tracking ────────────────────────────────────────────────
             if not is_penalty and self.objective.is_better(score, self.best_score):
                 self.best_score = score
                 self.best_config = config
                 self.best_iteration = len(self.configs) - 1
                 if self.verbose:
-                    print(f"    🏆 NEW BEST: {score:.4f}")
+                    if isinstance(score, tuple):
+                        score_str = "(" + ", ".join(f"{s:.4f}" for s in score) + ")"
+                    else:
+                        score_str = f"{score:.4f}"
+                    print(f"    NEW BEST: {score_str}")
         
         if self.verbose:
             print(f"\nCollected {n_success} successful evaluations")
@@ -941,9 +958,8 @@ class DeepHyperOptimizer(BaseOptimizer):
             if n_failed > 0:
                 print(f"  - Failed (simulation errors): {n_failed}")
             if is_multi_objective:
-                print(f"  - Multi-objective optimization detected")
-            if n_config_files_read > 0:
-                print(f"  - Config files read: {n_config_files_read}")
+                print(f"  - Multi-objective: {len(moo_obj_cols)} objectives "
+                      f"({', '.join(moo_obj_cols)})")
     
     def _read_config_files(self, file_paths: Dict) -> Dict:
         """Read config files and return as JSON strings."""
@@ -1211,7 +1227,6 @@ class DeepHyperOptimizer(BaseOptimizer):
                 with self.periodic_cleanup_state['lock']:
                     ArtifactCleanupManager.run_periodic_cleanup_for_state(
                         cleanup_state=self.periodic_cleanup_state,
-                        minimize=self.objective.minimize,
                         force=True,
                     )
 
@@ -1244,7 +1259,6 @@ class DeepHyperOptimizer(BaseOptimizer):
                 with self.periodic_cleanup_state['lock']:
                     ArtifactCleanupManager.run_periodic_cleanup_for_state(
                         cleanup_state=self.periodic_cleanup_state,
-                        minimize=self.objective.minimize,
                         force=True,
                     )
                 self.cleanup_manager.sync_counters(self.periodic_cleanup_state.get('cleanup_counters'))

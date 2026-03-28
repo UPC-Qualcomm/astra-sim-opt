@@ -60,37 +60,68 @@ class SimulationTracker:
     ):
         """
         Initialize simulation tracker.
-        
+
         Args:
-            initial_threshold: Initial score threshold.
-            kill_multiplier: Multiplier for early termination (default 1.5x)
-            verbose: Print tracking information
-            tracker_id: Optional shared id for tracker state file.
-                       If not provided, a unique id is generated per run.
-            minimize: Whether lower score is better.
-            objective: Optional objective function used to estimate running score.
+            initial_threshold: Magnitude of the worst-case score threshold.
+                The tracker converts this to the correct sign per objective
+                direction automatically (positive for minimize, negative for
+                maximize).  Pass a positive value; direction is handled here.
+            kill_multiplier: Kill simulations exceeding threshold × multiplier
+                (minimize) or below threshold / multiplier (maximize).
+            verbose: Print tracking information.
+            tracker_id: Optional shared id for the state file across worker
+                processes.  A unique id is generated per run when omitted.
+            minimize: Fallback primary direction used only when no objective
+                is provided.  When ``objective`` is given, direction is derived
+                from ``objective.score_directions`` and this parameter is ignored.
+            objective: Optional objective function.  When provided, per-objective
+                directions are taken from ``objective.score_directions`` so that
+                mixed-direction MOO (e.g. minimize time + maximize throughput)
+                is handled correctly.
         """
-        # Use file-based sharing for threshold across worker processes, but isolate each run.
+        self.kill_multiplier = kill_multiplier
+        self.verbose = verbose
+        self.objective = objective
+
+        # ── Derive per-objective directions ──────────────────────────────────
+        # Always read from the objective when available so that mixed-direction
+        # MOO objectives are handled without the caller needing to pass anything.
+        if objective is not None and hasattr(objective, 'score_directions'):
+            directions = objective.score_directions
+        else:
+            directions = [bool(minimize)]
+
+        # Primary direction (used as scalar fallback throughout the class).
+        self.minimize = directions[0]
+
+        # ── Build correct initial threshold per direction ──────────────────
+        # For minimize: worst case is +inf  → start at  +initial_threshold.
+        # For maximize: worst case is -inf  → start at  -initial_threshold.
+        # This prevents spurious kills on maximize objectives whose real scores
+        # (e.g. log10(throughput) ≈ 3) are far below a naïve +1e15 initial.
+        magnitude = abs(float(initial_threshold))
+        self._initial_threshold = magnitude
+        if len(directions) > 1:
+            threshold_init = [magnitude if d else -magnitude for d in directions]
+        else:
+            threshold_init = magnitude if directions[0] else -magnitude
+
+        # ── File-based shared state (across worker processes) ─────────────
         self._tracker_id = tracker_id or f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
         self._threshold_file = os.path.join(
             tempfile.gettempdir(),
             f'astrasim_tracker_threshold_{self._tracker_id}.json'
         )
+        self._initialize_state(threshold_init)
 
-        self.kill_multiplier = kill_multiplier
-        self.verbose = verbose
-        self.minimize = bool(minimize)
-        self.objective = objective
-        self._initial_threshold = initial_threshold
-
-        # Initialize clean state for this run.
-        self._initialize_state(initial_threshold)
-        
         if self.verbose:
-            direction = "minimize" if self.minimize else "maximize"
+            if len(directions) == 1:
+                dir_str = "minimize" if directions[0] else "maximize"
+            else:
+                dir_str = "[" + ", ".join("min" if d else "max" for d in directions) + "]"
             print(
-                f"[Tracker] Initialized with threshold={self._format_threshold(initial_threshold)}, "
-                f"kill_multiplier={kill_multiplier}, direction={direction}"
+                f"[Tracker] Initialized with threshold={self._format_threshold(threshold_init)}, "
+                f"kill_multiplier={kill_multiplier}, directions={dir_str}"
             )
 
     def _default_state(self, threshold: Optional[float] = None) -> Dict:
@@ -220,21 +251,22 @@ class SimulationTracker:
         """
         Get current kill threshold in score-space.
 
-        Minimize mode: kill if score > threshold * multiplier.
-        Maximize mode: kill if score < threshold / multiplier.
+        Minimize direction: kill if score > threshold * multiplier.
+        Maximize direction: kill if score < threshold / multiplier.
+
+        Returns a list for MOO objectives, a scalar for single-objective.
         """
         threshold = self.threshold
         if isinstance(threshold, (list, tuple)):
             directions = self._objective_directions(len(threshold))
-            kill_threshold = []
-            for value, is_min in zip(threshold, directions):
-                if is_min:
-                    kill_threshold.append(float(value) * self.kill_multiplier)
-                else:
-                    kill_threshold.append(float(value) / self.kill_multiplier)
-            return kill_threshold
+            return [
+                float(v) * self.kill_multiplier if is_min else float(v) / self.kill_multiplier
+                for v, is_min in zip(threshold, directions)
+            ]
 
-        if self.minimize:
+        # Scalar threshold: use the primary direction.
+        is_min = self._objective_directions(1)[0]
+        if is_min:
             return float(threshold) * self.kill_multiplier
         return float(threshold) / self.kill_multiplier
 
@@ -284,32 +316,42 @@ class SimulationTracker:
         Return per-objective optimization direction.
 
         True means minimize, False means maximize.
+
+        Delegates to ``objective.score_directions`` when an objective is
+        available so that all direction logic stays in one place.
         """
         if self.objective is None:
             return [self.minimize] * n_objectives
 
-        directions = getattr(self.objective, "objective_directions", None)
-        if directions is None:
-            return [self.minimize] * n_objectives
+        # Use the canonical score_directions property when available.
+        if hasattr(self.objective, 'score_directions'):
+            directions = self.objective.score_directions
+        else:
+            raw = getattr(self.objective, "objective_directions", None)
+            if raw is None:
+                return [self.minimize] * n_objectives
+            directions = []
+            for d in raw:
+                if isinstance(d, str):
+                    directions.append(d.strip().lower() != "max")
+                else:
+                    directions.append(bool(d))
 
-        normalized: List[bool] = []
-        for d in directions:
-            if isinstance(d, str):
-                normalized.append(d.strip().lower() != "max")
-            else:
-                normalized.append(bool(d))
-
-        if len(normalized) != n_objectives:
+        if len(directions) != n_objectives:
             if self.verbose:
                 print(
-                    f"[Tracker] Warning: objective_directions length {len(normalized)} "
+                    f"[Tracker] Warning: objective_directions length {len(directions)} "
                     f"!= {n_objectives}, using global minimize={self.minimize}"
                 )
             return [self.minimize] * n_objectives
-        return normalized
+        return directions
+
+    # Magnitude threshold matching objective.py PENALTY (1e20).
+    # Any score component with abs(value) >= this is treated as invalid.
+    _PENALTY_MAGNITUDE = 1e20
 
     def _reduce_score(self, score: Any) -> Optional[List[float]]:
-        """Convert scalar/tuple score into finite float vector."""
+        """Convert scalar/tuple score into finite, non-penalty float vector (strict, for completed runs)."""
         if score is None:
             return None
         raw_values = list(score) if isinstance(score, (tuple, list)) else [score]
@@ -322,10 +364,44 @@ class SimulationTracker:
                 value = float(item)
             except (TypeError, ValueError):
                 return None
-            if not math.isfinite(value):
+            if not math.isfinite(value) or abs(value) >= self._PENALTY_MAGNITUDE:
                 return None
             values.append(value)
         return values
+
+    @staticmethod
+    def _tracker_partial_estimate_vector(raw: Any) -> Optional[List[float]]:
+        """
+        Parse ``objective.compute`` output for mid-run tracking.
+
+        Components that cannot be evaluated yet (non-finite: ``inf``, ``nan``,
+        or unparseable) become ``nan`` placeholders.  At least one finite
+        component is required; otherwise returns ``None``.
+        """
+        if raw is None:
+            return None
+        _pen = SimulationTracker._PENALTY_MAGNITUDE
+
+        if isinstance(raw, (tuple, list)):
+            out: List[float] = []
+            for item in raw:
+                try:
+                    v = float(item)
+                except (TypeError, ValueError):
+                    out.append(float("nan"))
+                    continue
+                # Non-finite or penalty-magnitude values are unavailable mid-run.
+                out.append(v if (math.isfinite(v) and abs(v) < _pen) else float("nan"))
+            if not out or not any(math.isfinite(x) for x in out):
+                return None
+            return out
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(v) or abs(v) >= _pen:
+            return None
+        return [v]
 
     def _estimate_running_score(
         self,
@@ -336,8 +412,13 @@ class SimulationTracker:
         """
         Estimate objective score for an in-flight simulation.
 
-        If an objective is available, use objective.compute with partial context.
-        If not, fall back to tick-based proxy score.
+        Uses ``objective.compute`` with the current tick as ``exec_time``.  For
+        multi-objective functions, metrics that are not available until the run
+        finishes (e.g. peak memory, power) often yield non-finite components;
+        those are marked ``nan`` and omitted from the kill decision.  Kill uses
+        only objectives with finite partial estimates; when all components are
+        finite (e.g. latency + bandwidth from tick + config), the rule matches
+        full MOO: kill only if **every** objective is past its kill bound.
         """
         if self.objective is not None:
             try:
@@ -347,7 +428,7 @@ class SimulationTracker:
                     metadata=metadata or {},
                     config=config,
                 )
-                return self._reduce_score(estimated)
+                return self._tracker_partial_estimate_vector(estimated)
             except Exception as e:
                 if self.verbose:
                     print(f"[Tracker] Warning: objective-based score estimate failed: {e}")
@@ -365,17 +446,13 @@ class SimulationTracker:
     ) -> bool:
         """
         Check if simulation should be killed based on current progress.
-        
-        Monitors the trace CSV file for issue ticks and compares against threshold.
-        
-        Args:
-            trace_file: Path to simulation trace CSV file
-            workload_file: Optional path to workload file (for additional context)
-            config: Optional optimization configuration for objective-based scoring
-            metadata: Optional metadata for objective-based scoring
-        
-        Returns:
-            True if simulation should be killed, False otherwise
+
+        Monitors the trace CSV for issue ticks, builds a partial objective vector
+        via ``objective.compute(exec_time=tick, ...)``, and compares finite
+        components to per-objective kill bounds.  Components that are not
+        finite (unavailable mid-run, e.g. power or peak memory) are skipped.
+        The run is killed only when **every available** objective is worse than
+        its threshold (minimize: above kill line; maximize: below kill line).
         """
         _ = workload_file  # Reserved for future context-specific logic.
 
@@ -413,15 +490,27 @@ class SimulationTracker:
             if estimated_score is None:
                 self._write_state(state)
                 return False
-            
+
             kill_threshold_vector = self._to_vector(kill_threshold, len(estimated_score))
             directions = self._objective_directions(len(estimated_score))
-            # In multi-objective mode, kill only if run is worse than threshold
-            # on all objectives (safe Pareto-aware pruning).
-            should_kill = all(
-                (score_val > kill_val if is_min else score_val < kill_val)
-                for score_val, kill_val, is_min in zip(estimated_score, kill_threshold_vector, directions)
-            )
+            # Only evaluate objectives with a finite partial estimate.  Metrics
+            # that need a finished simulation (power, peak memory, etc.) often
+            # return non-finite values mid-run — skip those axes until available.
+            # Kill iff every *available* objective is past its kill bound.  When
+            # all objectives are available (e.g. time + config-derived BW), this
+            # matches full MOO: all must be bad to kill.
+            _pen = SimulationTracker._PENALTY_MAGNITUDE
+            bad_flags: List[bool] = []
+            for score_val, kill_val, is_min in zip(
+                estimated_score, kill_threshold_vector, directions
+            ):
+                # Skip unavailable (nan) or penalty-magnitude components.
+                if not math.isfinite(score_val) or abs(score_val) >= _pen:
+                    continue
+                bad_flags.append(
+                    (score_val > kill_val) if is_min else (score_val < kill_val)
+                )
+            should_kill = bool(bad_flags) and all(bad_flags)
 
             if should_kill:
                 print(
@@ -507,17 +596,20 @@ class SimulationTracker:
     def get_status(self) -> Dict:
         """
         Get tracker status information.
-        
+
         Returns:
-            Dictionary with threshold, kill_threshold, and statistics
+            Dictionary with threshold, kill_threshold, per-objective directions,
+            and running statistics.
         """
         state = self._read_state()
         threshold = state.get('threshold', 1e15)
+        n = len(threshold) if isinstance(threshold, (list, tuple)) else 1
+        directions = self._objective_directions(n)
         return {
             'threshold': threshold,
             'kill_threshold': self.get_kill_score_threshold(),
             'kill_multiplier': self.kill_multiplier,
-            'minimize': self.minimize,
+            'score_directions': directions,
             'latest_tick': state.get('latest_tick'),
             'total_checked': int(state.get('total_checked', 0)),
             'total_killed': int(state.get('total_killed', 0))
@@ -547,10 +639,15 @@ class SimulationTracker:
     def __str__(self) -> str:
         """Human-readable string."""
         status = self.get_status()
+        directions = status['score_directions']
+        if len(directions) == 1:
+            dir_str = "minimize" if directions[0] else "maximize"
+        else:
+            dir_str = "[" + ", ".join("min" if d else "max" for d in directions) + "]"
         return (f"SimulationTracker\n"
                 f"  Threshold: {self._format_threshold(status['threshold'])}\n"
                 f"  Kill at: {self._format_threshold(status['kill_threshold'])}\n"
-                f"  Mode: {'minimize' if status['minimize'] else 'maximize'}\n"
+                f"  Directions: {dir_str}\n"
                 f"  Multiplier: {status['kill_multiplier']}x\n"
                 f"  Total checked: {status['total_checked']}\n"
                 f"  Total killed: {status['total_killed']}")
