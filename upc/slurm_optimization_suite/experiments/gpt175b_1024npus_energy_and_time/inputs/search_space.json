@@ -14,8 +14,8 @@
     },
     "system":{
         "collective-optimization": ["localBWAware", "baseline"],
-        "active-chunks-per-dimension": [1, 2, 4, 8, 16],
-        "preferred-dataset-splits": [1, 2, 4, 8, 16]
+        "active-chunks-per-dimension": [1, 2, 4, 8],
+        "preferred-dataset-splits": [1, 2, 4, 8]
     },
     "network": {
         
