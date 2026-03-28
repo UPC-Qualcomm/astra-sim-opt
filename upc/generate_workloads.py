@@ -56,28 +56,28 @@ class Model(Enum):
     T5_Small = 0
     T5_Base = 1
     T5_Large = 2
-    GPT_2_Small = 3
-    GPT_2_Medium = 4
-    GPT_3_1300M = 5
+    GPT_Small = 3
+    GPT_Medium = 4
+    GPT_1300M = 5
     GPT_Neo_2700M = 6
     FLAN_T5_XXL_11B = 7
     GPT_13B = 8
     GPT_NeoX_20B = 9
-    GPT_3_175B = 10
+    GPT_175B = 10
     PaLM_540B = 11
-    GPT_4_Estimated_over_1T = 12
+    GPT_Estimated_over_1T = 12
     Default = 13
-    LLaMA_3_70B = 14
+    LLaMA_70B = 14
     Model_100B = 15
     Model_120B = 16
-    llama_8B = 17
+    LLaMA_8B = 17
     GPT_30B = 18
     GPT_40B = 19
     Simple = 20
     GPT_8B = 21
     GPT_70B = 22
-    LLaMA_2_30B = 23
-    LLaMA_2_405B = 24
+    LLaMA_30B = 23
+    LLaMA_405B = 24
 
 
     @staticmethod
@@ -88,14 +88,14 @@ class Model(Enum):
         'dense'.  Everything else defaults to 'dense' as a safe fallback.
         """
         _GPT_MODELS = {
-            Model.GPT_2_Small,
-            Model.GPT_2_Medium,
-            Model.GPT_3_1300M,
+            Model.GPT_Small,
+            Model.GPT_Medium,
+            Model.GPT_1300M,
             Model.GPT_Neo_2700M,
             Model.GPT_13B,
             Model.GPT_NeoX_20B,
-            Model.GPT_3_175B,
-            Model.GPT_4_Estimated_over_1T,
+            Model.GPT_175B,
+            Model.GPT_Estimated_over_1T,
             Model.GPT_30B,
             Model.GPT_40B,
             Model.GPT_8B,
@@ -104,10 +104,10 @@ class Model(Enum):
             Model.Simple,
         }
         _LLAMA_MODELS = {
-            Model.LLaMA_3_70B,
-            Model.llama_8B,
-            Model.LLaMA_2_30B,
-            Model.LLaMA_2_405B,
+            Model.LLaMA_70B,
+            Model.LLaMA_8B,
+            Model.LLaMA_30B,
+            Model.LLaMA_405B,
             Model.Model_100B,
             Model.Model_120B,
             Model.T5_Small,
@@ -128,53 +128,53 @@ class Model(Enum):
         if model == Model.T5_Small:
             return [32128, 512, 512, 2048, [32], 32, 512, 8, 6]
         elif model == Model.T5_Base:
-            return [32128, 768, 768, 3072, [2048], 32, 512, 12, 12]
+            return [32128, 768, 768, 3072, [2048], 2048, 512, 12, 12]
         elif model == Model.T5_Large:
-            return [32128, 1024, 1024, 4096, [2048], 32, 512, 16, 24]
-        elif model == Model.GPT_2_Small:
-            return [50257, 768, 768, 3072, [2048], 32, 1024, 12, 12]
-        elif model == Model.GPT_2_Medium:
-            return [50257, 1024, 1024, 4096, [2048], 32, 1024, 16, 24]
-        elif model == Model.GPT_3_1300M:
+            return [32128, 1024, 1024, 4096, [2048], 2048, 512, 16, 24]
+        elif model == Model.GPT_Small:
+            return [50257, 768, 768, 3072, [2048], 2048, 1024, 12, 12]
+        elif model == Model.GPT_Medium:
+            return [50257, 1024, 1024, 4096, [2048], 2048, 1024, 16, 24]
+        elif model == Model.GPT_1300M:
             return [50257, 2048, 2048, 8192, [512], 512, 2048, 16, 24]
         elif model == Model.GPT_Neo_2700M:
-            return [50257, 2560, 2560, 10240, [512], 64, 2048, 32, 32]
-        elif model == Model.llama_8B:
-            return [128256, 4096, 4096, 14336, [512], 128, 8192, 32, 32]
+            return [50257, 2560, 2560, 10240, [512], 512, 2048, 32, 32]
+        elif model == Model.LLaMA_8B:
+            return [128256, 4096, 4096, 14336, [32], 512, 8192, 32, 32]
         elif model == Model.FLAN_T5_XXL_11B:
-            return [32128, 4096, 4096, 10240, [2048], 32, 1024, 64, 24]
+            return [32128, 4096, 4096, 10240, [2048], 2048, 1024, 64, 24]
         elif model == Model.GPT_13B:
-            return [50257, 5140, 5140, 20560, [2048], 32, 2048, 40, 40]
+            return [50257, 5140, 5140, 20560, [2048], 2048, 2048, 40, 40]
         elif model == Model.GPT_NeoX_20B:
-            return [50257, 6144, 6144, 24576, [2048], 32, 2048, 64, 44]
+            return [50257, 6144, 6144, 24576, [2048], 2048, 2048, 64, 44]
         elif model == Model.GPT_8B:
-            return [50257, 3072, 3072, 12288, [2048], 32, 2048, 24, 24]
+            return [50257, 3072, 3072, 12288, [2048], 2048, 2048, 24, 24]
         elif model == Model.GPT_30B:
-            return [50257, 6144, 6144, 24576, [2048], 32, 2048, 48, 48]
+            return [50257, 6144, 6144, 24576, [2048], 2048, 2048, 48, 48]
         elif model == Model.GPT_70B:
-            return [50257, 6144, 6144, 21504, [2048], 32, 2048, 48, 72]
+            return [50257, 6144, 6144, 21504, [2048], 2048, 2048, 48, 72]
         elif model == Model.GPT_40B:
-            return [50257, 8192, 8192, 28672, [512], 512, 2048, 32, 56]
-        elif model == Model.LLaMA_2_30B:
-            return [128256, 8192, 8192, 32768, [2048], 32, 8192, 64, 56]
-        elif model == Model.LLaMA_2_70B:
-            return [128256, 8192, 8192, 32768, [2048], 32, 8192, 64, 80]
-        elif model == Model.LLaMA_2_405B:
-            return [128256, 16384, 16384, 67344, [2048], 32, 8192, 128, 126]
+            return [50257, 8192, 8192, 28672, [64], 512, 2048, 32, 56]
+        elif model == Model.LLaMA_30B:
+            return [128256, 8192, 8192, 32768, [2048], 2048, 8192, 64, 56]
+        elif model == Model.LLaMA_70B:
+            return [128256, 8192, 8192, 32768, [16], 2048, 8192, 64, 80]
+        elif model == Model.LLaMA_405B:
+            return [128256, 16384, 16384, 67344, [2048], 2048, 8192, 128, 126]
         elif model == Model.Model_100B:
             return [32000, 32000, 9216, 36864, [2048], 2048, 72, 88]
         elif model == Model.Model_120B:
-            return [32000, 32000, 10240, 40960, [2048], 32, 2048, 80, 96]
-        elif model == Model.GPT_3_175B:
-            return [50257, 12288, 12288, 49152, [2048], 32, 2048, 96, 96]
+            return [32000, 32000, 10240, 40960, [2048], 2048, 2048, 80, 96]
+        elif model == Model.GPT_175B:
+            return [50257, 12288, 12288, 49152, [32], 2048, 2048, 96, 96]
         elif model == Model.PaLM_540B:
-            return [50257, 18432, 18432, 73728, [2048], 32, 8192, 72, 118]
-        elif model == Model.GPT_4_Estimated_over_1T:
-            return [50257, 20480, 20480, 81920, [2048], 32, 8192, 128, 128]
+            return [50257, 18432, 18432, 73728, [2048], 2048, 8192, 72, 118]
+        elif model == Model.GPT_Estimated_over_1T:
+            return [50257, 20480, 20480, 81920, [2048], 2048, 8192, 128, 128]
         elif model == Model.Simple:
             return [1024, 1024, 1024, 4096, [32], 32, 32, 4, 4]
         else:
-            return [51200, 25600, 25600, 25600 * 4, [1024], 32, 1024, 1024, 32]
+            return [51200, 25600, 25600, 25600 * 4, [1024], 1024, 1024, 1024, 32]
 
     # def get_model_params(model):
     #    din = 51200
@@ -209,8 +209,8 @@ def generate_instance(design_point, model=Model.Default, folder_name="default", 
         #f"--dout {dout} "
         f"--dmodel {dmodel} "
         f"--dff {dff} "
-        f"--batch '{batch}' "
-        f"--micro_batch '{micro_batch}' "
+        f"--batch '{[dp*batch[0]]}' "
+        f"--micro_batch '{dp*batch[0]}' "
         f"--seq {seq} "
         f"--head {head} "
         f"--num_stacks {num_stacks} "
@@ -356,7 +356,6 @@ if __name__ == "__main__":
     custom_args = [
         args.activation_recompute,
         args.tpsp,
-        args.model_type,
         args.mixed_precision,
         args.print_gpu_vram,
         args.ep,
