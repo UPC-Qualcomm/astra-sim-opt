@@ -78,6 +78,9 @@ echo "Starting experiment: $EXP_NAME" | tee -a "$LOG_FILE"
 echo "SLURM job: ${SLURM_JOB_ID:-N/A}" | tee -a "$LOG_FILE"
 echo "Node: ${SLURMD_NODENAME:-$(hostname)}" | tee -a "$LOG_FILE"
 echo "CPUs: ${SLURM_CPUS_PER_TASK:-N/A}" | tee -a "$LOG_FILE"
+echo "ASTRA_SIM_PYTHON: ${ASTRA_SIM_PYTHON:-N/A}" | tee -a "$LOG_FILE"
+echo "which python: $(command -v python || echo N/A)" | tee -a "$LOG_FILE"
+echo "python --version: $(python --version 2>&1 || echo N/A)" | tee -a "$LOG_FILE"
 
 time python "$SWEEP_SCRIPT" \
   --objective "$OBJECTIVE_KEY" \

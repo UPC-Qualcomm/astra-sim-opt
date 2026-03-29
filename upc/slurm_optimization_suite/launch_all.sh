@@ -26,10 +26,6 @@ NODE_STATES="idle,mix"
 # Retry configuration for failed sbatch submissions
 MAX_RETRIES_PER_EXPERIMENT=3
 
-# Scheduling guards to avoid pending jobs when a node cannot run immediately.
-ENFORCE_REALTIME_NODE_CHECK=1
-SBATCH_IMMEDIATE_SECONDS=1
-
 # Global defaults (can be overridden per experiment in config.env)
 DEFAULT_CORES_PERCENT=32
 DEFAULT_MEM_PER_CORE_GB=2
@@ -40,27 +36,6 @@ MAX_CPUS_PER_EXPERIMENT=8
 # (Uncommented experiments will be submitted to SLURM)
 #################################################################################
 ACTIVE_EXPERIMENTS=(
-  "gpt175b_1024npus_edp"
-  "gpt175b_1024npus_edp_and_bw"
-  "gpt175b_1024npus_energy_and_time"
-  "gpt175b_1024npus_memory_and_time"
-  "gpt175b_1024npus_time"
-  "gpt175b_1024npus_time_and_bw"
-  "gpt175b_1024npus_time_and_throughput_per_energy"
-  "gpt60b_128npus_edp"
-  "gpt60b_128npus_edp_and_bw"
-  "gpt60b_128npus_energy_and_time"
-  "gpt60b_128npus_memory_and_time"
-  "gpt60b_128npus_time"
-  "gpt60b_128npus_time_and_bw"
-  "gpt60b_128npus_time_and_throughput_per_energy"
-  "llama70b_128npus_edp"
-  "llama70b_128npus_edp_and_bw"
-  "llama70b_128npus_energy_and_time"
-  "llama70b_128npus_memory_and_time"
-  "llama70b_128npus_time"
-  "llama70b_128npus_time_and_bw"
-  "llama70b_128npus_time_and_throughput_per_energy"
   "llama8b_32npus_edp"
   "llama8b_32npus_edp_and_bw"
   "llama8b_32npus_energy_and_time"
@@ -68,6 +43,27 @@ ACTIVE_EXPERIMENTS=(
   "llama8b_32npus_time"
   "llama8b_32npus_time_and_bw"
   "llama8b_32npus_time_and_throughput_per_energy"
+  #"gpt60b_128npus_edp"
+  #"gpt60b_128npus_edp_and_bw"
+  #"gpt60b_128npus_energy_and_time"
+  #"gpt60b_128npus_memory_and_time"
+  #"gpt60b_128npus_time"
+  #"gpt60b_128npus_time_and_bw"
+  #"gpt60b_128npus_time_and_throughput_per_energy"
+  #"llama70b_128npus_edp"
+  #"llama70b_128npus_edp_and_bw"
+  #"llama70b_128npus_energy_and_time"
+  #"llama70b_128npus_memory_and_time"
+  #"llama70b_128npus_time"
+  #"llama70b_128npus_time_and_bw"
+  #"llama70b_128npus_time_and_throughput_per_energy"
+  #"gpt175b_1024npus_edp"
+  #"gpt175b_1024npus_edp_and_bw"
+  #"gpt175b_1024npus_energy_and_time"
+  #"gpt175b_1024npus_memory_and_time"
+  #"gpt175b_1024npus_time"
+  #"gpt175b_1024npus_time_and_bw"
+  #"gpt175b_1024npus_time_and_throughput_per_energy"
   # "llama8b_32npus_time"          # Example: uncomment to RUN this experiment
 )
 
@@ -204,28 +200,6 @@ get_node_free_resources() {
   (( mem_free < 1 )) && mem_free=1
 
   echo "$cpu_tot|$mem_tot|$cpu_free|$mem_free"
-}
-
-node_has_realtime_capacity() {
-  local node_name="$1"
-  local req_cpus="$2"
-  local req_mem_mb="$3"
-
-  local resource_line_now
-  resource_line_now="$(get_node_free_resources "$node_name")"
-
-  local cpu_tot_now mem_tot_now cpu_free_now mem_free_now
-  IFS='|' read -r cpu_tot_now mem_tot_now cpu_free_now mem_free_now <<< "$resource_line_now"
-
-  (( cpu_free_now >= req_cpus )) || return 1
-  (( mem_free_now >= req_mem_mb )) || return 1
-
-  local pool_cpus_now
-  pool_cpus_now=$(( cpu_free_now * DEFAULT_CORES_PERCENT / 100 ))
-  (( pool_cpus_now < 1 )) && pool_cpus_now=1
-  (( pool_cpus_now >= req_cpus )) || return 1
-
-  return 0
 }
 
 SYNCED_NODES=()
@@ -375,10 +349,6 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
         candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
       fi
 
-      if [[ "$ENFORCE_REALTIME_NODE_CHECK" -eq 1 ]]; then
-        node_has_realtime_capacity "$node" "$candidate_cpus" "$candidate_req_mem_mb" || continue
-      fi
-
       selected_node_pos="$node_pos"
       selected_cpus="$candidate_cpus"
       selected_req_mem_mb="$candidate_req_mem_mb"
@@ -422,10 +392,12 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       submit_partition="$PARTITION_OVERRIDE"
     fi
 
-    # Sync environment to compute node before submission
-    echo "Preparing node $node for $(basename "$exp_dir")..."
-    if ! sync_astraenv_to_node "$node"; then
-      echo "Warning: Failed to sync astraenv to $node, job may fail" >&2
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+      # Sync environment to compute node before submission
+      echo "Preparing node $node for $(basename "$exp_dir")..."
+      if ! sync_astraenv_to_node "$node"; then
+        echo "Warning: Failed to sync astraenv to $node, job may fail" >&2
+      fi
     fi
 
     wrap_cmd="bash \"$run_script\""
@@ -443,10 +415,6 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       --error "$logs_dir/slurm-%j.err"
       --wrap "$wrap_cmd"
     )
-
-    if [[ "$SBATCH_IMMEDIATE_SECONDS" -ge 0 ]]; then
-      sbatch_cmd+=(--immediate="$SBATCH_IMMEDIATE_SECONDS")
-    fi
 
     # Add optional SLURM parameters if configured
     [[ -n "${SLURM_ACCOUNT:-}" ]] && sbatch_cmd+=(--account "$SLURM_ACCOUNT")
