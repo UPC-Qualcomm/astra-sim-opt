@@ -166,7 +166,7 @@ class Model(Enum):
         elif model == Model.Model_120B:
             return [32000, 32000, 10240, 40960, [2048], 2048, 2048, 80, 96]
         elif model == Model.GPT_175B:
-            return [50257, 12288, 12288, 49152, [32], 2048, 2048, 96, 96]
+            return [50257, 12288, 12288, 49152, [64], 2048, 2048, 96, 96]
         elif model == Model.PaLM_540B:
             return [50257, 18432, 18432, 73728, [2048], 2048, 8192, 72, 118]
         elif model == Model.GPT_Estimated_over_1T:
