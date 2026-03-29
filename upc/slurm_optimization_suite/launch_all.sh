@@ -232,8 +232,8 @@ SYNCED_NODES=()
 
 sync_astraenv_to_node() {
   local node_name="$1"
-  local source_env="/scratch/nas/4/nasser/astraenv"
-  local target_env="/scratch/nas/4/nasser/astraenv"
+  local source_env="/scratch/nas/4/nasser/astra-sim/astraenv"
+  local target_env="/scratch/nas/4/nasser/astra-sim/astraenv"
 
   # Check if already synced this node
   for synced in "${SYNCED_NODES[@]}"; do
