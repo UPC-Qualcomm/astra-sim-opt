@@ -104,7 +104,12 @@ class SimulationRunner:
         self.memory_config = None
         
         # Setup directories (use custom or default)
-        self.workload_dir = f"{base_dir}/workload/{self.folder_name}"
+        # If folder_name is absolute, use it directly to stay consistent with
+        # workload_generator.generate_workload_with_env root resolution.
+        if os.path.isabs(self.folder_name):
+            self.workload_dir = self.folder_name
+        else:
+            self.workload_dir = f"{base_dir}/workload/{self.folder_name}"
         self.output_dir = output_dir if output_dir is not None else f"{base_dir}/output/{self.folder_name}/{network_name}"
         self.network_log_dir = network_log_dir if network_log_dir is not None else f"{base_dir}/network_log/{self.folder_name}/{network_name}"
         
@@ -326,7 +331,7 @@ class SimulationRunner:
             'hidden_size': dmodel,
             'ffn_hidden_size': dff,
             'batch_size': batch[0] if isinstance(batch, list) else batch,
-            'micro_batch': micro_batch,
+            'micro_batch': batch[0],
             'sequence_length': seq,
             'num_attention_heads': head,
             'num_layers': num_stacks,

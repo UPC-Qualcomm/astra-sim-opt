@@ -20,6 +20,9 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
         True if successful, False otherwise
     """
     root = os.path.join(os.environ['ASTRA_SIM_ROOT'], 'upc', 'workload', folder_name)
+    stg_main = os.path.join(os.environ['ASTRA_SIM_ROOT'], 'extern', 'symbolic_tensor_graph', 'main.py')
+    if not os.path.isfile(stg_main):
+        raise FileNotFoundError(f"Workload generator entrypoint not found: {stg_main}")
     
     # Extract values from design_point dictionary
     dp = design_point['dp']
@@ -34,7 +37,7 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
     print(f"Parameters: din={din}, dmodel={dmodel}, dff={dff}, batch={batch}, micro_batch={micro_batch}, seq={seq}, head={head}, num_stacks={num_stacks}, dp={dp}, mp={mp}, sp={ssp}, pp={pp}, sharded={sharded}, model_type={model_type}")
     # Note: Having if the micro batch is much smaller than the global batch, the generator will be much slower.
     cmd = (
-        f"{os.environ['ASTRA_SIM_PYTHON']} main.py "
+        f"{os.environ['ASTRA_SIM_PYTHON']} {stg_main} "
         f"--output_dir {root} "
         f"--output_name {dp}_{mp}_{ssp}_{pp}_{1 if sharded else 0}.%d.et "
         f"--dp {dp} "
