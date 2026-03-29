@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Use /scratch for SLURM accessibility on compute nodes
+ROOT_DIR="/scratch/nas/4/nasser/astra-sim"
 EXPERIMENTS_DIR="$ROOT_DIR/experiments"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 LAUNCH_LOG_DIR="$ROOT_DIR/launch_logs/$TIMESTAMP"
 mkdir -p "$LAUNCH_LOG_DIR"
+
+# Verify that the scratch directory is accessible
+if [[ ! -d "$EXPERIMENTS_DIR" ]]; then
+  echo "Error: Experiments directory not found at: $EXPERIMENTS_DIR" >&2
+  echo "Please ensure experiments are synced to /scratch/nas/4/nasser/astra-sim" >&2
+  exit 1
+fi
 
 # Node states considered usable for scheduling.
 NODE_STATES="idle,mix"
@@ -14,6 +22,42 @@ NODE_STATES="idle,mix"
 DEFAULT_CORES_PERCENT=32
 DEFAULT_MEM_PER_CORE_GB=2
 MAX_CPUS_PER_EXPERIMENT=8
+
+#################################################################################
+# EXPERIMENT MANIFEST - Comment out experiments you DON'T want to run
+# (Uncommented experiments will be submitted to SLURM)
+#################################################################################
+ACTIVE_EXPERIMENTS=(
+  "gpt175b_1024npus_edp"
+  "gpt175b_1024npus_edp_and_bw"
+  "gpt175b_1024npus_energy_and_time"
+  "gpt175b_1024npus_memory_and_time"
+  "gpt175b_1024npus_time"
+  "gpt175b_1024npus_time_and_bw"
+  "gpt175b_1024npus_time_and_throughput_per_energy"
+  "gpt60b_128npus_edp"
+  "gpt60b_128npus_edp_and_bw"
+  "gpt60b_128npus_energy_and_time"
+  "gpt60b_128npus_memory_and_time"
+  "gpt60b_128npus_time"
+  "gpt60b_128npus_time_and_bw"
+  "gpt60b_128npus_time_and_throughput_per_energy"
+  "llama70b_128npus_edp"
+  "llama70b_128npus_edp_and_bw"
+  "llama70b_128npus_energy_and_time"
+  "llama70b_128npus_memory_and_time"
+  "llama70b_128npus_time"
+  "llama70b_128npus_time_and_bw"
+  "llama70b_128npus_time_and_throughput_per_energy"
+  "llama8b_32npus_edp"
+  "llama8b_32npus_edp_and_bw"
+  "llama8b_32npus_energy_and_time"
+  "llama8b_32npus_memory_and_time"
+  "llama8b_32npus_time"
+  "llama8b_32npus_time_and_bw"
+  "llama8b_32npus_time_and_throughput_per_energy"
+  # "llama8b_32npus_time"          # Example: uncomment to RUN this experiment
+)
 
 usage() {
   cat <<USAGE
@@ -24,6 +68,10 @@ Options:
   --partition PART     Force SLURM partition for all jobs.
   --max-jobs N         Submit at most N experiments (in manifest order).
   --allow-node-reuse   Compatibility flag (scheduler already packs multiple jobs per node).
+
+Experiment Selection:
+  Edit the ACTIVE_EXPERIMENTS array above to choose which experiments to run.
+  Comment out (#) experiments you don't want to run.
 USAGE
 }
 
@@ -67,9 +115,19 @@ if ! command -v sinfo >/dev/null 2>&1 || ! command -v sbatch >/dev/null 2>&1; th
   exit 1
 fi
 
-mapfile -t EXPERIMENT_PATHS < <(find "$EXPERIMENTS_DIR" -mindepth 1 -maxdepth 1 -type d | sort)
+# Filter experiments by ACTIVE_EXPERIMENTS list
+EXPERIMENT_PATHS=()
+for exp_name in "${ACTIVE_EXPERIMENTS[@]}"; do
+  exp_path="$EXPERIMENTS_DIR/$exp_name"
+  if [[ -d "$exp_path" ]]; then
+    EXPERIMENT_PATHS+=("$exp_path")
+  else
+    echo "Warning: experiment directory not found: $exp_path" >&2
+  fi
+done
+
 if [[ ${#EXPERIMENT_PATHS[@]} -eq 0 ]]; then
-  echo "No experiment folders found in $EXPERIMENTS_DIR" >&2
+  echo "No active experiments found in $EXPERIMENTS_DIR" >&2
   exit 1
 fi
 
@@ -78,7 +136,9 @@ if [[ "$MAX_JOBS" -gt 0 ]] && [[ "$MAX_JOBS" -lt "${#EXPERIMENT_PATHS[@]}" ]]; t
 fi
 
 SINFO_OUT="$LAUNCH_LOG_DIR/sinfo_nodes.txt"
-sinfo -N -h -t "$NODE_STATES" -o "%N|%P|%t|%c|%m" > "$SINFO_OUT"
+
+# Sort nodes in descending order (higher IDs first = more resources)
+sinfo -N -h -t "$NODE_STATES" -o "%N|%P|%t|%c|%m" | sort -rV > "$SINFO_OUT"
 
 if [[ ! -s "$SINFO_OUT" ]]; then
   echo "No available nodes in states: $NODE_STATES" >&2
