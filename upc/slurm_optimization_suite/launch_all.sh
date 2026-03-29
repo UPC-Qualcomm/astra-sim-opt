@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Use /scratch for SLURM accessibility on compute nodes
-ROOT_DIR="/scratch/nas/4/nasser/astra-sim"
+ROOT_DIR="/scratch/nas/4/nasser/astra-sim/upc/slurm_optimization_suite"
 EXPERIMENTS_DIR="$ROOT_DIR/experiments"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 LAUNCH_LOG_DIR="$ROOT_DIR/launch_logs/$TIMESTAMP"
@@ -11,12 +11,20 @@ mkdir -p "$LAUNCH_LOG_DIR"
 # Verify that the scratch directory is accessible
 if [[ ! -d "$EXPERIMENTS_DIR" ]]; then
   echo "Error: Experiments directory not found at: $EXPERIMENTS_DIR" >&2
-  echo "Please ensure experiments are synced to /scratch/nas/4/nasser/astra-sim" >&2
+  echo "Please ensure experiments are synced to /scratch/nas/4/nasser/astra-sim/upc/slurm_optimization_suite" >&2
   exit 1
 fi
 
 # Node states considered usable for scheduling.
 NODE_STATES="idle,mix"
+
+# Optional SLURM parameters (uncomment and set if needed)
+# SLURM_ACCOUNT=""      # e.g., --account myaccount
+# SLURM_QOS=""          # e.g., --qos large (if valid for your account/partition)
+# SLURM_EXTRA_ARGS=""   # Additional sbatch arguments
+
+# Retry configuration for failed sbatch submissions
+MAX_RETRIES_PER_EXPERIMENT=3
 
 # Global defaults (can be overridden per experiment in config.env)
 DEFAULT_CORES_PERCENT=32
@@ -258,113 +266,155 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
     mem_per_cpu_gb="$DEFAULT_MEM_PER_CORE_GB"
   fi
 
-  # Choose a node slot: each node can host multiple experiments,
-  # consuming only 32% of its free CPUs in chunks of up to 8 CPUs/job.
-  selected_node_pos=-1
-  selected_cpus=0
-  selected_req_mem_mb=0
+  # Retry loop for sbatch submission
+  submission_successful=0
+  retry_count=0
+  TRIED_NODES=()
 
-  for ((try_i=0; try_i<${#NODES[@]}; try_i++)); do
-    node_pos=$(( (node_idx + try_i) % ${#NODES[@]} ))
-    remaining_cpus="${NODE_REMAINING_CPUS[$node_pos]}"
-    remaining_mem_mb="${NODE_REMAINING_MEM_MB[$node_pos]}"
-    (( remaining_cpus < 1 )) && continue
+  while [[ $submission_successful -eq 0 ]] && [[ $retry_count -lt $MAX_RETRIES_PER_EXPERIMENT ]]; do
 
-    if [[ -n "$cpus_override" ]]; then
-      candidate_cpus="$cpus_override"
-      (( candidate_cpus > remaining_cpus )) && candidate_cpus="$remaining_cpus"
-    else
-      candidate_cpus="$remaining_cpus"
-      (( candidate_cpus > MAX_CPUS_PER_EXPERIMENT )) && candidate_cpus="$MAX_CPUS_PER_EXPERIMENT"
-    fi
+    # Choose a node slot: each node can host multiple experiments,
+    # skipping nodes that already failed for this experiment
+    selected_node_pos=-1
+    selected_cpus=0
+    selected_req_mem_mb=0
 
-    (( candidate_cpus < 1 )) && continue
-    candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
+    for ((try_i=0; try_i<${#NODES[@]}; try_i++)); do
+      node_pos=$(( (node_idx + try_i) % ${#NODES[@]} ))
+      node="${NODES[$node_pos]}"
 
-    if (( candidate_req_mem_mb > remaining_mem_mb )); then
-      max_cpus_by_mem=$(( remaining_mem_mb / (mem_per_cpu_gb * 1024) ))
-      (( max_cpus_by_mem < 1 )) && continue
-      (( max_cpus_by_mem < candidate_cpus )) && candidate_cpus="$max_cpus_by_mem"
+      # Skip nodes already tried for this experiment
+      skip_node=0
+      for tried_node in "${TRIED_NODES[@]}"; do
+        if [[ "$tried_node" == "$node" ]]; then
+          skip_node=1
+          break
+        fi
+      done
+      [[ $skip_node -eq 1 ]] && continue
+
+      remaining_cpus="${NODE_REMAINING_CPUS[$node_pos]}"
+      remaining_mem_mb="${NODE_REMAINING_MEM_MB[$node_pos]}"
+      (( remaining_cpus < 1 )) && continue
+
+      if [[ -n "$cpus_override" ]]; then
+        candidate_cpus="$cpus_override"
+        (( candidate_cpus > remaining_cpus )) && candidate_cpus="$remaining_cpus"
+      else
+        candidate_cpus="$remaining_cpus"
+        (( candidate_cpus > MAX_CPUS_PER_EXPERIMENT )) && candidate_cpus="$MAX_CPUS_PER_EXPERIMENT"
+      fi
+
+      (( candidate_cpus < 1 )) && continue
       candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
+
+      if (( candidate_req_mem_mb > remaining_mem_mb )); then
+        max_cpus_by_mem=$(( remaining_mem_mb / (mem_per_cpu_gb * 1024) ))
+        (( max_cpus_by_mem < 1 )) && continue
+        (( max_cpus_by_mem < candidate_cpus )) && candidate_cpus="$max_cpus_by_mem"
+        candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
+      fi
+
+      selected_node_pos="$node_pos"
+      selected_cpus="$candidate_cpus"
+      selected_req_mem_mb="$candidate_req_mem_mb"
+      break
+    done
+
+    if (( selected_node_pos < 0 )); then
+      echo "FAILED scheduling $(basename "$exp_dir"): no remaining capacity on available/untried nodes" >&2
+      echo "$(basename "$exp_dir"),N/A,N/A,0,0,0,0,0,$mem_per_cpu_gb,${mem_per_cpu_gb}G,${JOB_NAME:-$(basename "$exp_dir")},FAILED_NO_CAPACITY," >> "$ASSIGNMENT_CSV"
+      ((failed+=1))
+      break
     fi
 
-    selected_node_pos="$node_pos"
-    selected_cpus="$candidate_cpus"
-    selected_req_mem_mb="$candidate_req_mem_mb"
-    break
+    node_pos="$selected_node_pos"
+    node="${NODES[$node_pos]}"
+    partition="${PARTITIONS[$node_pos]}"
+    node_cores_total="${NODE_CORES_TOTAL_RUNTIME[$node_pos]}"
+    node_mem_total_mb="${NODE_MEM_TOTAL_RUNTIME[$node_pos]}"
+    node_cores_free="${NODE_FREE_CORES_INITIAL[$node_pos]}"
+    node_mem_free_mb="${NODE_FREE_MEM_INITIAL_MB[$node_pos]}"
+    cpus_per_task="$selected_cpus"
+    requested_mem_mb="$selected_req_mem_mb"
+
+    NODE_REMAINING_CPUS[$node_pos]=$(( ${NODE_REMAINING_CPUS[$node_pos]} - cpus_per_task ))
+    NODE_REMAINING_MEM_MB[$node_pos]=$(( ${NODE_REMAINING_MEM_MB[$node_pos]} - requested_mem_mb ))
+    NODE_ASSIGNED_JOBS[$node_pos]=$(( ${NODE_ASSIGNED_JOBS[$node_pos]} + 1 ))
+    NODE_ASSIGNED_CPUS[$node_pos]=$(( ${NODE_ASSIGNED_CPUS[$node_pos]} + cpus_per_task ))
+    (( NODE_REMAINING_CPUS[$node_pos] < 0 )) && NODE_REMAINING_CPUS[$node_pos]=0
+    (( NODE_REMAINING_MEM_MB[$node_pos] < 0 )) && NODE_REMAINING_MEM_MB[$node_pos]=0
+    node_idx=$(( node_pos + 1 ))
+
+    mem_per_cpu_slurm="${mem_per_cpu_gb}G"
+    job_name="${JOB_NAME:-$(basename "$exp_dir")}"
+    logs_dir="$exp_dir/logs"
+    mkdir -p "$logs_dir"
+
+    submit_partition="$partition"
+    if [[ -n "$FORCED_PARTITION" ]]; then
+      submit_partition="$FORCED_PARTITION"
+    elif [[ -n "${PARTITION_OVERRIDE:-}" ]]; then
+      submit_partition="$PARTITION_OVERRIDE"
+    fi
+
+    sbatch_cmd=(
+      sbatch
+      --job-name "$job_name"
+      --chdir "$exp_dir"
+      --nodelist "$node"
+      --partition "$submit_partition"
+      --cpus-per-task "$cpus_per_task"
+      --mem-per-cpu "$mem_per_cpu_slurm"
+      --export "ALL,N_WORKERS_OVERRIDE=$cpus_per_task"
+      --output "$logs_dir/slurm-%j.out"
+      --error "$logs_dir/slurm-%j.err"
+    )
+
+    # Add optional SLURM parameters if configured
+    [[ -n "${SLURM_ACCOUNT:-}" ]] && sbatch_cmd+=(--account "$SLURM_ACCOUNT")
+    [[ -n "${SLURM_QOS:-}" ]] && sbatch_cmd+=(--qos "$SLURM_QOS")
+    [[ -n "${SLURM_EXTRA_ARGS:-}" ]] && sbatch_cmd+=($SLURM_EXTRA_ARGS)
+
+    sbatch_cmd+=("$run_script")
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      echo "[DRY-RUN] ${sbatch_cmd[*]}"
+      echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,DRY_RUN," >> "$ASSIGNMENT_CSV"
+      ((submitted+=1))
+      submission_successful=1
+    else
+      set +e
+      out="$("${sbatch_cmd[@]}" 2>&1)"
+      rc=$?
+      set -e
+
+      if [[ $rc -eq 0 ]]; then
+        job_id="$(awk '{print $NF}' <<< "$out")"
+        echo "Submitted $(basename "$exp_dir") to $node (job $job_id, cpus=$cpus_per_task, mem/cpu=$mem_per_cpu_slurm)"
+        echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,SUBMITTED,$job_id" >> "$ASSIGNMENT_CSV"
+        ((submitted+=1))
+        submission_successful=1
+      else
+        echo "⚠️  Failed on $node (retry $(($retry_count+1))/$MAX_RETRIES_PER_EXPERIMENT): $out" >&2
+        TRIED_NODES+=("$node")
+        ((retry_count+=1))
+        
+        # Restore resources since this node failed
+        NODE_REMAINING_CPUS[$node_pos]=$(( ${NODE_REMAINING_CPUS[$node_pos]} + cpus_per_task ))
+        NODE_REMAINING_MEM_MB[$node_pos]=$(( ${NODE_REMAINING_MEM_MB[$node_pos]} + requested_mem_mb ))
+        NODE_ASSIGNED_JOBS[$node_pos]=$(( ${NODE_ASSIGNED_JOBS[$node_pos]} - 1 ))
+        NODE_ASSIGNED_CPUS[$node_pos]=$(( ${NODE_ASSIGNED_CPUS[$node_pos]} - cpus_per_task ))
+        (( NODE_ASSIGNED_JOBS[$node_pos] < 0 )) && NODE_ASSIGNED_JOBS[$node_pos]=0
+        (( NODE_ASSIGNED_CPUS[$node_pos] < 0 )) && NODE_ASSIGNED_CPUS[$node_pos]=0
+      fi
+    fi
   done
 
-  if (( selected_node_pos < 0 )); then
-    echo "FAILED scheduling $(basename "$exp_dir"): no remaining 32%-pool capacity on available nodes" >&2
-    echo "$(basename "$exp_dir"),N/A,N/A,0,0,0,0,0,$mem_per_cpu_gb,${mem_per_cpu_gb}G,${JOB_NAME:-$(basename "$exp_dir")},FAILED," >> "$ASSIGNMENT_CSV"
+  if [[ $submission_successful -eq 0 ]]; then
+    echo "FAILED submitting $(basename "$exp_dir") after $MAX_RETRIES_PER_EXPERIMENT retries" >&2
+    echo "$(basename "$exp_dir"),RETRY_EXHAUSTED,N/A,0,0,0,0,0,$mem_per_cpu_gb,${mem_per_cpu_gb}G,${JOB_NAME:-$(basename "$exp_dir")},FAILED_EXHAUSTED," >> "$ASSIGNMENT_CSV"
     ((failed+=1))
-    continue
-  fi
-
-  node_pos="$selected_node_pos"
-  node="${NODES[$node_pos]}"
-  partition="${PARTITIONS[$node_pos]}"
-  node_cores_total="${NODE_CORES_TOTAL_RUNTIME[$node_pos]}"
-  node_mem_total_mb="${NODE_MEM_TOTAL_RUNTIME[$node_pos]}"
-  node_cores_free="${NODE_FREE_CORES_INITIAL[$node_pos]}"
-  node_mem_free_mb="${NODE_FREE_MEM_INITIAL_MB[$node_pos]}"
-  cpus_per_task="$selected_cpus"
-  requested_mem_mb="$selected_req_mem_mb"
-
-  NODE_REMAINING_CPUS[$node_pos]=$(( ${NODE_REMAINING_CPUS[$node_pos]} - cpus_per_task ))
-  NODE_REMAINING_MEM_MB[$node_pos]=$(( ${NODE_REMAINING_MEM_MB[$node_pos]} - requested_mem_mb ))
-  NODE_ASSIGNED_JOBS[$node_pos]=$(( ${NODE_ASSIGNED_JOBS[$node_pos]} + 1 ))
-  NODE_ASSIGNED_CPUS[$node_pos]=$(( ${NODE_ASSIGNED_CPUS[$node_pos]} + cpus_per_task ))
-  (( NODE_REMAINING_CPUS[$node_pos] < 0 )) && NODE_REMAINING_CPUS[$node_pos]=0
-  (( NODE_REMAINING_MEM_MB[$node_pos] < 0 )) && NODE_REMAINING_MEM_MB[$node_pos]=0
-  node_idx=$(( node_pos + 1 ))
-
-  mem_per_cpu_slurm="${mem_per_cpu_gb}G"
-  job_name="${JOB_NAME:-$(basename "$exp_dir")}"
-  logs_dir="$exp_dir/logs"
-  mkdir -p "$logs_dir"
-
-  submit_partition="$partition"
-  if [[ -n "$FORCED_PARTITION" ]]; then
-    submit_partition="$FORCED_PARTITION"
-  elif [[ -n "${PARTITION_OVERRIDE:-}" ]]; then
-    submit_partition="$PARTITION_OVERRIDE"
-  fi
-
-  sbatch_cmd=(
-    sbatch
-    --job-name "$job_name"
-    --chdir "$exp_dir"
-    --nodelist "$node"
-    --partition "$submit_partition"
-    --qos "large"
-    --cpus-per-task "$cpus_per_task"
-    --mem-per-cpu "$mem_per_cpu_slurm"
-    --export "ALL,N_WORKERS_OVERRIDE=$cpus_per_task"
-    --output "$logs_dir/slurm-%j.out"
-    --error "$logs_dir/slurm-%j.err"
-    "$run_script"
-  )
-
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "[DRY-RUN] ${sbatch_cmd[*]}"
-    echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,DRY_RUN," >> "$ASSIGNMENT_CSV"
-    ((submitted+=1))
-  else
-    set +e
-    out="$("${sbatch_cmd[@]}" 2>&1)"
-    rc=$?
-    set -e
-    if [[ $rc -eq 0 ]]; then
-      job_id="$(awk '{print $NF}' <<< "$out")"
-      echo "Submitted $(basename "$exp_dir") to $node (job $job_id, cpus=$cpus_per_task, mem/cpu=$mem_per_cpu_slurm)"
-      echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,SUBMITTED,$job_id" >> "$ASSIGNMENT_CSV"
-      ((submitted+=1))
-    else
-      echo "FAILED submitting $(basename "$exp_dir"): $out" >&2
-      echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,FAILED," >> "$ASSIGNMENT_CSV"
-      ((failed+=1))
-    fi
   fi
 done
 

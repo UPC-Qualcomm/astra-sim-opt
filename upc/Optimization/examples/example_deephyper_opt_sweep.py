@@ -109,7 +109,7 @@ def main():
     objective_meta = OBJECTIVE_METADATA.get(objective_key, {"plot_labels": []})
 
     MODEL_NUM = args.model_num
-    MODEL_NAME = args.model_name or f"GPT_40B_{objective_key}"
+    MODEL_NAME = f'{args.model_name}_{objective_key}' if args.model_name else f"GPT_40B_{objective_key}"
     NUM_NPUS = args.num_npus
     NETWORK_NAME = args.network_name
     BUDGET = args.budget

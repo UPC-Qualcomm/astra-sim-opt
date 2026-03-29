@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # Use /scratch for SLURM accessibility on compute nodes
-ROOT_DIR="/scratch/nas/4/nasser/astra-sim"
+ROOT_DIR="/scratch/nas/4/nasser/astra-sim/upc/slurm_optimization_suite"
 EXPERIMENTS_DIR="$ROOT_DIR/experiments"
 
 # Verify that the scratch directory is accessible
 if [[ ! -d "$EXPERIMENTS_DIR" ]]; then
   echo "Error: Experiments directory not found at: $EXPERIMENTS_DIR" >&2
-  echo "Please ensure experiments are synced to /scratch/nas/4/nasser/astra-sim" >&2
+  echo "Please ensure experiments are synced to /scratch/nas/4/nasser/astra-sim/upc/slurm_optimization_suite" >&2
   exit 1
 fi
 
