@@ -2,7 +2,11 @@
 #SBATCH -q large
 set -euo pipefail
 
-EXP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${SLURM_SUBMIT_DIR:-}" && -f "${SLURM_SUBMIT_DIR}/config.env" ]]; then
+  EXP_DIR="${SLURM_SUBMIT_DIR}"
+else
+  EXP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 source "$EXP_DIR/config.env"
 
 mkdir -p "$EXP_DIR/logs" "$EXP_DIR/outputs"

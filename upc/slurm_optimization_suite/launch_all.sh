@@ -358,6 +358,8 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       submit_partition="$PARTITION_OVERRIDE"
     fi
 
+    wrap_cmd="bash \"$run_script\""
+
     sbatch_cmd=(
       sbatch
       --job-name "$job_name"
@@ -369,14 +371,13 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       --export "ALL,N_WORKERS_OVERRIDE=$cpus_per_task"
       --output "$logs_dir/slurm-%j.out"
       --error "$logs_dir/slurm-%j.err"
+      --wrap "$wrap_cmd"
     )
 
     # Add optional SLURM parameters if configured
     [[ -n "${SLURM_ACCOUNT:-}" ]] && sbatch_cmd+=(--account "$SLURM_ACCOUNT")
     [[ -n "${SLURM_QOS:-}" ]] && sbatch_cmd+=(--qos "$SLURM_QOS")
     [[ -n "${SLURM_EXTRA_ARGS:-}" ]] && sbatch_cmd+=($SLURM_EXTRA_ARGS)
-
-    sbatch_cmd+=("$run_script")
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
       echo "[DRY-RUN] ${sbatch_cmd[*]}"
