@@ -26,6 +26,10 @@ NODE_STATES="idle,mix"
 # Retry configuration for failed sbatch submissions
 MAX_RETRIES_PER_EXPERIMENT=3
 
+# Scheduling guards to avoid pending jobs when a node cannot run immediately.
+ENFORCE_REALTIME_NODE_CHECK=1
+SBATCH_IMMEDIATE_SECONDS=1
+
 # Global defaults (can be overridden per experiment in config.env)
 DEFAULT_CORES_PERCENT=32
 DEFAULT_MEM_PER_CORE_GB=2
@@ -202,6 +206,28 @@ get_node_free_resources() {
   echo "$cpu_tot|$mem_tot|$cpu_free|$mem_free"
 }
 
+node_has_realtime_capacity() {
+  local node_name="$1"
+  local req_cpus="$2"
+  local req_mem_mb="$3"
+
+  local resource_line_now
+  resource_line_now="$(get_node_free_resources "$node_name")"
+
+  local cpu_tot_now mem_tot_now cpu_free_now mem_free_now
+  IFS='|' read -r cpu_tot_now mem_tot_now cpu_free_now mem_free_now <<< "$resource_line_now"
+
+  (( cpu_free_now >= req_cpus )) || return 1
+  (( mem_free_now >= req_mem_mb )) || return 1
+
+  local pool_cpus_now
+  pool_cpus_now=$(( cpu_free_now * DEFAULT_CORES_PERCENT / 100 ))
+  (( pool_cpus_now < 1 )) && pool_cpus_now=1
+  (( pool_cpus_now >= req_cpus )) || return 1
+
+  return 0
+}
+
 declare -i node_idx=0
 submitted=0
 failed=0
@@ -315,6 +341,10 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
         candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
       fi
 
+      if [[ "$ENFORCE_REALTIME_NODE_CHECK" -eq 1 ]]; then
+        node_has_realtime_capacity "$node" "$candidate_cpus" "$candidate_req_mem_mb" || continue
+      fi
+
       selected_node_pos="$node_pos"
       selected_cpus="$candidate_cpus"
       selected_req_mem_mb="$candidate_req_mem_mb"
@@ -373,6 +403,10 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       --error "$logs_dir/slurm-%j.err"
       --wrap "$wrap_cmd"
     )
+
+    if [[ "$SBATCH_IMMEDIATE_SECONDS" -ge 0 ]]; then
+      sbatch_cmd+=(--immediate="$SBATCH_IMMEDIATE_SECONDS")
+    fi
 
     # Add optional SLURM parameters if configured
     [[ -n "${SLURM_ACCOUNT:-}" ]] && sbatch_cmd+=(--account "$SLURM_ACCOUNT")
