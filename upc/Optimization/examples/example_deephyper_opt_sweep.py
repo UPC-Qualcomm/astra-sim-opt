@@ -110,7 +110,6 @@ def main():
 
     MODEL_NUM = args.model_num
     MODEL_NAME = f'{args.model_name}_{objective_key}' if args.model_name else f"GPT_40B_{objective_key}"
-    NUM_NPUS = args.num_npus
     NETWORK_NAME = args.network_name
     BUDGET = args.budget
     INIT_SAMPLES = args.init_samples
@@ -139,7 +138,6 @@ def main():
     print("=" * 70)
     print(f"Objective key: {objective_key}")
     print(f"Model: {MODEL_NAME}")
-    print(f"NPUs: {NUM_NPUS}")
     print(f"Network: {NETWORK_NAME}")
     print(f"Budget: {BUDGET} evaluations")
     print(f"Workers: {N_WORKERS} (parallel evaluation)")
@@ -151,11 +149,7 @@ def main():
         search_space_path,
         include_categories=["parallelism_strategy", "network"],
     )
-    if getattr(search_space, "num_npus", NUM_NPUS) != NUM_NPUS:
-        print(
-            f"⚠️  Warning: num_npus mismatch (arg={NUM_NPUS}, search_space={search_space.num_npus}). "
-            "Using CLI value for simulator topology config."
-        )
+    
 
     print("\n2. Creating sampler...")
     sampler = RandomSampler(seed=42)
@@ -169,7 +163,7 @@ def main():
         "estimate_power": args.estimate_power,
         "power_config_path": power_config_path,
         "topology_config": {
-            "num_npus": NUM_NPUS,
+            "num_npus": args.num_npus,
             "npus_per_node": args.npus_per_node,
             "intra_node_topology": "switch",
             "num_nvswitches": args.num_nvswitches,

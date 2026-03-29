@@ -228,6 +228,40 @@ node_has_realtime_capacity() {
   return 0
 }
 
+SYNCED_NODES=()
+
+sync_astraenv_to_node() {
+  local node_name="$1"
+  local source_env="/scratch/nas/4/nasser/astraenv"
+  local target_env="/scratch/nas/4/nasser/astraenv"
+
+  # Check if already synced this node
+  for synced in "${SYNCED_NODES[@]}"; do
+    if [[ "$synced" == "$node_name" ]]; then
+      return 0
+    fi
+  done
+
+  # Check if venv already exists on target node
+  if ssh "$node_name" "[[ -d '$target_env/bin' && -f '$target_env/bin/python' ]]" 2>/dev/null; then
+    echo "  ✓ astraenv already exists on $node_name"
+    SYNCED_NODES+=("$node_name")
+    return 0
+  fi
+
+  # Sync environment to node
+  echo "  ⟳ Syncing astraenv to $node_name..."
+  if ssh "$node_name" "mkdir -p $(dirname "$target_env")" && \
+     rsync -az --delete "$source_env/" "$node_name:$target_env/" 2>/dev/null; then
+    echo "  ✓ astraenv synced to $node_name"
+    SYNCED_NODES+=("$node_name")
+    return 0
+  else
+    echo "  ✗ Failed to sync astraenv to $node_name" >&2
+    return 1
+  fi
+}
+
 declare -i node_idx=0
 submitted=0
 failed=0
@@ -386,6 +420,12 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       submit_partition="$FORCED_PARTITION"
     elif [[ -n "${PARTITION_OVERRIDE:-}" ]]; then
       submit_partition="$PARTITION_OVERRIDE"
+    fi
+
+    # Sync environment to compute node before submission
+    echo "Preparing node $node for $(basename "$exp_dir")..."
+    if ! sync_astraenv_to_node "$node"; then
+      echo "Warning: Failed to sync astraenv to $node, job may fail" >&2
     fi
 
     wrap_cmd="bash \"$run_script\""
