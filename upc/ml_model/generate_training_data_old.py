@@ -555,7 +555,7 @@ def main():
     
     # Set random seed for reproducibility
     #random.seed(42)
-    
+    random.shuffle(model_configs)
     # Generate all simulation configurations
     all_configs = []
     for num_npus in npu_counts:
