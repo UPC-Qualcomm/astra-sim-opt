@@ -188,13 +188,11 @@ class SimulationRunner:
                 print(f"      Memory: {self.memory_config}")
             
             # 1. Generate workload
-            model_data = {}
             success = workload_generator.generate_workload_with_env(
                 config,
                 workload_generator.Model(self.model_num),
                 self.folder_name,
-                suffix=suffix,
-                model_data=model_data
+                suffix=suffix
             )
             
             if not success:
@@ -257,10 +255,6 @@ class SimulationRunner:
             if self.verbose:
                 print(f"    Parsing output log...")
             exec_time, is_oom, peak_memory = self._output_log_parser(workload_file, suffix=suffix)
-            # peak_memory is stored in a local; added to metadata below after
-            # _get_simulation_metadata() initialises the dict.
-            num_steps = self._get_total_steps(config, model_data)
-            exec_time = num_steps * (exec_time / 1e09)
             
             if exec_time is None:
                 if self.verbose:
@@ -275,8 +269,13 @@ class SimulationRunner:
                     return None, is_oom, file_paths, metadata
                 return None
 
+
+            metadata = self._get_simulation_metadata()
+            num_steps = self._get_total_steps(config, metadata)
+            training_time = num_steps * (exec_time / 1e09)
             if self.verbose:
-                print(f"    ✓ Execution time: {exec_time:.2f}s")
+                print(f"    ✓ Execution time: {exec_time:.2f}ns")
+                print(f"    ✓ Total training time: {training_time:.2f}s")
 
             # 5. Run power estimation when explicitly requested (estimate_power=1, Mode D)
             power_metrics = {}
@@ -293,18 +292,16 @@ class SimulationRunner:
             # 6. Return with file paths and metadata if requested
             if return_paths:
                 # Collect metadata about the actual simulation configuration
-                metadata = self._get_simulation_metadata()
                 metadata['sim_walltime'] = sim_walltime
                 metadata['was_killed'] = False
                 metadata['sim_failed'] = False
                 metadata['peak_memory_gb'] = peak_memory
                 metadata['num_steps'] = self.num_npus
-                metadata.update(model_data)  # Merge model-specific data (din, dmodel, batch_size, seq, etc.)
                 metadata.update(power_metrics)  # Merge power metrics (empty dict if not g2 or failed)
 
-                return exec_time , is_oom, file_paths, metadata
+                return training_time , is_oom, file_paths, metadata
             else:
-                return exec_time , is_oom
+                return training_time , is_oom
             
         except Exception as e:
             if self.verbose:
@@ -380,21 +377,20 @@ class SimulationRunner:
         
         return None
     
-    def _get_total_steps(self, config, model_data):
+    def _get_total_steps(self, config, metadata):
         """
         Estimate total number of steps based on execution time and parallelsim settings and sequence length.
         
         Args:
             exec_time: Execution time of the simulation (in seconds)
             config: Configuration dictionary with dp, mp, sp, pp, sharded
-            model_data: Dictionary containing model-specific data, containing at least 'batch_size' and 'seq' keys
+            metadata: Dictionary containing model-specific data, containing at least 'batch_size' and 'seq' keys
 
         Returns:
             Estimated total number of steps for the full training run
         """
-            
-        global_batch_size = config['dp'] * model_data['batch_size']
-        tokens_per_step = global_batch_size * model_data['seq']
+        global_batch_size = config['dp'] * metadata['batch_size']
+        tokens_per_step = global_batch_size * metadata['sequence_length']
         total_num_steps = self.total_data_size_tokens / tokens_per_step
         return total_num_steps
             

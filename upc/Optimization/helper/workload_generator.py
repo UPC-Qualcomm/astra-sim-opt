@@ -7,7 +7,7 @@ sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
 from generate_workloads import Model
 
 
-def generate_workload_with_env(design_point: Dict, model, folder_name, suffix="", model_data: Dict = None):
+def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""):
     """
     Generate workload using the correct Python environment.
     
@@ -38,18 +38,6 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
         micro_batch = design_point['batch_size']  * dp
         
     model_type = Model.get_model_type(model)
-
-    model_data={
-        "din": din,
-        "dout": dout,
-        "dmodel": dmodel,
-        "dff": dff,
-        "batch": batch,
-        "micro_batch": micro_batch,
-        "seq": seq,
-        "head": head,
-        "num_stacks": num_stacks
-    }
     
     print("Generating workload for model:", model)
     print(f"Parameters: din={din}, dmodel={dmodel}, dff={dff}, batch={batch}, micro_batch={micro_batch}, seq={seq}, head={head}, num_stacks={num_stacks}, dp={dp}, mp={mp}, sp={ssp}, pp={pp}, sharded={sharded}, model_type={model_type}")

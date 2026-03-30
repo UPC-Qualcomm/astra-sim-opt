@@ -122,6 +122,7 @@ time python "$SWEEP_SCRIPT" \
   --routing-mode "$ROUTING_MODE" \
   --compress-and-clean \
   --include-categories "$INCLUDE_CATEGORIES" \
+  --enable-tracker "$ENABLE_TRACKER" \
   2>&1 | tee -a "$LOG_FILE"
 
 echo "Completed experiment: $EXP_NAME" | tee -a "$LOG_FILE"

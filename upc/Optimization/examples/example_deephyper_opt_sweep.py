@@ -87,7 +87,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--intra-node-bw", type=int, default=450, help="Intra-node bandwidth")
     parser.add_argument("--bw-unit", default="GB/s", help="Bandwidth unit")
     parser.add_argument("--include-categories", default=None, help="Comma-separated list of search space categories")
-    
+    parser.add_argument("--enable-tracker", action="store_true", help="Enable DeepHyper's built-in tracker for early termination")
     return parser.parse_args()
 
 
@@ -124,6 +124,7 @@ def main():
     TOP_K = args.top_k
     CLEANUP_BATCH_SIZE = args.cleanup_batch_size
     COMPRESS_AND_CLEAN_IS_ENABLED = args.compress_and_clean
+    ENABLE_TRACKER = args.enable_tracker
 
     default_search_space_path = os.path.join(
         os.path.dirname(__file__),
@@ -149,7 +150,10 @@ def main():
     print(f"Budget: {BUDGET} evaluations")
     print(f"Workers: {N_WORKERS} (parallel evaluation)")
     print(f"Search space: {search_space_path}")
-    print("Tracker: Enabled (kill at 1.5x threshold)\n")
+    if ENABLE_TRACKER:
+        print("Tracker: Enabled (kill at 1.5x threshold)\n")
+    else:
+        print("Tracker: Disabled\n")
 
     print("1. Creating search space...")
     search_space = create_search_space(
@@ -225,7 +229,7 @@ def main():
         acq_optimizer_kwargs={"max_total_failures": -1, "acq_optimizer_freq": 2},
         moo_scalarization_strategy="AugChebyshev",
         moo_scalarization_weight=moo_weight,
-        enable_tracker=True,
+        enable_tracker=ENABLE_TRACKER,
         tracker_kill_multiplier=1.5,
         tracker_initial_threshold=1e15,
         cleanup_batch_size=CLEANUP_BATCH_SIZE,
