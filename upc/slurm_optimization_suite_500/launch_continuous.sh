@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-ROOT_DIR="/scratch/nas/4/nasser/astra-sim/upc/slurm_optimization_suite"
+ROOT_DIR="/scratch/nas/4/nasser/astra-sim/upc/slurm_optimization_suite_500"
 EXPERIMENTS_DIR="$ROOT_DIR/experiments"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 LAUNCH_LOG_DIR="$ROOT_DIR/launch_logs/$TIMESTAMP"
