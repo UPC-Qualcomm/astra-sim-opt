@@ -140,7 +140,7 @@ class Model(Enum):
         elif model == Model.GPT_Neo_2700M:
             return [50257, 2560, 2560, 10240, [512], 512, 2048, 32, 32]
         elif model == Model.LLaMA_8B:
-            return [128256, 4096, 4096, 14336, [32], 512, 8192, 32, 32]
+            return [128256, 4096, 4096, 14336, [32], 512, 4096, 32, 32]
         elif model == Model.FLAN_T5_XXL_11B:
             return [32128, 4096, 4096, 10240, [2048], 2048, 1024, 64, 24]
         elif model == Model.GPT_13B:
@@ -156,11 +156,11 @@ class Model(Enum):
         elif model == Model.GPT_40B:
             return [50257, 8192, 8192, 28672, [64], 512, 2048, 32, 56]
         elif model == Model.LLaMA_30B:
-            return [128256, 8192, 8192, 32768, [2048], 2048, 8192, 64, 56]
+            return [128256, 8192, 8192, 32768, [2048], 2048, 4096, 64, 56]
         elif model == Model.LLaMA_70B:
-            return [128256, 8192, 8192, 32768, [16], 2048, 8192, 64, 80]
+            return [128256, 8192, 8192, 32768, [16], 2048, 4096, 64, 80]
         elif model == Model.LLaMA_405B:
-            return [128256, 16384, 16384, 67344, [2048], 2048, 8192, 128, 126]
+            return [128256, 16384, 16384, 67344, [2048], 2048, 4096, 128, 126]
         elif model == Model.Model_100B:
             return [32000, 32000, 9216, 36864, [2048], 2048, 72, 88]
         elif model == Model.Model_120B:
@@ -168,9 +168,9 @@ class Model(Enum):
         elif model == Model.GPT_175B:
             return [50257, 12288, 12288, 49152, [64], 2048, 2048, 96, 96]
         elif model == Model.PaLM_540B:
-            return [50257, 18432, 18432, 73728, [2048], 2048, 8192, 72, 118]
+            return [50257, 18432, 18432, 73728, [2048], 2048, 4096, 72, 118]
         elif model == Model.GPT_Estimated_over_1T:
-            return [50257, 20480, 20480, 81920, [2048], 2048, 8192, 128, 128]
+            return [50257, 20480, 20480, 81920, [2048], 2048, 4096, 128, 128]
         elif model == Model.Simple:
             return [1024, 1024, 1024, 4096, [32], 32, 32, 4, 4]
         else:

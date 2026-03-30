@@ -28,23 +28,23 @@ OBJECTIVE_METADATA = {
     "time_and_network_bw": {"plot_labels": []},
     "power": {"plot_labels": []},
     "energy": {"plot_labels": []},
-    "power_and_time": {"plot_labels": ["Total Power (W)", "Execution Cycles"]},
-    "energy_and_time": {"plot_labels": ["Total Energy (J)", "Execution Cycles"]},
-    "latency_total_network": {"plot_labels": ["Execution Cycles (ns)", "Network Total BW (GB/s)"]},
-    "latency_network": {"plot_labels": ["log10(Execution Cycles)", "log10(Network Total BW (GB/s))"]},
-    "latency_memory": {"plot_labels": ["log10(Execution Cycles)", "log10(Total Memory (GB))"]},
+    "power_and_time": {"plot_labels": ["Total Power (W)", "Training Time (s)"]},
+    "energy_and_time": {"plot_labels": ["Total Energy (J)", "Training Time (s)"]},
+    "latency_total_network": {"plot_labels": ["Training Time (s)", "Network Total BW (GB/s)"]},
+    "latency_network": {"plot_labels": ["log10(Training Time (s))", "log10(Network Total BW (GB/s))"]},
+    "latency_memory": {"plot_labels": ["log10(Training Time (s))", "log10(Total Memory (GB))"]},
     "network_memory": {"plot_labels": ["log10(Network Total BW (GB/s))", "log10(Total Memory (GB))"]},
-    "latency_network_memory": {"plot_labels": ["log10(Execution Cycles)", "log10(Network Total BW (GB/s))", "log10(Total Memory (GB))"]},
-    "latency_network_raw": {"plot_labels": ["Execution Cycles (ns)", "Network Total BW (GB/s)"]},
-    "latency_network_minmax": {"plot_labels": ["Normalized Execution Time", "Normalized Network BW"]},
-    "latency_network_sqrt": {"plot_labels": ["sqrt(Execution Cycles)", "sqrt(Network Total BW)"]},
-    "latency_network_power": {"plot_labels": ["Execution Cycles^p", "Network BW^p"]},
+    "latency_network_memory": {"plot_labels": ["log10(Training Time (s))", "log10(Network Total BW (GB/s))", "log10(Total Memory (GB))"]},
+    "latency_network_raw": {"plot_labels": ["Training Time (s)", "Network Total BW (GB/s)"]},
+    "latency_network_minmax": {"plot_labels": ["Normalized Training Time", "Normalized Network BW"]},
+    "latency_network_sqrt": {"plot_labels": ["sqrt(Training Time (s))", "sqrt(Network Total BW (GB/s))"]},
+    "latency_network_power": {"plot_labels": ["Training Time (s)^p", "Network BW^p"]},
     "edp": {"plot_labels": []},
     "edp_and_network_bw": {"plot_labels": ["EDP (J * cycles)", "Network Total BW (GB/s)"]},
     "ed2p_and_network_bw": {"plot_labels": ["ED²P (J * cycles²)", "Network Total BW (GB/s)"]},
     "e2d_and_network_bw": {"plot_labels": ["E²D (J² * cycles)", "Network Total BW (GB/s)"]},
-    "energy_cycles_and_network_bw": {"plot_labels": ["Total Energy (J)", "Execution Cycles", "Network Total BW (GB/s)"]},
-    "power_cycles_network_bw": {"plot_labels": ["Total Power (W)", "Execution Cycles", "Network Total BW (GB/s)"]},
+    "energy_cycles_and_network_bw": {"plot_labels": ["Total Energy (J)", "Training Time (s)", "Network Total BW (GB/s)"]},
+    "power_cycles_network_bw": {"plot_labels": ["Total Power (W)", "Training Time (s)", "Network Total BW (GB/s)"]},
     "ed2p": {"plot_labels": []},
     "e2d": {"plot_labels": []},
 }
@@ -86,7 +86,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--agg-core-bw", type=int, default=100, help="Aggregation-core bandwidth")
     parser.add_argument("--intra-node-bw", type=int, default=450, help="Intra-node bandwidth")
     parser.add_argument("--bw-unit", default="GB/s", help="Bandwidth unit")
-
+    parser.add_argument("--include-categories", default=None, help="Comma-separated list of search space categories")
+    
     return parser.parse_args()
 
 
@@ -107,7 +108,13 @@ def main():
     args = parse_args()
     objective_key = get_objective_key(args)
     objective_meta = OBJECTIVE_METADATA.get(objective_key, {"plot_labels": []})
-
+    
+    if args.include_categories:
+        include_categories = [x.strip() for x in args.include_categories.split(",")]
+    else:
+        include_categories = ["parallelism_strategy", "network"]  # default
+            
+    
     MODEL_NUM = args.model_num
     MODEL_NAME = f'{args.model_name}_{objective_key}' if args.model_name else f"GPT_40B_{objective_key}"
     NETWORK_NAME = args.network_name
@@ -147,7 +154,7 @@ def main():
     print("1. Creating search space...")
     search_space = create_search_space(
         search_space_path,
-        include_categories=["parallelism_strategy", "network"],
+        include_categories=include_categories,
     )
     
 

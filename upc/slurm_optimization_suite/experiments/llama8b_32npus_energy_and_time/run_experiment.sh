@@ -120,6 +120,7 @@ time python "$SWEEP_SCRIPT" \
   --topology "$TOPOLOGY" \
   --routing-mode "$ROUTING_MODE" \
   --compress-and-clean \
+  --include-categories "$INCLUDE_CATEGORIES" \
   2>&1 | tee -a "$LOG_FILE"
 
 echo "Completed experiment: $EXP_NAME" | tee -a "$LOG_FILE"

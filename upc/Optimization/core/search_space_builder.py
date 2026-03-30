@@ -15,6 +15,8 @@ import re
 from typing import Dict, List, Any, Optional, Callable
 from itertools import product
 
+from pytest import param
+
 try:
     from .sampler import get_sampler
 except ImportError:
@@ -180,7 +182,7 @@ class SearchSpaceBuilder:
     def _parse_model(self, params: Dict) -> None:
         """Parse model parameters."""
         if 'batch_size' in params:
-            self.parameters['batch_size'] = params['batch_size']
+            self.parameters['batch_size'] = self._get_batch_size_values(params['batch_size'])
         if 'micro_batch_size' in params:
             self.parameters['micro_batch_size'] = params['micro_batch_size']
         if 'mixed_precision' in params:
@@ -218,6 +220,34 @@ class SearchSpaceBuilder:
                 self._parse_constraint(constraint_str)
         
         return self
+    
+    def _get_batch_size_values(self, batch_size_param) -> List[int]:
+        """Helper to get batch size values, supporting both int and list."""
+        bs = batch_size_param
+        if isinstance(bs, dict) and "min" in bs and "max" in bs:
+            start = bs["min"]
+            end = bs["max"]
+            # Power-of-2 mode
+            if bs.get("mode") == "power2":
+                values = []
+                v = start
+                # move to first power of 2 >= start
+                if v < 1:
+                    raise ValueError("min must be >= 1 for power2 mode")
+                while (v & (v - 1)) != 0:  # not power of 2
+                    v += 1
+                while v <= end:
+                    values.append(v)
+                    v *= 2
+            # Linear step mode (default)
+            else:
+                step = bs.get("step", 1)
+                if step <= 0:
+                    raise ValueError("step must be > 0")
+                values = list(range(start, end + 1, step))
+            return values
+        else:
+            return bs
     
     def _parse_constraint(self, constraint_str: str) -> None:
         """

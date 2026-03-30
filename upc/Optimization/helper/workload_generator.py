@@ -7,7 +7,7 @@ sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc')
 from generate_workloads import Model
 
 
-def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""):
+def generate_workload_with_env(design_point: Dict, model, folder_name, suffix="", model_data: Dict = None):
     """
     Generate workload using the correct Python environment.
     
@@ -15,7 +15,7 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
         design_point: Configuration dictionary with dp, mp, sp, pp, sharded
         model: Model enum
         folder_name: Output folder name
-    
+        model_data: Optional dictionary containing model-specific data
     Returns:
         True if successful, False otherwise
     """
@@ -31,8 +31,26 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
     pp = design_point['pp']
     sharded = design_point['sharded']
     din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = Model.get_model_params(model)
+    batch = [batch[0] * dp]
+    micro_batch = batch[0] * dp
+    if (design_point.get('batch_size') is not None):
+        batch = [design_point['batch_size'] * dp]
+        micro_batch = design_point['batch_size']  * dp
+        
     model_type = Model.get_model_type(model)
 
+    model_data={
+        "din": din,
+        "dout": dout,
+        "dmodel": dmodel,
+        "dff": dff,
+        "batch": batch,
+        "micro_batch": micro_batch,
+        "seq": seq,
+        "head": head,
+        "num_stacks": num_stacks
+    }
+    
     print("Generating workload for model:", model)
     print(f"Parameters: din={din}, dmodel={dmodel}, dff={dff}, batch={batch}, micro_batch={micro_batch}, seq={seq}, head={head}, num_stacks={num_stacks}, dp={dp}, mp={mp}, sp={ssp}, pp={pp}, sharded={sharded}, model_type={model_type}")
     # Note: Having if the micro batch is much smaller than the global batch, the generator will be much slower.
@@ -47,8 +65,8 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
         f"--dvocal {din} "
         f"--dmodel {dmodel} "
         f"--dff {dff} "
-        f"--batch '{[dp * batch[0]]}' "
-        f"--micro_batch '{dp * batch[0]}' "
+        f"--batch '{batch}' "
+        f"--micro_batch '{micro_batch}' "
         f"--seq {seq} "
         f"--head {head} "
         f"--num_stacks {num_stacks} "

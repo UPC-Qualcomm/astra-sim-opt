@@ -64,7 +64,8 @@ class SimulationRunner:
         verbose: bool = False,
         output_dir: Optional[str] = None,
         network_log_dir: Optional[str] = None,
-        tracker: Optional[SimulationTracker] = None
+        tracker: Optional[SimulationTracker] = None,
+        total_data_size_tokens: Optional[int] = 300_000_000,  # Default to 300B tokens for total training data size
     ):
         """
         Initialize simulation runner.
@@ -94,7 +95,8 @@ class SimulationRunner:
         self.base_dir = base_dir if base_dir is not None else os.environ['ASTRA_SIM_ROOT'] + '/upc'
         self.verbose = verbose
         self.tracker = tracker
-        
+        self.total_data_size_tokens = total_data_size_tokens
+
         # Folder names
         self.folder_name = f"{folder_prefix}_{model_name}"
         print(f"Folder name for outputs: {self.folder_name}, Folder prefix: {folder_prefix}, Model name: {model_name}")
@@ -173,6 +175,8 @@ class SimulationRunner:
             print(f"  Running: dp={dp}, mp={mp}, sp={sp}, pp={pp}, sharded={sharded}")
         
         try:
+            
+            sim_start_time = time.time()  # Track wall clock time
             # 0. Generate config files (ALWAYS, using config_generator)
             self.system_config, self.network_config, self.memory_config = \
                 config_generator.generate_all_configs(config, net_sim_config=self.net_sim_config)
@@ -184,11 +188,13 @@ class SimulationRunner:
                 print(f"      Memory: {self.memory_config}")
             
             # 1. Generate workload
+            model_data = {}
             success = workload_generator.generate_workload_with_env(
                 config,
                 workload_generator.Model(self.model_num),
                 self.folder_name,
-                suffix=suffix
+                suffix=suffix,
+                model_data=model_data
             )
             
             if not success:
@@ -219,7 +225,6 @@ class SimulationRunner:
             if self.verbose:
                 print(f"    Running simulation: {workload_file}")
             
-            sim_start_time = time.time()  # Track wall clock time
             result, was_killed = self._run_astrasim(workload_file, suffix=suffix, config=config)
             sim_walltime = time.time() - sim_start_time  # Actual wall clock duration
             
@@ -254,7 +259,9 @@ class SimulationRunner:
             exec_time, is_oom, peak_memory = self._output_log_parser(workload_file, suffix=suffix)
             # peak_memory is stored in a local; added to metadata below after
             # _get_simulation_metadata() initialises the dict.
-
+            num_steps = self._get_total_steps(config, model_data)
+            exec_time = num_steps * (exec_time / 1e09)
+            
             if exec_time is None:
                 if self.verbose:
                     print("    ⚠️  Could not extract execution time", result)
@@ -264,6 +271,7 @@ class SimulationRunner:
                     metadata['sim_failed'] = True
                     metadata['sim_walltime'] = sim_walltime
                     metadata['peak_memory_gb'] = peak_memory
+                    metadata['num_steps'] = self.num_npus
                     return None, is_oom, file_paths, metadata
                 return None
 
@@ -290,11 +298,13 @@ class SimulationRunner:
                 metadata['was_killed'] = False
                 metadata['sim_failed'] = False
                 metadata['peak_memory_gb'] = peak_memory
+                metadata['num_steps'] = self.num_npus
+                metadata.update(model_data)  # Merge model-specific data (din, dmodel, batch_size, seq, etc.)
                 metadata.update(power_metrics)  # Merge power metrics (empty dict if not g2 or failed)
 
-                return exec_time, is_oom, file_paths, metadata
+                return exec_time , is_oom, file_paths, metadata
             else:
-                return exec_time, is_oom
+                return exec_time , is_oom
             
         except Exception as e:
             if self.verbose:
@@ -370,6 +380,24 @@ class SimulationRunner:
         
         return None
     
+    def _get_total_steps(self, config, model_data):
+        """
+        Estimate total number of steps based on execution time and parallelsim settings and sequence length.
+        
+        Args:
+            exec_time: Execution time of the simulation (in seconds)
+            config: Configuration dictionary with dp, mp, sp, pp, sharded
+            model_data: Dictionary containing model-specific data, containing at least 'batch_size' and 'seq' keys
+
+        Returns:
+            Estimated total number of steps for the full training run
+        """
+            
+        global_batch_size = config['dp'] * model_data['batch_size']
+        tokens_per_step = global_batch_size * model_data['seq']
+        total_num_steps = self.total_data_size_tokens / tokens_per_step
+        return total_num_steps
+            
     def _run_astrasim(
         self,
         workload_path: str,

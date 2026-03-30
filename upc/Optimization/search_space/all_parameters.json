@@ -40,6 +40,10 @@
         "num_layers": [12, 24, 36, 48]
     },
     "constraints": {
-        "parallelism_strategy": "dp * mp * sp * pp = npu_count"
+        "parallelism_strategy": "dp * mp * sp * pp = npu_count",
+        "dp_max": "dp <= npu_count",
+        "mp_max": "mp <= npu_count",
+        "sp_max": "sp <= npu_count",
+        "pp_max": "pp <= npu_count"
     }
 }

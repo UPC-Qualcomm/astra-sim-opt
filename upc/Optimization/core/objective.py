@@ -687,7 +687,8 @@ class MinimizeLatencyAndNetworkBWMinMax(ObjectiveFunction):
         if is_oom or exec_time is None or config is None:
             return PENALTY, PENALTY
 
-        scaled_exec_time = exec_time / self.exec_time_scale if self.exec_time_scale else exec_time
+        #scaled_exec_time = exec_time / self.exec_time_scale if self.exec_time_scale else exec_time
+        scaled_exec_time = exec_time
         total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
 
         time_span = self.time_max - self.time_min
@@ -721,7 +722,8 @@ class MinimizeLatencyAndNetworkBWSqrt(ObjectiveFunction):
         if is_oom or exec_time is None or config is None:
             return PENALTY, PENALTY
 
-        scaled_exec_time = exec_time / self.exec_time_scale if self.exec_time_scale else exec_time
+        #scaled_exec_time = exec_time / self.exec_time_scale if self.exec_time_scale else exec_time
+        scaled_exec_time = exec_time
         total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
 
         sqrt_time = math.sqrt(max(0.0, scaled_exec_time))
@@ -749,7 +751,8 @@ class MinimizeLatencyAndNetworkBWPower(ObjectiveFunction):
         if is_oom or exec_time is None or config is None:
             return PENALTY, PENALTY
 
-        scaled_exec_time = exec_time / self.exec_time_scale if self.exec_time_scale else exec_time
+        #scaled_exec_time = exec_time / self.exec_time_scale if self.exec_time_scale else exec_time
+        scaled_exec_time = exec_time
         total_network_bw = _compute_total_network_bw(config, self.npus_per_node)
 
         power_time = math.pow(max(0.0, scaled_exec_time), self.power)
@@ -1147,14 +1150,14 @@ class MinimizeTimeMaximizeThroughputPerEnergy(ObjectiveFunction):
             return (PENALTY, PENALTY)
 
         # Requirement: consume the reported metric from power estimator.
-        samples_per_joule = metadata["samples_per_sec_per_mj"]
+        samples_per_mj = metadata["samples_per_sec_per_mj"]
         
-        if samples_per_joule is None or samples_per_joule <= 0 or not math.isfinite(samples_per_joule):
+        if samples_per_mj is None or samples_per_mj <= 0 or not math.isfinite(samples_per_mj):
             return (PENALTY, PENALTY)
 
         return (
             math.log10(exec_time),
-            math.log10(samples_per_joule),
+            math.log10(samples_per_mj),
         )
 
 
