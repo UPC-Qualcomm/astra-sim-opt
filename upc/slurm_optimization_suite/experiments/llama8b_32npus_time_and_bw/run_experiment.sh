@@ -93,6 +93,16 @@ echo "ASTRA_SIM_PYTHON: ${ASTRA_SIM_PYTHON:-N/A}" | tee -a "$LOG_FILE"
 echo "which python: $(command -v python || echo N/A)" | tee -a "$LOG_FILE"
 echo "python --version: $(python --version 2>&1 || echo N/A)" | tee -a "$LOG_FILE"
 
+# Use node-local temp storage for Python multiprocessing artifacts.
+# This avoids NFS .nfs* cleanup races at interpreter shutdown.
+TMP_BASE="${SLURM_TMPDIR:-/tmp}"
+JOB_TMP_DIR="${TMP_BASE%/}/astra_tmp_${SLURM_JOB_ID:-$$}"
+mkdir -p "$JOB_TMP_DIR"
+export TMPDIR="$JOB_TMP_DIR"
+export TMP="$JOB_TMP_DIR"
+export TEMP="$JOB_TMP_DIR"
+echo "TMPDIR: $TMPDIR" | tee -a "$LOG_FILE"
+
 time python "$SWEEP_SCRIPT" \
   --objective "$OBJECTIVE_KEY" \
   --model-num "$MODEL_NUM" \

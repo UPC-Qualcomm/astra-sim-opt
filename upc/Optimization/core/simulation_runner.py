@@ -96,8 +96,8 @@ class SimulationRunner:
         self.tracker = tracker
         
         # Folder names
-        self.folder_name = f"{normalized_prefix}_{model_name}"
-        print(f"Folder name for outputs: {self.folder_name}, Normalized folder prefix: {normalized_prefix}, Model name: {model_name}")
+        self.folder_name = f"{folder_prefix}_{model_name}"
+        print(f"Folder name for outputs: {self.folder_name}, Folder prefix: {folder_prefix}, Model name: {model_name}")
         # Config paths will be generated per-run by config_generator
         self.system_config = None
         self.network_config = None
