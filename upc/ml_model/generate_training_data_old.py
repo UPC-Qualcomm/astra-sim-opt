@@ -131,37 +131,37 @@ def generate_model_configs():
     
     # Small models (16-64 NPUs)
     configs.extend([
-        {'name': 'T5_Small', 'din': 32128, 'dmodel': 512, 'dff': random.randint(3, 8) * 512, 'batch': 2048, 'micro_batch': 32, 'seq': 512, 'head': 8, 'num_stacks': 6, 'min_npus': 16, 'max_npus': 64},
-        {'name': 'T5_Base', 'din': 32000, 'dmodel': 768, 'dff': random.randint(3, 8) * 768, 'batch': 2048, 'micro_batch': 64, 'seq': 512, 'head': 12, 'num_stacks': 12, 'min_npus': 16, 'max_npus': 64},
-        {'name': 'T5_Large', 'din': 16000, 'dmodel': 1024, 'dff': random.randint(3, 8) * 1024, 'batch': 128, 'micro_batch': 32, 'seq': 8192, 'head': 16, 'num_stacks': 24, 'min_npus': 16, 'max_npus': 128},
+        {'name': 'T5_Small', 'din': 32128, 'dmodel': 512, 'dff': random.randint(3, 8) * 512, 'batch': 64, 'micro_batch': 64, 'seq': 512, 'head': 8, 'num_stacks': 6, 'min_npus': 16, 'max_npus': 16},
+        {'name': 'T5_Base', 'din': 32000, 'dmodel': 768, 'dff': random.randint(3, 8) * 768, 'batch': 128, 'micro_batch': 128, 'seq': 512, 'head': 12, 'num_stacks': 12, 'min_npus': 16, 'max_npus': 16},
+        {'name': 'T5_Large', 'din': 16000, 'dmodel': 1024, 'dff': random.randint(3, 8) * 1024, 'batch': 32, 'micro_batch': 32, 'seq': 8192, 'head': 16, 'num_stacks': 24, 'min_npus': 16, 'max_npus': 32},
     ])
     
     # Medium models (32-256 NPUs)
     configs.extend([
-        {'name': 'GPT_2_Small', 'din': 48000, 'dmodel': 768, 'dff': random.randint(3, 8) * 768, 'batch': 128, 'micro_batch': 32, 'seq': 1024, 'head': 12, 'num_stacks': 12, 'min_npus': 16, 'max_npus': 128},
-        {'name': 'GPT_2_Medium', 'din': 100000, 'dmodel': 10240, 'dff': random.randint(3, 8) * 10240, 'batch': 2048, 'micro_batch': 64, 'seq': 1024, 'head': 16, 'num_stacks': 96, 'min_npus': 32, 'max_npus': 256},
-        {'name': 'GPT_3_1300M', 'din': 50000, 'dmodel': 12288, 'dff': random.randint(3, 8) * 12288, 'batch': 512, 'micro_batch': 512, 'seq': 2048, 'head': 16, 'num_stacks': 48, 'min_npus': 32, 'max_npus': 256},
-        {'name': 'GPT_Neo_2700M', 'din': 64000, 'dmodel': 2560, 'dff': random.randint(3, 8) * 2560, 'batch': 512, 'micro_batch': 128, 'seq': 8192, 'head': 32, 'num_stacks': 32, 'min_npus': 32, 'max_npus': 512},
+        {'name': 'GPT_2_Small', 'din': 48000, 'dmodel': 768, 'dff': random.randint(3, 8) * 768, 'batch': 128, 'micro_batch': 128, 'seq': 1024, 'head': 12, 'num_stacks': 12, 'min_npus': 16, 'max_npus': 32},
+        {'name': 'GPT_2_Medium', 'din': 100000, 'dmodel': 10240, 'dff': random.randint(3, 8) * 10240, 'batch': 256, 'micro_batch': 256, 'seq': 1024, 'head': 16, 'num_stacks': 96, 'min_npus': 16, 'max_npus': 32},
+        {'name': 'GPT_3_1300M', 'din': 50000, 'dmodel': 12288, 'dff': random.randint(3, 8) * 12288, 'batch': 64, 'micro_batch': 64, 'seq': 2048, 'head': 16, 'num_stacks': 48, 'min_npus': 16, 'max_npus': 32},
+        {'name': 'GPT_Neo_2700M', 'din': 64000, 'dmodel': 2560, 'dff': random.randint(3, 8) * 2560, 'batch': 128, 'micro_batch': 128, 'seq': 8192, 'head': 32, 'num_stacks': 32, 'min_npus': 16, 'max_npus': 32},
     ])
     
     # Large models (64+ NPUs)
     configs.extend([
-        {'name': 'llama_8B', 'din': 128000, 'dmodel': 2048, 'dff': random.randint(3, 8) * 2048, 'batch': 256, 'micro_batch': 256, 'seq': 256, 'head': 32, 'num_stacks': 80, 'min_npus': 64, 'max_npus': 512},
-        {'name': 'FLAN_T5_XXL_11B', 'din': 256000, 'dmodel': 4096, 'dff': random.randint(3, 8) * 4096, 'batch': 2048, 'micro_batch': 2048, 'seq': 1024, 'head': 64, 'num_stacks': 24, 'min_npus': 64, 'max_npus': 512},
-        {'name': 'GPT_13B', 'din': 50257, 'dmodel': 18432 , 'dff': random.randint(3, 8) * 18432, 'batch': 512, 'micro_batch': 512, 'seq': 201638448, 'head': 40, 'num_stacks': 40, 'min_npus': 64, 'max_npus': 1024},
-        {'name': 'GPT_NeoX_20B', 'din': 50257, 'dmodel': 6144, 'dff': random.randint(3, 8) * 6144, 'batch': 2048, 'micro_batch': 128, 'seq': 65536, 'head': 128, 'num_stacks': 44, 'min_npus': 64, 'max_npus': 1024},
-        {'name': 'GPT_30B', 'din': 200000, 'dmodel': 8192 , 'dff': random.randint(3, 8) * 8192 , 'batch': 2048, 'micro_batch': 512, 'seq': 32768, 'head': 32, 'num_stacks': 120, 'min_npus': 64, 'max_npus': 1024},
+        {'name': 'llama_8B', 'din': 128000, 'dmodel': 2048, 'dff': random.randint(3, 8) * 2048, 'batch': 256, 'micro_batch': 256, 'seq': 4096, 'head': 32, 'num_stacks': 80, 'min_npus': 16, 'max_npus': 64},
+        {'name': 'FLAN_T5_XXL_11B', 'din': 256000, 'dmodel': 4096, 'dff': random.randint(3, 8) * 4096, 'batch': 2048, 'micro_batch': 2048, 'seq': 1024, 'head': 64, 'num_stacks': 24, 'min_npus': 16, 'max_npus': 64},
+        {'name': 'GPT_13B', 'din': 50257, 'dmodel': 18432 , 'dff': random.randint(3, 8) * 18432, 'batch': 4, 'micro_batch': 4, 'seq': 20480, 'head': 40, 'num_stacks': 40, 'min_npus': 32, 'max_npus': 64},
+        {'name': 'GPT_NeoX_20B', 'din': 50257, 'dmodel': 6144, 'dff': random.randint(3, 8) * 6144, 'batch': 32, 'micro_batch': 32, 'seq': 65536, 'head': 128, 'num_stacks': 44, 'min_npus': 64, 'max_npus': 128},
+        {'name': 'GPT_30B', 'din': 200000, 'dmodel': 8192 , 'dff': random.randint(3, 8) * 8192 , 'batch': 16, 'micro_batch': 16, 'seq': 32768, 'head': 32, 'num_stacks': 120, 'min_npus': 64, 'max_npus': 256},
     ])
     
     # Very large models (128+ NPUs)
     configs.extend([
-        {'name': 'GPT_40B', 'din': 50257, 'dmodel': 1536, 'dff': random.randint(3, 8) * 1536, 'batch': 512, 'micro_batch': 64, 'seq': 131072, 'head': 160, 'num_stacks': 144, 'min_npus': 128, 'max_npus': 2048},
-        {'name': 'LLaMA_3_70B', 'din': 64000, 'dmodel': 1024, 'dff': random.randint(3, 8) * 1024, 'batch': 1024, 'micro_batch': 1024, 'seq': 65536, 'head': 64, 'num_stacks': 80, 'min_npus': 128, 'max_npus': 2048},
-        {'name': 'Model_100B', 'din': 32000, 'dmodel': 9216, 'dff': random.randint(3, 8) * 9216, 'batch': 2048, 'micro_batch': 128, 'seq': 2048, 'head': 72, 'num_stacks': 88, 'min_npus': 256, 'max_npus': 2048},
-        {'name': 'Model_120B', 'din': 32000, 'dmodel': 1024, 'dff': random.randint(3, 8) * 1024, 'batch': 2048, 'micro_batch': 256, 'seq': 4096, 'head': 80, 'num_stacks': 96, 'min_npus': 256, 'max_npus': 2048},
-        {'name': 'GPT_3_175B', 'din': 50257, 'dmodel': 2048, 'dff': random.randint(3, 8) * 2048, 'batch': 2048, 'micro_batch': 512, 'seq': 1024, 'head': 96, 'num_stacks': 160, 'min_npus': 512, 'max_npus': 2048},
-        {'name': 'PaLM_540B', 'din': 48000, 'dmodel': 5140, 'dff': random.randint(3, 8) * 5140, 'batch': 2048, 'micro_batch': 1024, 'seq': 8192, 'head': 72, 'num_stacks': 118, 'min_npus': 1024, 'max_npus': 2048},
-        {'name': 'GPT_4_Estimated_over_1T', 'din': 16000, 'dmodel': 20480, 'dff': random.randint(3, 8) * 20480, 'batch': 2048, 'micro_batch': 32, 'seq': 8192, 'head': 128, 'num_stacks': 128, 'min_npus': 1024, 'max_npus': 2048},
+        {'name': 'GPT_40B', 'din': 50257, 'dmodel': 1536, 'dff': random.randint(3, 8) * 1536, 'batch': 256, 'micro_batch': 256, 'seq': 8192, 'head': 160, 'num_stacks': 144, 'min_npus': 64, 'max_npus': 256},
+        {'name': 'LLaMA_3_70B', 'din': 64000, 'dmodel': 1024, 'dff': random.randint(3, 8) * 1024, 'batch': 32, 'micro_batch': 32, 'seq': 65536, 'head': 64, 'num_stacks': 80, 'min_npus': 64, 'max_npus': 512},
+        {'name': 'Model_100B', 'din': 32000, 'dmodel': 9216, 'dff': random.randint(3, 8) * 9216, 'batch': 8, 'micro_batch': 8, 'seq': 2048, 'head': 72, 'num_stacks': 88, 'min_npus': 128, 'max_npus': 512},
+        {'name': 'Model_120B', 'din': 32000, 'dmodel': 1024, 'dff': random.randint(3, 8) * 1024, 'batch': 128, 'micro_batch': 128, 'seq': 4096, 'head': 80, 'num_stacks': 96, 'min_npus': 128, 'max_npus': 512},
+        {'name': 'GPT_3_175B', 'din': 50257, 'dmodel': 2048, 'dff': random.randint(3, 8) * 2048, 'batch': 64, 'micro_batch': 64, 'seq': 8192, 'head': 96, 'num_stacks': 160, 'min_npus': 512, 'max_npus': 2048},
+        {'name': 'PaLM_540B', 'din': 48000, 'dmodel': 5140, 'dff': random.randint(3, 8) * 5140, 'batch': 128, 'micro_batch': 128, 'seq': 8192, 'head': 72, 'num_stacks': 118, 'min_npus': 1024, 'max_npus': 2048},
+        {'name': 'GPT_4_Estimated_over_1T', 'din': 16000, 'dmodel': 20480, 'dff': random.randint(3, 8) * 20480, 'batch': 64, 'micro_batch': 64, 'seq': 8192, 'head': 128, 'num_stacks': 128, 'min_npus': 1024, 'max_npus': 2048},
     ])
     
     return configs
