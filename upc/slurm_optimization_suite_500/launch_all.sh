@@ -456,7 +456,7 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       submit_partition="$PARTITION_OVERRIDE"
     fi
 
-    wrap_cmd="bash \"$run_script\""
+    wrap_cmd="ulimit -c 0; bash \"$run_script\""
 
     sbatch_cmd=(
       sbatch

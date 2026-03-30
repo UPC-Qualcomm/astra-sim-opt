@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+ulimit -c 0
 #SBATCH -q large
 set -euo pipefail
 
