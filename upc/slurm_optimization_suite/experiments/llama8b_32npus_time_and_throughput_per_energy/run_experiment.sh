@@ -72,6 +72,17 @@ TS="$(date +%Y%m%d_%H%M%S)"
 RUN_PREFIX="$RESULT_FOLDER_PREFIX/run_${TS}"
 mkdir -p "$RUN_PREFIX"
 
+# Keep optimizer artifacts under absolute outputs/, but pass a simulation-safe
+# relative prefix to avoid embedding absolute paths into workload/output roots.
+UPC_ROOT="${ASTRA_SIM_ROOT}/upc"
+if [[ "$EXP_DIR" == "$UPC_ROOT"/* ]]; then
+  EXP_DIR_REL="${EXP_DIR#"$UPC_ROOT"/}"
+else
+  # Fallback when experiment directory is outside UPC root.
+  EXP_DIR_REL="$(basename "$EXP_DIR")"
+fi
+SIM_FOLDER_PREFIX="$EXP_DIR_REL/run_${TS}"
+
 LOG_FILE="$EXP_DIR/logs/optimization_${TS}.log"
 
 echo "Starting experiment: $EXP_NAME" | tee -a "$LOG_FILE"
@@ -93,7 +104,7 @@ time python "$SWEEP_SCRIPT" \
   --n-workers "$N_WORKERS_EFFECTIVE" \
   --top-k "$TOP_K" \
   --cleanup-batch-size "$CLEANUP_BATCH_SIZE" \
-  --folder-prefix "$RUN_PREFIX" \
+  --folder-prefix "$SIM_FOLDER_PREFIX" \
   --search-space-path "$SEARCH_SPACE_PATH" \
   --sim-type "$SIM_TYPE" \
   --topology "$TOPOLOGY" \

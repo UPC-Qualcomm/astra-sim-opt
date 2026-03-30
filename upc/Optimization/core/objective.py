@@ -465,6 +465,7 @@ class MinimizePowerAndTime(ObjectiveFunction):
     def __init__(self):
         super().__init__("Minimize Power (W) and Execution Time [Mode D, MOO]")
         self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
@@ -491,7 +492,8 @@ class MinimizeEnergyAndTime(ObjectiveFunction):
     def __init__(self):
         super().__init__("Minimize Energy (J) and Execution Time [Mode D, MOO]")
         self.is_multi_objective = True
-
+        self.objective_directions = ["min", "min"]
+        
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
                 config: Optional[Dict[str, Any]] = None):
         
@@ -792,6 +794,7 @@ class MinimizeEDPAndNetworkBW(ObjectiveFunction):
         """
         super().__init__("Minimize EDP and Network BW [Mode D, MOO]")
         self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
         self.npus_per_node = npus_per_node
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
@@ -830,6 +833,7 @@ class MinimizeED2PAndNetworkBW(ObjectiveFunction):
     def __init__(self, npus_per_node: int = 8):
         super().__init__("Minimize ED²P and Network BW [Mode D, MOO]")
         self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
         self.npus_per_node = npus_per_node
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
@@ -865,6 +869,7 @@ class MinimizeE2DAndNetworkBW(ObjectiveFunction):
     def __init__(self, npus_per_node: int = 8):
         super().__init__("Minimize E²D and Network BW [Mode D, MOO]")
         self.is_multi_objective = True
+        self.objective_directions = ["min", "min"]
         self.npus_per_node = npus_per_node
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
@@ -898,6 +903,7 @@ class MinimizeEnergyCyclesAndNetworkBW(ObjectiveFunction):
     def __init__(self, npus_per_node: int = 8):
         super().__init__("Minimize Energy, Cycles, and Network BW [Mode D, 3-MOO]")
         self.is_multi_objective = True
+        self.objective_directions = ["min", "min", "min"]
         self.npus_per_node = npus_per_node
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],
@@ -932,6 +938,7 @@ class MinimizePowerCyclesAndNetworkBW(ObjectiveFunction):
     def __init__(self, npus_per_node: int = 8):
         super().__init__("Minimize Power, Cycles, and Network BW [Mode D, 3-MOO]")
         self.is_multi_objective = True
+        self.objective_directions = ["min", "min", "min"]
         self.npus_per_node = npus_per_node
 
     def compute(self, exec_time: float, is_oom: bool, metadata: Dict[str, Any],

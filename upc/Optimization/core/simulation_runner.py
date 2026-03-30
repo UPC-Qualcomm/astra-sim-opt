@@ -96,22 +96,17 @@ class SimulationRunner:
         self.tracker = tracker
         
         # Folder names
-        self.folder_name = f"{folder_prefix}_{model_name}"
-        
+        self.folder_name = f"{normalized_prefix}_{model_name}"
+        print(f"Folder name for outputs: {self.folder_name}, Normalized folder prefix: {normalized_prefix}, Model name: {model_name}")
         # Config paths will be generated per-run by config_generator
         self.system_config = None
         self.network_config = None
         self.memory_config = None
         
         # Setup directories (use custom or default)
-        # If folder_name is absolute, use it directly to stay consistent with
-        # workload_generator.generate_workload_with_env root resolution.
-        if os.path.isabs(self.folder_name):
-            self.workload_dir = self.folder_name
-        else:
-            self.workload_dir = f"{base_dir}/workload/{self.folder_name}"
-        self.output_dir = output_dir if output_dir is not None else f"{base_dir}/output/{self.folder_name}/{network_name}"
-        self.network_log_dir = network_log_dir if network_log_dir is not None else f"{base_dir}/network_log/{self.folder_name}/{network_name}"
+        self.workload_dir = os.path.join(self.base_dir, "workload", self.folder_name)
+        self.output_dir = output_dir if output_dir is not None else os.path.join(self.base_dir, "output", self.folder_name, network_name)
+        self.network_log_dir = network_log_dir if network_log_dir is not None else os.path.join(self.base_dir, "network_log", self.folder_name, network_name)
         
         # Clean and create directories
         if clean_on_init:

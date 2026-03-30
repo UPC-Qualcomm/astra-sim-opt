@@ -18,6 +18,9 @@ fi
 # Node states considered usable for scheduling.
 NODE_STATES="idle,mix"
 
+# Nodes to exclude from scheduling (known unavailable/problematic nodes).
+SKIP_NODES=("sert-2201")
+
 # Optional SLURM parameters (uncomment and set if needed)
 # SLURM_ACCOUNT=""      # e.g., --account myaccount
 # SLURM_QOS=""          # e.g., --qos large (if valid for your account/partition)
@@ -36,13 +39,13 @@ MAX_CPUS_PER_EXPERIMENT=8
 # (Uncommented experiments will be submitted to SLURM)
 #################################################################################
 ACTIVE_EXPERIMENTS=(
-  "llama8b_32npus_edp"
+  #"llama8b_32npus_edp"
   "llama8b_32npus_edp_and_bw"
-  "llama8b_32npus_energy_and_time"
-  "llama8b_32npus_memory_and_time"
-  "llama8b_32npus_time"
-  "llama8b_32npus_time_and_bw"
-  "llama8b_32npus_time_and_throughput_per_energy"
+  #"llama8b_32npus_energy_and_time"
+  #"llama8b_32npus_memory_and_time"
+  #"llama8b_32npus_time"
+  #"llama8b_32npus_time_and_bw"
+  #"llama8b_32npus_time_and_throughput_per_energy"
   #"gpt60b_128npus_edp"
   #"gpt60b_128npus_edp_and_bw"
   #"gpt60b_128npus_energy_and_time"
@@ -160,6 +163,14 @@ NODE_CORES=()
 NODE_MEM_MB=()
 while IFS='|' read -r node partition state cores mem_mb; do
   [[ -z "$node" ]] && continue
+  skip_node=0
+  for excluded in "${SKIP_NODES[@]}"; do
+    if [[ "$node" == "$excluded" ]]; then
+      skip_node=1
+      break
+    fi
+  done
+  [[ $skip_node -eq 1 ]] && continue
   partition="${partition%%\**}"
   NODES+=("$node")
   PARTITIONS+=("$partition")
@@ -216,7 +227,8 @@ NODE_REMAINING_MEM_MB=()
 NODE_ASSIGNED_JOBS=()
 NODE_ASSIGNED_CPUS=()
 
-# Build per-node scheduling pool based on 32% of currently free CPUs.
+# Build per-node scheduling pool based on policy percent of TOTAL CPUs,
+# then cap by currently free CPUs.
 for i in "${!NODES[@]}"; do
   resource_line="$(get_node_free_resources "${NODES[$i]}")"
   IFS='|' read -r node_cores_total node_mem_total_mb node_cores_free node_mem_free_mb <<< "$resource_line"
@@ -230,7 +242,12 @@ for i in "${!NODES[@]}"; do
     node_mem_free_mb="${NODE_MEM_MB[$i]}"
   fi
 
-  pool_cpus=$(( node_cores_free * DEFAULT_CORES_PERCENT / 100 ))
+  policy_pool_cpus=$(( node_cores_total * DEFAULT_CORES_PERCENT / 100 ))
+  (( policy_pool_cpus < 1 )) && policy_pool_cpus=1
+
+  # Never schedule beyond what is currently free on the node snapshot.
+  pool_cpus="$policy_pool_cpus"
+  (( pool_cpus > node_cores_free )) && pool_cpus="$node_cores_free"
   (( pool_cpus < 1 )) && pool_cpus=1
 
   NODE_CORES_TOTAL_RUNTIME+=("$node_cores_total")
@@ -297,21 +314,34 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
 
       remaining_cpus="${NODE_REMAINING_CPUS[$node_pos]}"
       remaining_mem_mb="${NODE_REMAINING_MEM_MB[$node_pos]}"
-      (( remaining_cpus < 1 )) && continue
+
+      # Real-time guard: only consider resources that are still free *now* on the node.
+      # This avoids submitting to a node that became busy after the initial snapshot.
+      current_resource_line="$(get_node_free_resources "$node")"
+      IFS='|' read -r _cpu_tot_now _mem_tot_now cpu_free_now mem_free_now <<< "$current_resource_line"
+
+      effective_available_cpus="$remaining_cpus"
+      (( effective_available_cpus > cpu_free_now )) && effective_available_cpus="$cpu_free_now"
+
+      effective_available_mem_mb="$remaining_mem_mb"
+      (( effective_available_mem_mb > mem_free_now )) && effective_available_mem_mb="$mem_free_now"
+
+      (( effective_available_cpus < 1 )) && continue
+      (( effective_available_mem_mb < 1 )) && continue
 
       if [[ -n "$cpus_override" ]]; then
         candidate_cpus="$cpus_override"
-        (( candidate_cpus > remaining_cpus )) && candidate_cpus="$remaining_cpus"
+        (( candidate_cpus > effective_available_cpus )) && candidate_cpus="$effective_available_cpus"
       else
-        candidate_cpus="$remaining_cpus"
+        candidate_cpus="$effective_available_cpus"
         (( candidate_cpus > MAX_CPUS_PER_EXPERIMENT )) && candidate_cpus="$MAX_CPUS_PER_EXPERIMENT"
       fi
 
       (( candidate_cpus < 1 )) && continue
       candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
 
-      if (( candidate_req_mem_mb > remaining_mem_mb )); then
-        max_cpus_by_mem=$(( remaining_mem_mb / (mem_per_cpu_gb * 1024) ))
+      if (( candidate_req_mem_mb > effective_available_mem_mb )); then
+        max_cpus_by_mem=$(( effective_available_mem_mb / (mem_per_cpu_gb * 1024) ))
         (( max_cpus_by_mem < 1 )) && continue
         (( max_cpus_by_mem < candidate_cpus )) && candidate_cpus="$max_cpus_by_mem"
         candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
@@ -375,6 +405,24 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       --error "$logs_dir/slurm-%j.err"
       --wrap "$wrap_cmd"
     )
+
+    # Final real-time guard before submission: skip node if current free resources
+    # cannot satisfy this job anymore.
+    current_resource_line="$(get_node_free_resources "$node")"
+    IFS='|' read -r _cpu_tot_now _mem_tot_now cpu_free_now mem_free_now <<< "$current_resource_line"
+    if (( cpus_per_task > cpu_free_now || requested_mem_mb > mem_free_now )); then
+      echo "Skipping $node for $(basename "$exp_dir"): insufficient current free resources (need cpu=$cpus_per_task mem_mb=$requested_mem_mb, have cpu=$cpu_free_now mem_mb=$mem_free_now)" >&2
+      TRIED_NODES+=("$node")
+
+      # Restore reserved pool resources and try another node.
+      NODE_REMAINING_CPUS[$node_pos]=$(( ${NODE_REMAINING_CPUS[$node_pos]} + cpus_per_task ))
+      NODE_REMAINING_MEM_MB[$node_pos]=$(( ${NODE_REMAINING_MEM_MB[$node_pos]} + requested_mem_mb ))
+      NODE_ASSIGNED_JOBS[$node_pos]=$(( ${NODE_ASSIGNED_JOBS[$node_pos]} - 1 ))
+      NODE_ASSIGNED_CPUS[$node_pos]=$(( ${NODE_ASSIGNED_CPUS[$node_pos]} - cpus_per_task ))
+      (( NODE_ASSIGNED_JOBS[$node_pos] < 0 )) && NODE_ASSIGNED_JOBS[$node_pos]=0
+      (( NODE_ASSIGNED_CPUS[$node_pos] < 0 )) && NODE_ASSIGNED_CPUS[$node_pos]=0
+      continue
+    fi
 
     # Add optional SLURM parameters if configured
     [[ -n "${SLURM_ACCOUNT:-}" ]] && sbatch_cmd+=(--account "$SLURM_ACCOUNT")
