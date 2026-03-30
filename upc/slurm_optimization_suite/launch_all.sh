@@ -32,7 +32,8 @@ MAX_RETRIES_PER_EXPERIMENT=3
 # Global defaults (can be overridden per experiment in config.env)
 DEFAULT_CORES_PERCENT=32
 DEFAULT_MEM_PER_CORE_GB=2
-MAX_CPUS_PER_EXPERIMENT=8
+MAX_CPUS_PER_EXPERIMENT=80
+MIN_CPUS_PER_EXPERIMENT=4   # Never schedule fewer than this many CPUs; skip node if memory can't fit even this many
 
 #################################################################################
 # EXPERIMENT MANIFEST - Comment out experiments you DON'T want to run
@@ -297,6 +298,7 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
     selected_node_pos=-1
     selected_cpus=0
     selected_req_mem_mb=0
+    is_fallback=0
 
     for ((try_i=0; try_i<${#NODES[@]}; try_i++)); do
       node_pos=$(( (node_idx + try_i) % ${#NODES[@]} ))
@@ -342,7 +344,7 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
 
       if (( candidate_req_mem_mb > effective_available_mem_mb )); then
         max_cpus_by_mem=$(( effective_available_mem_mb / (mem_per_cpu_gb * 1024) ))
-        (( max_cpus_by_mem < 1 )) && continue
+        (( max_cpus_by_mem < MIN_CPUS_PER_EXPERIMENT )) && continue
         (( max_cpus_by_mem < candidate_cpus )) && candidate_cpus="$max_cpus_by_mem"
         candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
       fi
@@ -353,11 +355,70 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
       break
     done
 
+    # Fallback: no node currently has enough free resources for immediate placement.
+    # Select the node with the most free CPUs from the top of the list and submit
+    # anyway — SLURM will queue the job (PD) and start it when resources free up.
     if (( selected_node_pos < 0 )); then
-      echo "FAILED scheduling $(basename "$exp_dir"): no remaining capacity on available/untried nodes" >&2
-      echo "$(basename "$exp_dir"),N/A,N/A,0,0,0,0,0,$mem_per_cpu_gb,${mem_per_cpu_gb}G,${JOB_NAME:-$(basename "$exp_dir")},FAILED_NO_CAPACITY," >> "$ASSIGNMENT_CSV"
-      ((failed+=1))
-      break
+      echo "No node has immediate capacity for $(basename "$exp_dir"); queuing on best available node." >&2
+      fallback_node_pos=-1
+      fallback_best_cpus=-1
+      for ((fb_i=0; fb_i<${#NODES[@]}; fb_i++)); do
+        fb_node="${NODES[$fb_i]}"
+        skip_node=0
+        for excluded in "${SKIP_NODES[@]}"; do
+          [[ "$fb_node" == "$excluded" ]] && { skip_node=1; break; }
+        done
+        [[ $skip_node -eq 1 ]] && continue
+        skip_node=0
+        for tried_node in "${TRIED_NODES[@]}"; do
+          [[ "$tried_node" == "$fb_node" ]] && { skip_node=1; break; }
+        done
+        [[ $skip_node -eq 1 ]] && continue
+        fb_cpus_free="${NODE_FREE_CORES_INITIAL[$fb_i]}"
+        if (( fb_cpus_free > fallback_best_cpus )); then
+          fallback_best_cpus="$fb_cpus_free"
+          fallback_node_pos="$fb_i"
+        fi
+      done
+
+      if (( fallback_node_pos < 0 )); then
+        # Tried nodes exhausted — reset and pick from the very top of the list
+        fallback_node_pos=-1
+        fallback_best_cpus=-1
+        for ((fb_i=0; fb_i<${#NODES[@]}; fb_i++)); do
+          fb_node="${NODES[$fb_i]}"
+          skip_node=0
+          for excluded in "${SKIP_NODES[@]}"; do
+            [[ "$fb_node" == "$excluded" ]] && { skip_node=1; break; }
+          done
+          [[ $skip_node -eq 1 ]] && continue
+          fb_cpus_free="${NODE_FREE_CORES_INITIAL[$fb_i]}"
+          if (( fb_cpus_free > fallback_best_cpus )); then
+            fallback_best_cpus="$fb_cpus_free"
+            fallback_node_pos="$fb_i"
+          fi
+        done
+      fi
+
+      if (( fallback_node_pos < 0 )); then
+        echo "FAILED scheduling $(basename "$exp_dir"): no usable nodes in the cluster" >&2
+        echo "$(basename "$exp_dir"),N/A,N/A,0,0,0,0,0,$mem_per_cpu_gb,${mem_per_cpu_gb}G,${JOB_NAME:-$(basename "$exp_dir")},FAILED_NO_NODES," >> "$ASSIGNMENT_CSV"
+        ((failed+=1))
+        break
+      fi
+
+      selected_node_pos="$fallback_node_pos"
+      fb_node_total_cpus="${NODE_CORES_TOTAL_RUNTIME[$fallback_node_pos]}"
+      if [[ -n "$cpus_override" ]]; then
+        selected_cpus="$cpus_override"
+      else
+        policy_cpus=$(( fb_node_total_cpus * DEFAULT_CORES_PERCENT / 100 ))
+        (( policy_cpus < 1 )) && policy_cpus=1
+        selected_cpus="$policy_cpus"
+        (( selected_cpus > MAX_CPUS_PER_EXPERIMENT )) && selected_cpus="$MAX_CPUS_PER_EXPERIMENT"
+      fi
+      selected_req_mem_mb=$(( selected_cpus * mem_per_cpu_gb * 1024 ))
+      is_fallback=1
     fi
 
     node_pos="$selected_node_pos"
@@ -407,10 +468,11 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
     )
 
     # Final real-time guard before submission: skip node if current free resources
-    # cannot satisfy this job anymore.
+    # cannot satisfy this job anymore.  In fallback mode we skip this guard —
+    # the job is intentionally queued (PD) on the best available node.
     current_resource_line="$(get_node_free_resources "$node")"
     IFS='|' read -r _cpu_tot_now _mem_tot_now cpu_free_now mem_free_now <<< "$current_resource_line"
-    if (( cpus_per_task > cpu_free_now || requested_mem_mb > mem_free_now )); then
+    if [[ "$is_fallback" -eq 0 ]] && (( cpus_per_task > cpu_free_now || requested_mem_mb > mem_free_now )); then
       echo "Skipping $node for $(basename "$exp_dir"): insufficient current free resources (need cpu=$cpus_per_task mem_mb=$requested_mem_mb, have cpu=$cpu_free_now mem_mb=$mem_free_now)" >&2
       TRIED_NODES+=("$node")
 
@@ -430,8 +492,10 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
     [[ -n "${SLURM_EXTRA_ARGS:-}" ]] && sbatch_cmd+=($SLURM_EXTRA_ARGS)
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
-      echo "[DRY-RUN] ${sbatch_cmd[*]}"
-      echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,DRY_RUN," >> "$ASSIGNMENT_CSV"
+      local_dry_status="DRY_RUN"
+      [[ "$is_fallback" -eq 1 ]] && local_dry_status="DRY_RUN_QUEUED_FALLBACK"
+      echo "[DRY-RUN${is_fallback:+/QUEUED-FALLBACK}] ${sbatch_cmd[*]}"
+      echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,$local_dry_status," >> "$ASSIGNMENT_CSV"
       ((submitted+=1))
       submission_successful=1
     else
@@ -442,8 +506,13 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
 
       if [[ $rc -eq 0 ]]; then
         job_id="$(awk '{print $NF}' <<< "$out")"
-        echo "Submitted $(basename "$exp_dir") to $node (job $job_id, cpus=$cpus_per_task, mem/cpu=$mem_per_cpu_slurm)"
-        echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,SUBMITTED,$job_id" >> "$ASSIGNMENT_CSV"
+        if [[ "$is_fallback" -eq 1 ]]; then
+          echo "Queued $(basename "$exp_dir") on $node (job $job_id, cpus=$cpus_per_task, mem/cpu=$mem_per_cpu_slurm) [QUEUED-fallback, will start when resources free up]"
+          echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,QUEUED_FALLBACK,$job_id" >> "$ASSIGNMENT_CSV"
+        else
+          echo "Submitted $(basename "$exp_dir") to $node (job $job_id, cpus=$cpus_per_task, mem/cpu=$mem_per_cpu_slurm)"
+          echo "$(basename "$exp_dir"),$node,$submit_partition,$node_cores_total,$node_mem_total_mb,$node_cores_free,$node_mem_free_mb,$cpus_per_task,$mem_per_cpu_gb,$mem_per_cpu_slurm,$job_name,SUBMITTED,$job_id" >> "$ASSIGNMENT_CSV"
+        fi
         ((submitted+=1))
         submission_successful=1
       else
