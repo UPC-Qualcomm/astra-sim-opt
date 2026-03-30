@@ -19,7 +19,7 @@ fi
 NODE_STATES="idle,mix"
 
 # Nodes to exclude from scheduling (known unavailable/problematic nodes).
-SKIP_NODES=("sert-2201")
+SKIP_NODES=("sert-2201" "sert-1430" "sert-1419" "sert-1434" "sert-1433" "sert-1431" "sert-1425" "sert-1424" "sert-1906")
 
 # Optional SLURM parameters (uncomment and set if needed)
 # SLURM_ACCOUNT=""      # e.g., --account myaccount
@@ -339,7 +339,7 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
         (( candidate_cpus > MAX_CPUS_PER_EXPERIMENT )) && candidate_cpus="$MAX_CPUS_PER_EXPERIMENT"
       fi
 
-      (( candidate_cpus < 1 )) && continue
+      (( candidate_cpus < MIN_CPUS_PER_EXPERIMENT )) && continue
       candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
 
       if (( candidate_req_mem_mb > effective_available_mem_mb )); then
@@ -348,6 +348,9 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
         (( max_cpus_by_mem < candidate_cpus )) && candidate_cpus="$max_cpus_by_mem"
         candidate_req_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
       fi
+
+      # Final check: enforce minimum after all adjustments
+      (( candidate_cpus < MIN_CPUS_PER_EXPERIMENT )) && continue
 
       selected_node_pos="$node_pos"
       selected_cpus="$candidate_cpus"
@@ -393,7 +396,7 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
           done
           [[ $skip_node -eq 1 ]] && continue
           fb_cpus_free="${NODE_FREE_CORES_INITIAL[$fb_i]}"
-          if (( fb_cpus_free > fallback_best_cpus )); then
+          if (( fb_cpus_free >= MIN_CPUS_PER_EXPERIMENT && fb_cpus_free >= MIN_CPUS_PER_EXPERIMENT && fb_cpus_free > fallback_best_cpus )); then
             fallback_best_cpus="$fb_cpus_free"
             fallback_node_pos="$fb_i"
           fi
@@ -416,6 +419,8 @@ for exp_dir in "${EXPERIMENT_PATHS[@]}"; do
         (( policy_cpus < 1 )) && policy_cpus=1
         selected_cpus="$policy_cpus"
         (( selected_cpus > MAX_CPUS_PER_EXPERIMENT )) && selected_cpus="$MAX_CPUS_PER_EXPERIMENT"
+        # Enforce minimum for fallback allocation
+        (( selected_cpus < MIN_CPUS_PER_EXPERIMENT )) && selected_cpus="$MIN_CPUS_PER_EXPERIMENT"
       fi
       selected_req_mem_mb=$(( selected_cpus * mem_per_cpu_gb * 1024 ))
       is_fallback=1

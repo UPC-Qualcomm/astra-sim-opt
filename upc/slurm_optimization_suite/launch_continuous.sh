@@ -40,7 +40,7 @@ fi
 
 NODE_STATES="idle,mix"
 
-SKIP_NODES=("sert-2201")
+SKIP_NODES=("sert-2201" "sert-1430" "sert-1419" "sert-1434" "sert-1433" "sert-1431" "sert-1425" "sert-1424" "sert-1906")
 
 DEFAULT_CORES_PERCENT=32
 DEFAULT_MEM_PER_CPU_GB=2
@@ -271,7 +271,7 @@ find_node_for_experiment() {
 
     # Can't use more than what is currently free
     (( candidate_cpus > effective_cpu_free )) && candidate_cpus="$effective_cpu_free"
-    (( candidate_cpus < 1 )) && continue
+    (( candidate_cpus < MIN_CPUS_PER_EXPERIMENT )) && continue
 
     # Check memory: required = candidate_cpus * mem_per_cpu_gb * 1024 MB
     local required_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
@@ -284,7 +284,8 @@ find_node_for_experiment() {
       required_mem_mb=$(( candidate_cpus * mem_per_cpu_gb * 1024 ))
     fi
 
-    (( candidate_cpus < 1 )) && continue
+    # Final check: enforce minimum after all adjustments
+    (( candidate_cpus < MIN_CPUS_PER_EXPERIMENT )) && continue
 
     # This node fits — select it
     CHOSEN_NODE_IDX="$ni"
