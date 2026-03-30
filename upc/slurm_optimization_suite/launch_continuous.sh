@@ -328,7 +328,7 @@ submit_experiment() {
     sbatch
     --job-name "$job_name"
     --chdir "$exp_dir"
-    --nodelist "$node"
+    #--nodelist "$node"
     --partition "$submit_partition"
     --cpus-per-task "$cpus_per_task"
     --mem-per-cpu "$mem_per_cpu_slurm"
