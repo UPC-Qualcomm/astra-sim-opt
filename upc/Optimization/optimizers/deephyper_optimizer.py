@@ -16,6 +16,7 @@ import yaml
 sys.path.append(os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..core import BaseOptimizer, ArtifactCleanupManager
 from ..core.simulation_tracker import SimulationTracker
+from ..core.search_early_stopping import AdaptiveSearchEarlyStopping
 from ..helper import evaluate_config_worker, workload_generator
 
 try:
@@ -43,8 +44,19 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
     clusters = optimizer_state.get('clusters')
     
     # Create cache key BEFORE enriching config (so it matches the DataFrame params)
-    config_key = tuple(config.items())
-    
+    config_key = tuple(sorted(config.items()))
+    # --- Duplicate config cache ---
+    # Use optimizer_state['duplicate_eval_cache'] if present, else create it
+    duplicate_eval_cache = optimizer_state['duplicate_eval_cache']
+    if config_key in duplicate_eval_cache:
+        optimizer_state['cache_statistics']['hits'] += 1
+        cached_result = duplicate_eval_cache[config_key]
+        print(f"    ⚡ Duplicate config detected, returning cached result for {config_key}")
+        return cached_result
+    else:
+        optimizer_state['cache_statistics']['misses'] += 1
+
+    print(f"Cache statistics (cache hits: {optimizer_state['cache_statistics']['hits']}, cache misses: {optimizer_state['cache_statistics']['misses']})")
     if clusters and 'cluster' in config:
         config = enrich_config_with_clusters(config, clusters)
 
@@ -79,6 +91,7 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
                 _bump_cleanup_counter('files_deleted', cleanup_result['total_removed'])
             
             print("    ⚠️  exec_time error")
+            duplicate_eval_cache[config_key] = "F"
             return "F"
         
         # Cache exec_time and config files for enrichment
@@ -114,6 +127,7 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
         if score is None:
             
             print("    ⚠️  objective error")
+            duplicate_eval_cache[config_key] = "F"
             return "F"
 
         # Update tracker threshold only on successful completed runs.
@@ -156,16 +170,21 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
         # bias the surrogate model.
         if was_killed:
             if isinstance(score, (tuple, list)):
-                return tuple(PENALTY for _ in score)
+                result = tuple(PENALTY for _ in score)
             else:
-                return PENALTY
+                result = PENALTY
+            duplicate_eval_cache[config_key] = result
+            return result
 
         # Raw → DeepHyper maximization space (per-objective min/max + invalid).
         # float() casts happen inside to_optimizer_score; int64-safe for Pareto/CSV.
-        return objective.to_optimizer_score(score, optimizer_bad_value=PENALTY)
+        result = objective.to_optimizer_score(score, optimizer_bad_value=PENALTY)
+        duplicate_eval_cache[config_key] = result
+        return result
         
     except Exception as e:
         print(f"    ⚠️  Evaluation error: {e}")
+        duplicate_eval_cache[config_key] = "F"
         return "F"
 
 
@@ -225,6 +244,9 @@ class DeepHyperOptimizer(BaseOptimizer):
         problem_kwargs: Optional[Dict] = None,
         cbo_kwargs: Optional[Dict] = None,
         compress_and_clean_is_enabled: bool = True,
+        # Early stopping — search-level no-improvement detector
+        early_stopping_patience: int = -1,
+        early_stopping_min_evaluations: int = 0,
     ):
         """
         Args:
@@ -287,6 +309,17 @@ class DeepHyperOptimizer(BaseOptimizer):
             # Additional overrides
             problem_kwargs: Additional HpProblem arguments (advanced)
             cbo_kwargs: Additional CBO arguments (advanced, overrides above)
+
+            # Early stopping (search-level no-improvement detector)
+            early_stopping_patience: Number of consecutive non-improving evaluations
+                before stopping.  Set to -1 (default) to disable.  Penalty results
+                (killed simulations) count as non-improving but do not update the best.
+                Failure results ("F") are ignored entirely.  For parallel runs set this
+                to at least 3-5x n_workers (e.g. 30-50 for n_workers=10).
+            early_stopping_min_evaluations: Minimum number of non-failure evaluations
+                to collect before the patience counter starts.  Set to n_initial_points
+                (or larger) so the random exploration phase is never interrupted.
+                Defaults to 0.
         """
         if not DEEPHYPER_AVAILABLE:
             raise ImportError("DeepHyper is not installed. Please install it with 'pip install deephyper'")
@@ -400,6 +433,8 @@ class DeepHyperOptimizer(BaseOptimizer):
         from multiprocessing import Manager
         self._manager = Manager()
         self.extra_data_cache = self._manager.dict()
+        self.duplicate_eval_cache = self._manager.dict()
+        self.cache_statistics = self._manager.dict({'hits': 0, 'misses': 0})
         self.periodic_cleanup_state = None
         if self._periodic_cleanup_enabled():
             self.periodic_cleanup_state = {
@@ -419,8 +454,11 @@ class DeepHyperOptimizer(BaseOptimizer):
             }
 
         # Simulation tracker for early termination
+        # Early stopping — search-level no-improvement detector
+        self.early_stopping_patience = early_stopping_patience
+        self.early_stopping_min_evaluations = early_stopping_min_evaluations
+
         if enable_tracker:
-            # Pass the raw threshold magnitude; SimulationTracker derives per-
             # objective directions from objective.score_directions internally and
             # builds the correct initial threshold vector (positive for minimize,
             # negative for maximize) without the caller needing to pre-flip signs.
@@ -452,6 +490,14 @@ class DeepHyperOptimizer(BaseOptimizer):
             print(f"Search space: {len(self.search_space.parameters)} parameters, "
                   f"{len(self.search_space.constraints)} constraints")
             print(f"Log directory: {self.log_dir}")
+            if self.early_stopping_patience > 0:
+                print(
+                    f"Early stopping: enabled "
+                    f"(patience={self.early_stopping_patience}, "
+                    f"warmup={self.early_stopping_min_evaluations} evals)"
+                )
+            else:
+                print("Early stopping: disabled")
             print("="*70 + "\n")
 
         try:
@@ -737,13 +783,31 @@ class DeepHyperOptimizer(BaseOptimizer):
             'extra_data_cache': self.extra_data_cache,
             'tracker': self.tracker if self.enable_tracker else None,
             'periodic_cleanup': self.periodic_cleanup_state,
+            'duplicate_eval_cache': self.duplicate_eval_cache,
+            'cache_statistics': self.cache_statistics,
         }
         
         eval_func = partial(_deephyper_evaluate_wrapper, optimizer_state=optimizer_state)
+
+        callbacks = []
+        if self.early_stopping_patience > 0:
+            early_stopper = AdaptiveSearchEarlyStopping(
+                patience_limit=self.early_stopping_patience,
+                min_evaluations_before_check=self.early_stopping_min_evaluations,
+                verbose=self.verbose,
+            )
+            callbacks.append(early_stopper)
+            if self.verbose:
+                print(
+                    f"✓ Early stopping enabled "
+                    f"(patience={self.early_stopping_patience}, "
+                    f"warmup={self.early_stopping_min_evaluations} evals)"
+                )
+
         evaluator = Evaluator.create(
             eval_func,
             method=self.evaluator_method,
-            method_kwargs={"num_workers": self.n_workers}
+            method_kwargs={"num_workers": self.n_workers, "callbacks": callbacks}
         )
         
         return evaluator

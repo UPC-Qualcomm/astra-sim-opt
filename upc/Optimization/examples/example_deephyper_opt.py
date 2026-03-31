@@ -28,11 +28,11 @@ def main():
     
     # Configuration
     MODEL_NUM = 5 # GPT_40B (Model enum value)
-    MODEL_NAME = "GPT_test_new_min_max"  # Descriptive name for results folder and plots
+    MODEL_NAME = "GPT_test_new_min_min_no_cache_no_early"  # Descriptive name for results folder and plots
     NUM_NPUS = 64
     NETWORK_NAME = "FoldedClos"
     BUDGET = 100
-    INIT_SAMPLES = 25
+    INIT_SAMPLES = 10
     N_WORKERS = 10
     TOP_K = 10  # Number of top configurations to keep track of
     CLEANUP_BATCH_SIZE = 120  # Batch size for parallel evaluation (if supported by sim runner)
@@ -61,7 +61,7 @@ def main():
     )
     search_space = create_search_space(
         search_space_path,
-        include_categories=['parallelism_strategy', 'network']
+        include_categories=['parallelism_strategy', 'network', 'model']
     )
     
     # 2. Choose sampler (for fallback if needed)
@@ -107,7 +107,7 @@ def main():
     print("\n4. Creating objective function...")
     
     objective = create_objective(
-        objective_type='time_and_throughput_per_energy'
+        objective_type='edp_and_network_bw'
     )
     #objective = CustomObjective(
     #    obj_latency_network,  # Raw values - let DeepHyper normalize
@@ -143,12 +143,15 @@ def main():
         # Use DeepHyper's built-in scaler for normalization
         objective_scaler="minmax",  # Options: 'identity', 'minmax', 'minmaxlog', 'log', 'quantile-uniform'
         # Tracker for early termination (enabled by default)
-        enable_tracker=True,
+        enable_tracker=False,
         tracker_kill_multiplier=1.5,
         tracker_initial_threshold=1e15,
         cleanup_batch_size=CLEANUP_BATCH_SIZE,
         compress_and_clean_is_enabled=COMPRESS_AND_CLEAN_IS_ENABLED,
         search_type = "cbo",  # "cbo" or "random"
+        # --- Early stopping (search-level no-improvement detector) ---
+        early_stopping_patience=-1,
+        early_stopping_min_evaluations=INIT_SAMPLES,
     )
     print(f"   Using: {optimizer}")
     if optimizer.tracker:

@@ -68,6 +68,8 @@ if [[ -n "${SLURM_CPUS_PER_TASK:-}" ]]; then
 fi
 
 N_WORKERS_EFFECTIVE="${N_WORKERS_OVERRIDE:-${SLURM_CPUS_PER_TASK:-$N_WORKERS}}"
+EARLY_STOPPING_PATIENCE="${EARLY_STOPPING_PATIENCE:-$((3 * N_WORKERS_EFFECTIVE))}"
+EARLY_STOPPING_MIN_EVALUATIONS="${EARLY_STOPPING_MIN_EVALUATIONS:-${INIT_SAMPLES}}"
 
 TS="$(date +%Y%m%d_%H%M%S)"
 RUN_PREFIX="$RESULT_FOLDER_PREFIX/run_${TS}"
@@ -123,6 +125,8 @@ time python "$SWEEP_SCRIPT" \
   --compress-and-clean \
   --include-categories "$INCLUDE_CATEGORIES" \
   --enable-tracker "$ENABLE_TRACKER" \
+  --early-stopping-patience "$EARLY_STOPPING_PATIENCE" \
+  --early-stopping-min-evaluations "$EARLY_STOPPING_MIN_EVALUATIONS" \
   2>&1 | tee -a "$LOG_FILE"
 
 echo "Completed experiment: $EXP_NAME" | tee -a "$LOG_FILE"

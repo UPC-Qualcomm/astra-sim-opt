@@ -88,6 +88,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bw-unit", default="GB/s", help="Bandwidth unit")
     parser.add_argument("--include-categories", default=None, help="Comma-separated list of search space categories")
     parser.add_argument("--enable-tracker", action="store_true", help="Enable DeepHyper's built-in tracker for early termination")
+    parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=-1,
+        help=(
+            "Stop the search after this many consecutive non-improving evaluations. "
+            "Set to -1 (default) to disable. Recommended: 3-5x --n-workers "
+            "(e.g. --early-stopping-patience 50 for 10 workers)."
+        ),
+    )
+    parser.add_argument(
+        "--early-stopping-min-evaluations",
+        type=int,
+        default=0,
+        help=(
+            "Minimum number of valid (non-failure) evaluations before the early-stopping "
+            "patience counter begins. Set to at least --init-samples to protect the "
+            "random exploration phase. Defaults to 0."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -125,6 +145,8 @@ def main():
     CLEANUP_BATCH_SIZE = args.cleanup_batch_size
     COMPRESS_AND_CLEAN_IS_ENABLED = args.compress_and_clean
     ENABLE_TRACKER = args.enable_tracker
+    EARLY_STOPPING_PATIENCE = args.early_stopping_patience if args.early_stopping_patience > 0 else 2 * N_WORKERS
+    EARLY_STOPPING_MIN_EVALUATIONS = args.early_stopping_min_evaluations if args.early_stopping_min_evaluations > 0 else INIT_SAMPLES
 
     default_search_space_path = os.path.join(
         os.path.dirname(__file__),
@@ -233,7 +255,10 @@ def main():
         tracker_kill_multiplier=1.5,
         tracker_initial_threshold=1e15,
         cleanup_batch_size=CLEANUP_BATCH_SIZE,
-        compress_and_clean_is_enabled=COMPRESS_AND_CLEAN_IS_ENABLED
+        compress_and_clean_is_enabled=COMPRESS_AND_CLEAN_IS_ENABLED,
+        # Early stopping: disabled by default (-1). Enable with --early-stopping-patience.
+        early_stopping_patience=EARLY_STOPPING_PATIENCE,
+        early_stopping_min_evaluations=EARLY_STOPPING_MIN_EVALUATIONS,
     )
     print(f"   Using: {optimizer}")
     if optimizer.tracker:

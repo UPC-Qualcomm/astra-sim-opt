@@ -15,6 +15,7 @@ from .artifact_cleanup import ArtifactCleanupManager
 from .simulation_runner import SimulationRunner
 from .simulation_tracker import SimulationTracker
 from .time_statistics import TimeStatistics
+from .search_early_stopping import AdaptiveSearchEarlyStopping
 from .categorical_encoder import get_numerical, get_str
 from .power_estimator import run_power_estimation
 from .objective import (
@@ -60,6 +61,7 @@ __all__ = [
     'SimulationRunner',
     'SimulationTracker',
     'TimeStatistics',
+    'AdaptiveSearchEarlyStopping',
     'get_numerical',
     'get_str',
     'run_power_estimation',
