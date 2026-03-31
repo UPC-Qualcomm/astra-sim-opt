@@ -109,6 +109,7 @@ mkdir -p "$STG_TMP_DIR"
 echo "TMPDIR: $TMPDIR" | tee -a "$LOG_FILE"
 echo "STG_TMP_DIR: $STG_TMP_DIR" | tee -a "$LOG_FILE"
 
+_EXP_START=$(date +%s)
 time python "$SWEEP_SCRIPT" \
   --objective "$OBJECTIVE_KEY" \
   --model-num "$MODEL_NUM" \
@@ -131,5 +132,11 @@ time python "$SWEEP_SCRIPT" \
   --early-stopping-patience "$EARLY_STOPPING_PATIENCE" \
   --early-stopping-min-evaluations "$EARLY_STOPPING_MIN_EVALUATIONS" \
   2>&1 | tee -a "$LOG_FILE"
+
+_EXP_END=$(date +%s)
+_ELAPSED=$(( _EXP_END - _EXP_START ))
+printf "Experiment wall time: %02dh %02dm %02ds (%ds total)\n" \
+  $(( _ELAPSED/3600 )) $(( (_ELAPSED%3600)/60 )) $(( _ELAPSED%60 )) "$_ELAPSED" \
+  | tee -a "$LOG_FILE"
 
 echo "Completed experiment: $EXP_NAME" | tee -a "$LOG_FILE"
