@@ -104,7 +104,10 @@ mkdir -p "$JOB_TMP_DIR"
 export TMPDIR="$JOB_TMP_DIR"
 export TMP="$JOB_TMP_DIR"
 export TEMP="$JOB_TMP_DIR"
+export STG_TMP_DIR="/scratch/nas/4/nasser/tmp/stg_${SLURM_JOB_ID:-$$}"
+mkdir -p "$STG_TMP_DIR"
 echo "TMPDIR: $TMPDIR" | tee -a "$LOG_FILE"
+echo "STG_TMP_DIR: $STG_TMP_DIR" | tee -a "$LOG_FILE"
 
 time python "$SWEEP_SCRIPT" \
   --objective "$OBJECTIVE_KEY" \
