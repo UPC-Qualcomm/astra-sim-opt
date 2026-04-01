@@ -21,6 +21,7 @@ Usage:
 import json
 import yaml
 import os
+import tempfile
 from typing import Dict, Any
 
 
@@ -263,9 +264,17 @@ def generate_system_config(config: Dict[str, Any]) -> str:
     # Generate filename with hash (not timestamp)
     output_path = os.path.join(CONFIG_OUTPUT_DIR, f"system_{config_hash}.json")
     
-    # Write JSON file
-    with open(output_path, 'w') as f:
-        json.dump(system_config, f, indent=4)
+    # If another worker already wrote the same file, reuse it directly.
+    if os.path.exists(output_path):
+        _SYSTEM_CONFIG_CACHE[config_hash] = output_path
+        return output_path
+
+    # Write atomically: write to a temp file then rename so the C++ simulator
+    # never sees a partially-written file (fixes parallel-worker race condition).
+    with tempfile.NamedTemporaryFile('w', dir=CONFIG_OUTPUT_DIR, suffix='.json', delete=False) as tmp:
+        json.dump(system_config, tmp, indent=4)
+        tmp_path = tmp.name
+    os.replace(tmp_path, output_path)
     
     # Cache the path
     _SYSTEM_CONFIG_CACHE[config_hash] = output_path
@@ -351,9 +360,16 @@ def generate_network_config(config: Dict[str, Any]) -> str:
     # Generate filename with hash (not timestamp)
     output_path = os.path.join(CONFIG_OUTPUT_DIR, f"network_{config_hash}.yml")
     
-    # Write YAML file with flow style for lists (matches FoldedClos.yml format)
-    with open(output_path, 'w') as f:
-        yaml.dump(network_config, f, default_flow_style=None)
+    # If another worker already wrote the same file, reuse it directly.
+    if os.path.exists(output_path):
+        _NETWORK_CONFIG_CACHE[config_hash] = output_path
+        return output_path
+
+    # Write atomically to avoid readers seeing partial YAML under parallel runs.
+    with tempfile.NamedTemporaryFile('w', dir=CONFIG_OUTPUT_DIR, suffix='.yml', delete=False) as tmp:
+        yaml.dump(network_config, tmp, default_flow_style=None)
+        tmp_path = tmp.name
+    os.replace(tmp_path, output_path)
     
     # Cache the path
     _NETWORK_CONFIG_CACHE[config_hash] = output_path
@@ -397,9 +413,16 @@ def generate_memory_config(config: Dict[str, Any]) -> str:
     # Generate filename with hash (not timestamp)
     output_path = os.path.join(CONFIG_OUTPUT_DIR, f"memory_{config_hash}.json")
     
-    # Write JSON file
-    with open(output_path, 'w') as f:
-        json.dump(memory_config, f, indent=4)
+    # If another worker already wrote the same file, reuse it directly.
+    if os.path.exists(output_path):
+        _MEMORY_CONFIG_CACHE[config_hash] = output_path
+        return output_path
+
+    # Write atomically to avoid readers seeing partial JSON under parallel runs.
+    with tempfile.NamedTemporaryFile('w', dir=CONFIG_OUTPUT_DIR, suffix='.json', delete=False) as tmp:
+        json.dump(memory_config, tmp, indent=4)
+        tmp_path = tmp.name
+    os.replace(tmp_path, output_path)
     
     # Cache the path
     _MEMORY_CONFIG_CACHE[config_hash] = output_path
@@ -467,9 +490,16 @@ def generate_g2_system_config(config: Dict[str, Any]) -> str:
     # Generate filename with hash
     output_path = os.path.join(CONFIG_OUTPUT_DIR, f"system_g2_{config_hash}.json")
     
-    # Write JSON file
-    with open(output_path, 'w') as f:
-        json.dump(system_config, f, indent=4)
+    # If another worker already wrote the same file, reuse it directly.
+    if os.path.exists(output_path):
+        _SYSTEM_CONFIG_CACHE[config_hash] = output_path
+        return output_path
+
+    # Write atomically to avoid readers seeing partial JSON under parallel runs.
+    with tempfile.NamedTemporaryFile('w', dir=CONFIG_OUTPUT_DIR, suffix='.json', delete=False) as tmp:
+        json.dump(system_config, tmp, indent=4)
+        tmp_path = tmp.name
+    os.replace(tmp_path, output_path)
     
     # Cache the path
     _SYSTEM_CONFIG_CACHE[config_hash] = output_path
@@ -698,10 +728,10 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
     network_config_path = os.path.join(CONFIG_OUTPUT_DIR, f"network_g2_{config_hash}.yml")
     
     # Write atomically to avoid readers seeing partial YAML under parallel runs.
-    temp_network_config_path = network_config_path
-    with open(temp_network_config_path, 'w') as f:
-        yaml.dump(g2_network_config, f, default_flow_style=None)
-    os.replace(temp_network_config_path, network_config_path)
+    with tempfile.NamedTemporaryFile('w', dir=CONFIG_OUTPUT_DIR, suffix='.yml', delete=False) as tmp:
+        yaml.dump(g2_network_config, tmp, default_flow_style=None)
+        tmp_path = tmp.name
+    os.replace(tmp_path, network_config_path)
     
     # Cache the path
     _NETWORK_CONFIG_CACHE[config_hash] = network_config_path
