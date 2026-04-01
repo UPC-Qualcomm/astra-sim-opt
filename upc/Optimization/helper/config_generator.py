@@ -811,16 +811,19 @@ def generate_g2_network_config_old(config: Dict[str, Any], net_sim_config: Dict[
             actual_nodes = int(K**3 / 4)
             actual_npus = actual_nodes * npus_per_node
             
-            # Keep incrementing K until actual_npus is >= num_npus AND is a power of 2
-            def is_power_of_2(n):
-                return n > 0 and (n & (n - 1)) == 0
+            # Keep incrementing K until actual_npus is >= num_npus AND is even
+            def is_even(n):
+                return n > 0 and (n & 1) == 0
             
-            while actual_npus < num_npus or not is_power_of_2(actual_npus):
+            while actual_npus < num_npus or not is_even(actual_npus):
                 K += 1
+                if K % 2 != 0:
+                    K += 1  # Ensure K is even for FoldedClos
                 actual_nodes = int(K**3 / 4)
                 actual_npus = actual_nodes * npus_per_node
             
             topology_config['K'] = K
+            print(f"Calculated FoldedClos K={K} for num_npus={num_npus} with npus_per_node={npus_per_node} (actual_npus={actual_npus})")
         
         # Map bandwidth parameters
         if 'intra-node-bw' in config:
