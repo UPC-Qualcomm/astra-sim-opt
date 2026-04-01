@@ -1141,24 +1141,22 @@ class MinimizeTimeMaximizeThroughputPerEnergy(ObjectiveFunction):
                               = batch_size / (exec_time_sec * total_energy_J * 1e-6)
         """
         if is_oom:
-            return (PENALTY, PENALTY)
+            return PENALTY, PENALTY
 
         if metadata is None:
             metadata = {}
 
         if exec_time is None or exec_time <= 0:
-            return (PENALTY, PENALTY)
+            return PENALTY, PENALTY
 
         # Requirement: consume the reported metric from power estimator.
-        samples_per_mj = metadata["samples_per_sec_per_mj"]
+        samples_per_mj = metadata.get("samples_per_sec_per_mj")
         
         if samples_per_mj is None or samples_per_mj <= 0 or not math.isfinite(samples_per_mj):
-            return (PENALTY, PENALTY)
+            return PENALTY, PENALTY
 
-        return (
-            math.log10(exec_time),
-            math.log10(samples_per_mj),
-        )
+        return math.log10(exec_time), math.log10(samples_per_mj)
+        
 
 
 class MaximizeMemoryMinimizeTime(ObjectiveFunction):
@@ -1190,7 +1188,7 @@ class MaximizeMemoryMinimizeTime(ObjectiveFunction):
         Compute (peak_memory_GB, exec_time).
         """
         if is_oom:
-            return (PENALTY, PENALTY)
+            return PENALTY, PENALTY
 
         if metadata is None:
             metadata = {}
@@ -1198,17 +1196,14 @@ class MaximizeMemoryMinimizeTime(ObjectiveFunction):
             config = {}
 
         if exec_time is None or exec_time <= 0:
-            return (PENALTY, PENALTY)
+            return PENALTY, PENALTY
 
-        peak_memory_gb = metadata["peak_memory_gb"],
+        peak_memory_gb = metadata.get("peak_memory_gb")
 
-        if peak_memory_gb <= 0 or not math.isfinite(peak_memory_gb):
-            return (PENALTY, PENALTY)
+        if peak_memory_gb is None or peak_memory_gb <= 0 or not math.isfinite(peak_memory_gb):
+            return PENALTY, PENALTY
 
-        return (
-            math.log10(peak_memory_gb),
-            math.log10(exec_time),
-        )
+        return math.log10(peak_memory_gb), math.log10(exec_time)
 
 
 class CustomObjective(ObjectiveFunction):
