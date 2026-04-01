@@ -23,7 +23,7 @@
         "intra-node-bw": [900]
     },
     "model": {
-        "batch_size": [1, 2, 4, 8, 16, 32, 64]
+        "batch_size": {"min": 8, "max": 64, "step": 8}
     },
     "constraints": {
         "parallelism_strategy": "dp * mp * sp * pp = npu_count",

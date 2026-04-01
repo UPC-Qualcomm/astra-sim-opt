@@ -19,7 +19,8 @@ fi
 NODE_STATES="idle,mix"
 
 # Nodes to exclude from scheduling (known unavailable/problematic nodes).
-SKIP_NODES=("sert-2201" "sert-1430" "sert-1419" "sert-1434" "sert-1433" "sert-1431" "sert-1425" "sert-1424" "sert-1906")
+#SKIP_NODES=("sert-2201" "sert-1430" "sert-1419" "sert-1434" "sert-1433" "sert-1431" "sert-1425" "sert-1424" "sert-1906")
+SKIP_NODES=()
 SLURM_QOS="large"
 # Optional SLURM parameters (uncomment and set if needed)
 # SLURM_ACCOUNT=""      # e.g., --account myaccount
@@ -46,6 +47,7 @@ ACTIVE_EXPERIMENTS=(
   "llama70b_128npus_memory_and_time"
   "llama70b_128npus_time"
   "llama70b_128npus_time_and_bw"
+  "llama70b_128npus_latency_network"
   "llama70b_128npus_time_and_throughput_per_energy"
   "gpt60b_128npus_edp"
   "gpt60b_128npus_edp_and_bw"
@@ -53,6 +55,7 @@ ACTIVE_EXPERIMENTS=(
   "gpt60b_128npus_memory_and_time"
   "gpt60b_128npus_time"
   "gpt60b_128npus_time_and_bw"
+  "gpt60b_128npus_latency_network"
   "gpt60b_128npus_time_and_throughput_per_energy"
   "gpt175b_1024npus_edp"
   "gpt175b_1024npus_edp_and_bw"
@@ -60,6 +63,7 @@ ACTIVE_EXPERIMENTS=(
   "gpt175b_1024npus_memory_and_time"
   "gpt175b_1024npus_time"
   "gpt175b_1024npus_time_and_bw"
+  "gpt175b_1024npus_latency_network"
   "gpt175b_1024npus_time_and_throughput_per_energy"
   "llama8b_32npus_edp"
   "llama8b_32npus_edp_and_bw"
@@ -68,6 +72,7 @@ ACTIVE_EXPERIMENTS=(
   "llama8b_32npus_time"
   "llama8b_32npus_time_and_bw"
   "llama8b_32npus_time_and_throughput_per_energy"
+  "llama8b_32npus_latency_network"
   # "llama8b_32npus_time"          # Example: uncomment to RUN this experiment
 )
 
