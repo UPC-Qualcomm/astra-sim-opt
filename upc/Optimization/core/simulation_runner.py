@@ -276,6 +276,9 @@ class SimulationRunner:
             if self.verbose:
                 print(f"    ✓ Execution time: {exec_time:.2f}ns")
                 print(f"    ✓ Total training time: {training_time:.2f}s")
+            # Store the raw per-step exec time (ns) in metadata so the tracker
+            # can compare it against trace ticks (also in ns).
+            metadata['exec_time_ns'] = exec_time
 
             # 5. Run power estimation when explicitly requested (estimate_power=1, Mode D)
             power_metrics = {}

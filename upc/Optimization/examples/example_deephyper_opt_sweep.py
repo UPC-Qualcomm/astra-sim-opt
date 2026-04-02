@@ -23,30 +23,37 @@ from Optimization import (
 from Optimization.core.base_optimizer import format_score
 
 
+# plot_directions: per-objective display direction, matching objective.score_directions.
+# DeepHyper negates minimized objectives in the CSV, so 'min' applies sign=-1 for display.
+# Derived from objective.score_directions (True=min, False=max) via create_objective().
 OBJECTIVE_METADATA = {
-    "time": {"plot_labels": []},
-    "time_and_network_bw": {"plot_labels": []},
-    "power": {"plot_labels": []},
-    "energy": {"plot_labels": []},
-    "power_and_time": {"plot_labels": ["Total Power (W)", "Training Time (s)"]},
-    "energy_and_time": {"plot_labels": ["Total Energy (J)", "Training Time (s)"]},
-    "latency_total_network": {"plot_labels": ["Training Time (s)", "Network Total BW (GB/s)"]},
-    "latency_network": {"plot_labels": ["log10(Training Time (s))", "log10(Network Total BW (GB/s))"]},
-    "latency_memory": {"plot_labels": ["log10(Training Time (s))", "log10(Total Memory (GB))"]},
-    "network_memory": {"plot_labels": ["log10(Network Total BW (GB/s))", "log10(Total Memory (GB))"]},
-    "latency_network_memory": {"plot_labels": ["log10(Training Time (s))", "log10(Network Total BW (GB/s))", "log10(Total Memory (GB))"]},
-    "latency_network_raw": {"plot_labels": ["Training Time (s)", "Network Total BW (GB/s)"]},
-    "latency_network_minmax": {"plot_labels": ["Normalized Training Time", "Normalized Network BW"]},
-    "latency_network_sqrt": {"plot_labels": ["sqrt(Training Time (s))", "sqrt(Network Total BW (GB/s))"]},
-    "latency_network_power": {"plot_labels": ["Training Time (s)^p", "Network BW^p"]},
-    "edp": {"plot_labels": []},
-    "edp_and_network_bw": {"plot_labels": ["EDP (J * cycles)", "Network Total BW (GB/s)"]},
-    "ed2p_and_network_bw": {"plot_labels": ["ED²P (J * cycles²)", "Network Total BW (GB/s)"]},
-    "e2d_and_network_bw": {"plot_labels": ["E²D (J² * cycles)", "Network Total BW (GB/s)"]},
-    "energy_cycles_and_network_bw": {"plot_labels": ["Total Energy (J)", "Training Time (s)", "Network Total BW (GB/s)"]},
-    "power_cycles_network_bw": {"plot_labels": ["Total Power (W)", "Training Time (s)", "Network Total BW (GB/s)"]},
-    "ed2p": {"plot_labels": []},
-    "e2d": {"plot_labels": []},
+    "time":                       {"plot_labels": [],                                                                                          "plot_directions": []},
+    "time_and_network_bw":        {"plot_labels": [],                                                                                          "plot_directions": []},
+    "power":                      {"plot_labels": [],                                                                                          "plot_directions": []},
+    "energy":                     {"plot_labels": [],                                                                                          "plot_directions": []},
+    "edp":                        {"plot_labels": [],                                                                                          "plot_directions": []},
+    "ed2p":                       {"plot_labels": [],                                                                                          "plot_directions": []},
+    "e2d":                        {"plot_labels": [],                                                                                          "plot_directions": []},
+    "power_and_time":             {"plot_labels": ["Total Power (W)", "Training Time (s)"],                                                    "plot_directions": ["min", "min"]},
+    "energy_and_time":            {"plot_labels": ["Total Energy (J)", "Training Time (s)"],                                                   "plot_directions": ["min", "min"]},
+    "latency_total_network":      {"plot_labels": ["Training Time (s)", "Network Total BW (GB/s)"],                                           "plot_directions": ["min", "min"]},
+    "latency_network":            {"plot_labels": ["log10(Training Time (s))", "log10(Network Total BW (GB/s))"],                             "plot_directions": ["min", "min"]},
+    "latency_memory":             {"plot_labels": ["log10(Training Time (s))", "log10(Total Memory (GB))"],                                   "plot_directions": ["min", "min"]},
+    "network_memory":             {"plot_labels": ["log10(Network Total BW (GB/s))", "log10(Total Memory (GB))"],                            "plot_directions": ["min", "min"]},
+    "latency_network_raw":        {"plot_labels": ["Training Time (s)", "Network Total BW (GB/s)"],                                          "plot_directions": ["min", "min"]},
+    "latency_network_minmax":     {"plot_labels": ["Normalized Training Time", "Normalized Network BW"],                                     "plot_directions": ["min", "min"]},
+    "latency_network_sqrt":       {"plot_labels": ["sqrt(Training Time (s))", "sqrt(Network Total BW (GB/s))"],                              "plot_directions": ["min", "min"]},
+    "latency_network_power":      {"plot_labels": ["Training Time (s)^p", "Network BW^p"],                                                   "plot_directions": ["min", "min"]},
+    "edp_and_network_bw":         {"plot_labels": ["EDP (J * cycles)", "Network Total BW (GB/s)"],                                          "plot_directions": ["min", "min"]},
+    "ed2p_and_network_bw":        {"plot_labels": ["ED\u00b2P (J * cycles\u00b2)", "Network Total BW (GB/s)"],                              "plot_directions": ["min", "min"]},
+    "e2d_and_network_bw":         {"plot_labels": ["E\u00b2D (J\u00b2 * cycles)", "Network Total BW (GB/s)"],                              "plot_directions": ["min", "min"]},
+    # Special cases: mixed minimize/maximize directions
+    "time_and_throughput_per_energy": {"plot_labels": ["Training Time (s)", "Throughput/Energy (samples/J)"],                              "plot_directions": ["min", "max"]},
+    "memory_and_time":            {"plot_labels": ["Total Memory (GB)", "Training Time (s)"],                                               "plot_directions": ["max", "min"]},
+    # 3-objective (auto-plotting skipped — only 2D is supported)
+    "latency_network_memory":     {"plot_labels": ["log10(Training Time (s))", "log10(Network Total BW (GB/s))", "log10(Total Memory (GB))"], "plot_directions": ["min", "min", "min"]},
+    "energy_cycles_and_network_bw": {"plot_labels": ["Total Energy (J)", "Training Time (s)", "Network Total BW (GB/s)"],                  "plot_directions": ["min", "min", "min"]},
+    "power_cycles_network_bw":    {"plot_labels": ["Total Power (W)", "Training Time (s)", "Network Total BW (GB/s)"],                      "plot_directions": ["min", "min", "min"]},
 }
 
 DEFAULT_OBJECTIVE = "e2d_and_network_bw"
@@ -304,6 +311,7 @@ def main():
                 model_name = getattr(optimizer.simulation_runner, "model_name", "model")
                 output_base = os.path.join(optimizer.save_dir, f"./pareto_front_{model_name}")
 
+                plot_dirs = objective_meta.get("plot_directions", ["min", "min"])
                 pareto_plots = plot_pareto_front(
                     results_file=csv_path,
                     obj0_name=plot_labels[0],
@@ -311,8 +319,10 @@ def main():
                     output_file=output_base,
                     plot_format="both",
                     show_labels=True,
-                    remove_outliers=True,
+                    remove_outliers=False,
                     iqr_multiplier=1.5,
+                    obj0_direction=plot_dirs[0] if len(plot_dirs) > 0 else "min",
+                    obj1_direction=plot_dirs[1] if len(plot_dirs) > 1 else "min",
                 )
             except Exception as e:
                 print(f"⚠️  Error plotting Pareto front: {e}")

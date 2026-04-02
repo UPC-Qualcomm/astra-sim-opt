@@ -243,7 +243,8 @@ def plot_pareto_front_static(
     df,
     obj0_name="Objective 0",
     obj1_name="Objective 1",
-    output_file="pareto_front.png"
+    output_file="pareto_front.png",
+    directions=("min", "min"),
 ):
     """Create static Pareto front plot using Matplotlib.
     
@@ -260,58 +261,74 @@ def plot_pareto_front_static(
         print("❌ Matplotlib not available. Install with: pip install matplotlib")
         return None
     
-    # Create plot
-    fig, ax = plt.subplots(figsize=(9, 7), tight_layout=True)
-    
+    # Create plot — single-column A4/A* paper: 3.5 × 2.8 in at 300 dpi
+    fig, ax = plt.subplots(figsize=(3.5, 2.8))
+    fig.subplots_adjust(left=0.16, right=0.97, top=0.93, bottom=0.15)
+
+    # DeepHyper negates minimized objectives internally (converts to maximize).
+    # Negate them back for display; maximize objectives are stored positive as-is.
+    sign0 = -1 if directions[0] == "min" else 1
+    sign1 = -1 if directions[1] == "min" else 1
+
     # Check if pareto_efficient column exists
     if "pareto_efficient" in df.columns:
         # Plot non-Pareto efficient points
         non_pareto = df[~df["pareto_efficient"]]
         if len(non_pareto) > 0:
-            ax.plot(
-                -non_pareto["objective_0"],
-                -non_pareto["objective_1"],
-                "o",
-                color="blue",
-                alpha=0.7,
-                label="Non Pareto-Efficient",
-                markersize=6
+            ax.scatter(
+                sign0 * non_pareto["objective_0"],
+                sign1 * non_pareto["objective_1"],
+                c="#4472C4",
+                alpha=0.55,
+                label="All evaluations",
+                s=10,
+                linewidths=0,
             )
         
         # Plot Pareto efficient points
         pareto = df[df["pareto_efficient"]]
         if len(pareto) > 0:
-            ax.plot(
-                -pareto["objective_0"],
-                -pareto["objective_1"],
-                "o",
-                color="red",
+            ax.scatter(
+                sign0 * pareto["objective_0"],
+                sign1 * pareto["objective_1"],
+                c="#C00000",
                 alpha=0.9,
-                label="Pareto-Efficient",
-                markersize=8
+                label="Pareto front",
+                s=22,
+                marker="*",
+                linewidths=0,
+                zorder=3,
             )
     else:
         # Plot all points if pareto_efficient column doesn't exist
-        ax.plot(
-            -df["objective_0"],
-            -df["objective_1"],
-            "o",
-            color="blue",
-            alpha=0.7,
-            label="All Evaluations",
-            markersize=6
+        ax.scatter(
+            sign0 * df["objective_0"],
+            sign1 * df["objective_1"],
+            c="#4472C4",
+            alpha=0.55,
+            label="All evaluations",
+            s=10,
+            linewidths=0,
         )
     
-    ax.grid(alpha=0.3)
-    ax.legend(loc="best")
-    ax.set_xlabel(f"{obj0_name}", fontsize=12)
-    ax.set_ylabel(f"{obj1_name}", fontsize=12)
-    ax.set_title("Pareto Front: Multi-Objective Optimization", fontsize=14, fontweight="bold")
+    ax.grid(alpha=0.25, linewidth=0.5)
+    ax.legend(loc="upper right", fontsize=6, framealpha=0.8, handlelength=1.2, borderpad=0.4)
+    ax.set_xlabel(obj0_name, fontsize=7)
+    ax.set_ylabel(obj1_name, fontsize=7)
+    ax.set_title("Pareto Front", fontsize=8, fontweight="bold", pad=3)
+    ax.tick_params(axis="both", labelsize=6)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.6)
     
-    # Save figure
-    fig.savefig(output_file, dpi=150, bbox_inches="tight")
-    print(f"✓ Static plot saved to: {output_file}")
-    
+    # Save PNG at 300 dpi — ready for single-column paper inclusion
+    fig.savefig(output_file, dpi=300, bbox_inches="tight")
+    print(f"✓ Static PNG saved to: {output_file}")
+
+    # Save PDF (vector) — preferred for paper submission (no rasterisation)
+    pdf_file = output_file.replace(".png", ".pdf")
+    fig.savefig(pdf_file, bbox_inches="tight")
+    print(f"✓ Static PDF saved to: {pdf_file}")
+
     plt.close(fig)
     return output_file
 
@@ -321,7 +338,8 @@ def plot_pareto_front_interactive(
     obj0_name="Objective 0",
     obj1_name="Objective 1",
     output_file="pareto_front_interactive.html",
-    show_labels=True
+    show_labels=True,
+    directions=("min", "min"),
 ):
     """Create interactive Pareto front plot using Plotly.
     
@@ -366,20 +384,25 @@ def plot_pareto_front_interactive(
         pareto_hover = None
         non_pareto_hover = None
     
+    # DeepHyper negates minimized objectives internally (converts to maximize).
+    # Negate them back for display; maximize objectives are stored positive as-is.
+    sign0 = -1 if directions[0] == "min" else 1
+    sign1 = -1 if directions[1] == "min" else 1
+
     # Create figure
     fig = go.Figure()
     
     # Plot non-Pareto points
     if len(non_pareto_df) > 0:
         fig.add_trace(go.Scatter(
-            x=-non_pareto_df["objective_0"],  # Negate for maximization display
-            y=-non_pareto_df["objective_1"],
+            x=sign0 * non_pareto_df["objective_0"],
+            y=sign1 * non_pareto_df["objective_1"],
             mode="markers",
-            name="Non Pareto-Efficient",
+            name="All evaluations",
             marker=dict(
-                size=8,
-                color="rgba(100, 149, 237, 0.6)",  # Cornflower blue
-                line=dict(width=1, color="white")
+                size=5,
+                color="rgba(68, 114, 196, 0.55)",
+                line=dict(width=0)
             ),
             text=non_pareto_hover,
             hovertemplate="%{text}<extra></extra>" if non_pareto_hover else None
@@ -388,80 +411,99 @@ def plot_pareto_front_interactive(
     # Plot Pareto-efficient points
     if len(pareto_df) > 0:
         fig.add_trace(go.Scatter(
-            x=-pareto_df["objective_0"],
-            y=-pareto_df["objective_1"],
+            x=sign0 * pareto_df["objective_0"],
+            y=sign1 * pareto_df["objective_1"],
             mode="markers",
-            name="Pareto-Efficient",
+            name="Pareto front",
             marker=dict(
-                size=12,
-                color="rgba(220, 20, 60, 0.8)",  # Crimson
+                size=9,
+                color="rgba(192, 0, 0, 0.85)",
                 symbol="star",
-                line=dict(width=1, color="white")
+                line=dict(width=0.5, color="white")
             ),
             text=pareto_hover,
             hovertemplate="%{text}<extra></extra>" if pareto_hover else None
         ))
     
-    # Update layout
+    # Update layout — single-column A4/A* paper: 700 × 520 px with compact fonts
     fig.update_layout(
         title=dict(
-            text="<b>Pareto Front: Multi-Objective Optimization</b>",
+            text=f"<b>Pareto Front</b>",
             x=0.5,
-            xanchor="center"
+            xanchor="center",
+            font=dict(size=11),
+            pad=dict(b=2),
         ),
         xaxis=dict(
-            title=f"<b>{obj0_name}</b>",
-            gridcolor="rgba(200, 200, 200, 0.3)",
-            showgrid=True
+            title=dict(text=f"<b>{obj0_name}</b>", font=dict(size=9), standoff=4),
+            tickfont=dict(size=8),
+            gridcolor="rgba(200, 200, 200, 0.35)",
+            gridwidth=0.5,
+            showgrid=True,
+            linecolor="rgba(0,0,0,0.4)",
+            linewidth=0.8,
+            mirror=True,
         ),
         yaxis=dict(
-            title=f"<b>{obj1_name}</b>",
-            gridcolor="rgba(200, 200, 200, 0.3)",
-            showgrid=True
+            title=dict(text=f"<b>{obj1_name}</b>", font=dict(size=9), standoff=4),
+            tickfont=dict(size=8),
+            gridcolor="rgba(200, 200, 200, 0.35)",
+            gridwidth=0.5,
+            showgrid=True,
+            linecolor="rgba(0,0,0,0.4)",
+            linewidth=0.8,
+            mirror=True,
         ),
         plot_bgcolor="white",
+        paper_bgcolor="white",
         hovermode="closest",
-        width=1800,
-        height=900,
+        width=700,
+        height=520,
+        margin=dict(l=60, r=12, t=36, b=52),
         legend=dict(
-            x=1.02,
-            y=1,
-            xanchor="left",
+            x=0.98,
+            y=0.98,
+            xanchor="right",
             yanchor="top",
-            bgcolor="rgba(255, 255, 255, 0.8)",
-            bordercolor="rgba(0, 0, 0, 0.2)",
-            borderwidth=1
+            bgcolor="rgba(255,255,255,0.85)",
+            bordercolor="rgba(0,0,0,0.25)",
+            borderwidth=0.8,
+            font=dict(size=8),
+            itemsizing="constant",
+            tracegroupgap=2,
         ),
-        font=dict(size=12),
+        font=dict(size=9, family="Arial, sans-serif"),
         hoverlabel=dict(
-            font_size=11,
+            font_size=9,
             font_family="monospace",
             align="left",
-            namelength=-1
-        )
+            namelength=-1,
+        ),
     )
     
     # Add statistics annotation
     df_valid = df[df["objective_0"].notna() & df["objective_1"].notna()]
+    obj0_display = sign0 * df_valid["objective_0"]
+    obj1_display = sign1 * df_valid["objective_1"]
     stats_text = (
         f"<b>Statistics:</b><br>"
         f"Total evaluations: {len(df_valid)}<br>"
         f"Pareto-efficient: {len(pareto_df)} ({len(pareto_df)/len(df_valid)*100:.1f}%)<br>"
-        f"{obj0_name} range: [{-df_valid['objective_0'].max():.2e}, {-df_valid['objective_0'].min():.2e}]<br>"
-        f"{obj1_name} range: [{-df_valid['objective_1'].max():.2e}, {-df_valid['objective_1'].min():.2e}]"
+        f"{obj0_name} range: [{obj0_display.min():.2e}, {obj0_display.max():.2e}]<br>"
+        f"{obj1_name} range: [{obj1_display.min():.2e}, {obj1_display.max():.2e}]"
     )
     
     fig.add_annotation(
         text=stats_text,
         xref="paper", yref="paper",
-        x=0.98, y=0.98,
-        xanchor="right", yanchor="top",
+        x=0.99, y=0.01,
+        xanchor="right", yanchor="bottom",
         showarrow=False,
-        bgcolor="rgba(255, 255, 255, 0.9)",
+        bgcolor="rgba(255, 255, 255, 0.88)",
         bordercolor="rgba(0, 0, 0, 0.2)",
-        borderwidth=1,
-        borderpad=10,
-        font=dict(size=10)
+        borderwidth=0.8,
+        borderpad=5,
+        font=dict(size=7)
     )
     
     # Save to HTML
@@ -473,11 +515,16 @@ def plot_pareto_front_interactive(
     
     print(f"✓ Interactive plot saved to: {output_file}")
     
-    # Also try to save as static PNG
+    # Also try to save as print-ready PNG + PDF (requires kaleido)
     try:
         static_file = output_file.replace(".html", "_plotly.png")
-        fig.write_image(static_file, width=900, height=700, scale=2)
-        print(f"✓ Static PNG (from Plotly) saved to: {static_file}")
+        # width=700px × scale=3 → 2100px / 300dpi ≈ 7 in (fits single column when scaled down by journal)
+        fig.write_image(static_file, width=700, height=520, scale=3)
+        print(f"✓ Plotly PNG saved to: {static_file}")
+
+        pdf_file = output_file.replace(".html", "_plotly.pdf")
+        fig.write_image(pdf_file, width=700, height=520)
+        print(f"✓ Plotly PDF saved to: {pdf_file}")
     except Exception:
         pass  # Silently fail if kaleido not installed
     
@@ -496,7 +543,9 @@ def plot_pareto_front(
     obj0_min=None,
     obj0_max=None,
     obj1_min=None,
-    obj1_max=None
+    obj1_max=None,
+    obj0_direction="min",
+    obj1_direction="min",
 ):
     """Main function to plot Pareto front in specified format(s).
     
@@ -513,6 +562,9 @@ def plot_pareto_front(
         obj0_max: Manual maximum value for objective 0 (optional)
         obj1_min: Manual minimum value for objective 1 (optional)
         obj1_max: Manual maximum value for objective 1 (optional)
+        obj0_direction: 'min' or 'max' — optimization direction for objective 0.
+            DeepHyper stores minimized objectives as negated; 'min' undoes this for display.
+        obj1_direction: 'min' or 'max' — optimization direction for objective 1.
     
     Returns:
         List of paths to saved plots
@@ -570,7 +622,18 @@ def plot_pareto_front(
     n_non_numeric = df_before_numeric - len(df)
     if n_non_numeric > 0:
         print(f"   Removed {n_non_numeric} non-numeric evaluations")
-    
+
+    # Filter penalty/failed values — DeepHyper uses ±1e20 as failure markers.
+    _PENALTY_THRESHOLD = 1e15
+    df_before_penalty = len(df)
+    df = df[
+        (df["objective_0"].abs() < _PENALTY_THRESHOLD) &
+        (df["objective_1"].abs() < _PENALTY_THRESHOLD)
+    ]
+    n_penalty = df_before_penalty - len(df)
+    if n_penalty > 0:
+        print(f"   Filtered {n_penalty} penalty/failed evaluations (|score| >= 1e15)")
+
     # Apply manual range filtering if specified
     if obj0_min is not None or obj0_max is not None or obj1_min is not None or obj1_max is not None:
         df_before_manual = len(df)
@@ -586,13 +649,25 @@ def plot_pareto_front(
         if n_manual > 0:
             print(f"   Manual filter removed {n_manual} points ({n_manual/df_before_manual*100:.1f}%)")
     
-    # Apply IQR outlier removal if requested
+    # Apply IQR outlier removal if requested.
+    # NOTE: failure-marker removal (|score| >= 1e15) already happened above and
+    # runs unconditionally.  The IQR step here only applies *statistical*
+    # outlier removal and is controlled solely by remove_outliers.
     if remove_outliers:
         df_before_iqr = len(df)
-        df = remove_outliers_iqr(df, ["objective_0", "objective_1"], iqr_multiplier)
-        n_iqr = df_before_iqr - len(df)
+        df_filtered = remove_outliers_iqr(df, ["objective_0", "objective_1"], iqr_multiplier)
+        # Always keep Pareto-efficient points even if classified as outliers —
+        # the best-performing configs naturally appear at the distribution extremes.
+        if "pareto_efficient" in df.columns:
+            pareto_rows = df[df["pareto_efficient"] == True]
+            df_filtered = pd.concat([df_filtered, pareto_rows]).drop_duplicates()
+        n_iqr = df_before_iqr - len(df_filtered)
+        df = df_filtered
         if n_iqr > 0:
             print(f"   IQR filter removed {n_iqr} outliers ({n_iqr/df_before_iqr*100:.1f}%)")
+    else:
+        if len(df) > 0:
+            print(f"   IQR outlier removal: disabled (showing all {len(df)} valid evaluations)")
     
     if len(df) == 0:
         print("❌ No valid data points after filtering")
@@ -632,7 +707,8 @@ def plot_pareto_front(
                 obj0_name=obj0_name,
                 obj1_name=obj1_name,
                 output_file=interactive_file,
-                show_labels=show_labels
+                show_labels=show_labels,
+                directions=(obj0_direction, obj1_direction),
             )
             if result:
                 saved_files.append(result)
@@ -647,7 +723,8 @@ def plot_pareto_front(
                 df=df,
                 obj0_name=obj0_name,
                 obj1_name=obj1_name,
-                output_file=static_file
+                output_file=static_file,
+                directions=(obj0_direction, obj1_direction),
             )
             if result:
                 saved_files.append(result)
@@ -752,7 +829,21 @@ Examples:
         type=float,
         help="Manual maximum value for objective 1 (use = for negative values: --obj1-max=-1e6)"
     )
-    
+
+    parser.add_argument(
+        "--obj0-direction",
+        choices=["min", "max"],
+        default="min",
+        help="Optimization direction for objective 0: 'min' (default) or 'max'"
+    )
+
+    parser.add_argument(
+        "--obj1-direction",
+        choices=["min", "max"],
+        default="min",
+        help="Optimization direction for objective 1: 'min' (default) or 'max'"
+    )
+
     args = parser.parse_args()
     
     # Check if file exists
@@ -779,7 +870,9 @@ Examples:
         obj0_min=args.obj0_min,
         obj0_max=args.obj0_max,
         obj1_min=args.obj1_min,
-        obj1_max=args.obj1_max
+        obj1_max=args.obj1_max,
+        obj0_direction=args.obj0_direction,
+        obj1_direction=args.obj1_direction,
     )
     
     if saved_files:

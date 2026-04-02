@@ -18,15 +18,30 @@ from .time_statistics import TimeStatistics
 from .objective import ObjectiveFunction, MinimizeExecutionTime
 
 
+def _fmt_one(s: float, penalty: float) -> str:
+    """Format a single numeric score, switching to scientific notation for
+    values whose magnitude is either very small or very large."""
+    try:
+        f = float(s)
+    except (TypeError, ValueError):
+        return "N/A"
+    if not math.isfinite(f) or abs(f) >= penalty:
+        return "N/A"
+    # Use fixed-point for "human-scale" values, scientific otherwise.
+    if f == 0.0 or (1e-3 <= abs(f) < 1e7):
+        return f"{f:.4f}"
+    return f"{f:.6g}"
+
+
 def format_score(score) -> str:
     """Format score for display, handling both floats and tuples."""
     _PEN = 1e20  # matches PENALTY in objective.py
     if isinstance(score, tuple):
-        return f"({', '.join([f'{s:.4f}' for s in score])})"
+        return "(" + ", ".join(_fmt_one(s, _PEN) for s in score) + ")"
     elif score is None or (isinstance(score, float) and (not math.isfinite(score) or abs(score) >= _PEN)):
         return "N/A"
     else:
-        return f"{score:.4f}"
+        return _fmt_one(score, _PEN)
 
 
 class BaseOptimizer(ABC):
@@ -336,12 +351,66 @@ class BaseOptimizer(ABC):
         
         # Improvement
         if len(self.scores) > 1 and self.init_samples > 0:
-            initial_best = self.objective.get_best_score(self.scores[:self.init_samples])
+            is_moo = isinstance(self.best_score, tuple)
             print("\n📈 IMPROVEMENT:")
-            print(f"   Initial best: {format_score(initial_best)}")
-            print(f"   Final best: {format_score(self.best_score)}")
-            if not isinstance(self.best_score, tuple):
-                improvement_pct = abs((initial_best - self.best_score) / initial_best * 100)
+            if is_moo:
+                # For MOO, "lexicographic best" is misleading: the best single
+                # point by lexicographic ordering may never change even when the
+                # Pareto front expands significantly.  Show Pareto front stats
+                # instead, and note the lexicographic best for reference only.
+                directions = self.objective.score_directions   # list of bool (True=min)
+                valid_scores = [
+                    s for s in self.scores
+                    if isinstance(s, tuple)
+                    and not any(not math.isfinite(float(v)) or abs(float(v)) >= 1e20
+                                for v in s)
+                ]
+                n_valid = len(valid_scores)
+
+                # Compute Pareto front (non-dominated set)
+                def _dominates(a, b):
+                    """True if a Pareto-dominates b (better or equal on all, strictly better on one)."""
+                    better_on_any = False
+                    for v_a, v_b, is_min in zip(a, b, directions):
+                        fa, fb = float(v_a), float(v_b)
+                        if is_min:
+                            if fa > fb: return False
+                            if fa < fb: better_on_any = True
+                        else:
+                            if fa < fb: return False
+                            if fa > fb: better_on_any = True
+                    return better_on_any
+
+                pareto_front = []
+                for candidate in valid_scores:
+                    dominated = False
+                    pareto_front = [p for p in pareto_front if not _dominates(candidate, p)]
+                    for p in pareto_front:
+                        if _dominates(p, candidate):
+                            dominated = True
+                            break
+                    if not dominated:
+                        pareto_front.append(candidate)
+
+                init_valid = [
+                    s for s in self.scores[:self.init_samples]
+                    if isinstance(s, tuple)
+                    and not any(not math.isfinite(float(v)) or abs(float(v)) >= 1e20
+                                for v in s)
+                ]
+
+                print(f"   Valid evaluations: {n_valid}/{len(self.scores)}")
+                print(f"   Pareto-optimal configurations found: {len(pareto_front)}")
+                if init_valid:
+                    print(f"   Initial Pareto front size: {len([s for s in init_valid if all(_dominates(s, p) is False for p in init_valid if p is not s) or True])} valid init samples")
+                print(f"   Final Pareto front size: {len(pareto_front)}")
+                print(f"   Lexicographic best (obj0-first): {format_score(self.best_score)}")
+                print(f"   NOTE: For MOO, check the Pareto front plot for full improvement picture.")
+            else:
+                initial_best = self.objective.get_best_score(self.scores[:self.init_samples])
+                print(f"   Initial best: {format_score(initial_best)}")
+                print(f"   Final best: {format_score(self.best_score)}")
+                improvement_pct = abs((initial_best - self.best_score) / initial_best * 100) if initial_best != 0 else 0.0
                 print(f"   Improvement: {improvement_pct:.1f}%")
         
         # Best configuration

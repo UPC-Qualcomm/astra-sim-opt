@@ -78,10 +78,23 @@ class AdaptiveSearchEarlyStopping(Callback):
         patience_limit: int = 50,
         min_evaluations_before_check: int = 0,
         verbose: bool = True,
+        objective_directions: list = None,
     ):
+        """
+        Args:
+            objective_directions: Optional list of ``"min"`` / ``"max"`` strings,
+                one per objective.  When ``None`` (default), all objectives are
+                assumed to be in DeepHyper's internal maximisation convention
+                (minimised objectives were negated before being returned from the
+                evaluation function).  When provided, the values in
+                ``job.objective`` are treated as raw (un-negated) values and each
+                dimension is converted to minimisation space according to its
+                direction (``"min"`` → keep as-is, ``"max"`` → negate).
+        """
         self.patience_limit = patience_limit
         self.min_evaluations_before_check = min_evaluations_before_check
         self.verbose = verbose
+        self.objective_directions = objective_directions  # None or ["min","max",...]
 
         # State
         self._patience_counter: int = 0
@@ -133,10 +146,38 @@ class AdaptiveSearchEarlyStopping(Callback):
 
         # MOO: hypervolume indicator
         objectives = np.asarray(self._valid_objectives, dtype=float)
-        # objectives are in DeepHyper's maximisation space (higher = better).
-        # hypervolume() expects a minimisation problem, so negate first.
-        minimise = -objectives
-        ref = np.max(minimise, axis=0)   # anti-ideal reference point
+
+        if self.objective_directions is not None:
+            # Raw objectives — convert each dimension to minimisation space.
+            # "min" → keep as-is (lower is already better).
+            # "max" → negate (flip so lower is better).
+            signs = np.array(
+                [1.0 if d == "min" else -1.0 for d in self.objective_directions]
+            )
+            minimise = objectives * signs
+        else:
+            # DeepHyper's internal convention: all objectives are in maximisation
+            # space (minimised objectives were negated before being returned).
+            # A single negation converts back to minimisation space for all cases,
+            # including mixed min/max when the evaluation function handled the
+            # direction itself (e.g. returned -exec_time for a minimised objective
+            # and +bandwidth for a maximised one).
+            minimise = -objectives
+
+        # Reference point must be strictly dominated by at least some Pareto points.
+        # Using np.max(minimise) as the reference makes every Pareto point
+        # contribute zero in at least one dimension, producing HVI = 0 regardless
+        # of how good the front is.  A small per-dimension margin fixes this.
+        #
+        # The margin must be large enough to avoid the collapse when going from
+        # 1 point (col_range = 0 → margin falls back to 1.0) to 2+ points
+        # (col_range > 0 → 1% * range << 1.0), which would make HVI drop sharply
+        # even though the Pareto front improved.  Enforcing a minimum of 1.0
+        # keeps the reference box stable across the full run (objectives are in
+        # log-scale, so 1 unit = one order of magnitude, a natural floor).
+        col_range = np.ptp(minimise, axis=0)                                    # range per dim
+        margin = np.maximum(col_range * 0.01, 1.0)                             # at least 1.0
+        ref = np.max(minimise, axis=0) + margin
         return float(hypervolume(minimise, ref))
 
     # ------------------------------------------------------------------

@@ -15,6 +15,7 @@ import yaml
 # Add parent directory to path for imports
 sys.path.append(os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..core import BaseOptimizer, ArtifactCleanupManager
+from ..core.base_optimizer import format_score
 from ..core.simulation_tracker import SimulationTracker
 from ..core.search_early_stopping import AdaptiveSearchEarlyStopping
 from ..helper import evaluate_config_worker, workload_generator
@@ -997,10 +998,10 @@ class DeepHyperOptimizer(BaseOptimizer):
             if self.verbose and n_success <= 10:
                 config_str = ", ".join([f"{k}={v}" for k, v in config.items()])
                 if isinstance(score, tuple):
-                    obj_str = ", ".join(f"Obj{i}: {s:.4f}" for i, s in enumerate(score))
+                    obj_str = ", ".join(f"Obj{i}: {format_score(s)}" for i, s in enumerate(score))
                     print(f"  Iteration {n_success}: {config_str} | {obj_str}")
                 else:
-                    print(f"  Iteration {n_success}: {config_str} | Score: {score:.4f}")
+                    print(f"  Iteration {n_success}: {config_str} | Score: {format_score(score)}")
             
             # ── best tracking ────────────────────────────────────────────────
             if not is_penalty and self.objective.is_better(score, self.best_score):
@@ -1008,11 +1009,11 @@ class DeepHyperOptimizer(BaseOptimizer):
                 self.best_config = config
                 self.best_iteration = len(self.configs) - 1
                 if self.verbose:
-                    if isinstance(score, tuple):
-                        score_str = "(" + ", ".join(f"{s:.4f}" for s in score) + ")"
+                    score_str = format_score(score)
+                    if n_success > 10:
+                        print(f"    NEW BEST (iter {n_success}): {score_str}")
                     else:
-                        score_str = f"{score:.4f}"
-                    print(f"    NEW BEST: {score_str}")
+                        print(f"    NEW BEST: {score_str}")
         
         if self.verbose:
             print(f"\nCollected {n_success} successful evaluations")
