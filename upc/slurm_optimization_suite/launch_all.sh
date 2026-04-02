@@ -32,9 +32,9 @@ MAX_RETRIES_PER_EXPERIMENT=3
 
 # Global defaults (can be overridden per experiment in config.env)
 DEFAULT_CORES_PERCENT=32
-DEFAULT_MEM_PER_CORE_GB=2
-MAX_CPUS_PER_EXPERIMENT=80
-MIN_CPUS_PER_EXPERIMENT=4   # Never schedule fewer than this many CPUs; skip node if memory can't fit even this many
+DEFAULT_MEM_PER_CORE_GB=4
+MAX_CPUS_PER_EXPERIMENT=1
+MIN_CPUS_PER_EXPERIMENT=1   # Never schedule fewer than this many CPUs; skip node if memory can't fit even this many
 
 #################################################################################
 # EXPERIMENT MANIFEST - Comment out experiments you DON'T want to run
