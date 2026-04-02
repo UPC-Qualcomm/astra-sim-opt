@@ -71,6 +71,27 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
         counters[name] = int(counters.get(name, 0)) + int(amount)
     
     try:
+        # ── Tracker warmup: disable killing during initial random phase ──
+        # The surrogate needs the full initial sample to train well.
+        # During warmup, detach the tracker from the runner so simulations
+        # run to completion.  Threshold updates still happen below so the
+        # tracker has accurate baselines when it activates for the CBO phase.
+        tracker_warmup = optimizer_state.get('tracker_warmup', 0)
+        eval_counter = optimizer_state.get('eval_counter')  # Manager ValueProxy
+        eval_lock = optimizer_state.get('eval_lock')        # Manager Lock
+        in_warmup = False
+        if eval_counter is not None and tracker_warmup > 0:
+            with eval_lock:
+                eval_counter.value += 1
+                eval_num = eval_counter.value
+            in_warmup = eval_num <= tracker_warmup
+            if in_warmup and simulation_runner.tracker is not None:
+                # Process-local: forked worker only, does not affect the parent.
+                simulation_runner.tracker = None
+            if not in_warmup and eval_num == tracker_warmup + 1:
+                print(f"\n✓ Tracker warmup complete ({tracker_warmup} evals). "
+                      "Simulation killing is now active.")
+
         returned_config, exec_time, is_oom, file_paths, metadata = evaluate_config_worker(
             config, simulation_runner
         )
@@ -112,7 +133,7 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
             optimizer_state['extra_data_cache'][config_key] = {
                 'exec_time': exec_time,
                 'config_files': config_files,
-                'was_killed': bool(metadata.get('was_killed', False)) if isinstance(metadata, dict) else False,
+                'was_killed': was_killed,
                 'is_oom': bool(is_oom),
                 'total_power_W': metadata.get('total_power_W') if isinstance(metadata, dict) else None,
                 'total_energy_J': metadata.get('total_energy_J') if isinstance(metadata, dict) else None,
@@ -136,7 +157,14 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
         tracker = optimizer_state.get('tracker')
         sim_failed = bool(metadata.get('sim_failed', False)) if isinstance(metadata, dict) else False
         if tracker and exec_time is not None and not bool(is_oom) and not was_killed and not sim_failed:
-            tracker.update_threshold(score)
+            # exec_time here is training_time (seconds); use exec_time_ns (nanoseconds,
+            # one simulation step) so the tracker compares against trace ticks correctly.
+            # Also pass exec_time (seconds) so the tracker can convert mid-run ticks
+            # back to training-time-seconds when estimating scores for in-flight sims,
+            # fixing the unit mismatch that caused Pareto-efficient configs to be killed.
+            raw_exec_time_ns = metadata.get('exec_time_ns') if isinstance(metadata, dict) else None
+            tracker.update_threshold(score, raw_exec_time=raw_exec_time_ns,
+                                     training_time_s=exec_time)
 
         cleanup_state = optimizer_state.get('periodic_cleanup')
         if cleanup_state is not None:
@@ -164,18 +192,33 @@ def _deephyper_evaluate_wrapper(job, optimizer_state):
                     force=False,
                 )
         
-        # Killed simulations: the runner returned exec_time=float('inf') or a
-        # very large value, so objective.compute() produced PENALTY (1e20)
-        # scores.  Return DeepHyper's PENALTY (-1e20) explicitly as an
-        # unconditional guard so killed runs never reach the Pareto front or
-        # bias the surrogate model.
+        # Killed simulations: return "F" so DeepHyper treats this as a missing
+        # observation and does NOT update the surrogate model.
+        #
+        # Why NOT return PENALTY (-1e20):
+        #   Returning PENALTY tells the surrogate "this config has the worst
+        #   possible objective on EVERY dimension."  For MOO objectives such as
+        #   (log_latency, log_network_bw), the BW dimension is fully determined
+        #   by the config (intra/inter-node-bw × npu_count) and is completely
+        #   independent of simulation runtime.  A high-BW config that happens to
+        #   be slow gets incorrectly labelled as low-BW, training the surrogate
+        #   to avoid otherwise-good regions.
+        #
+        # Why "F" is correct:
+        #   We only know exec_time >= kill_threshold — a one-sided bound on one
+        #   objective.  We have no information about other objectives.  "F"
+        #   (missing data) is the honest representation; the duplicate_eval_cache
+        #   entry prevents re-running the same config, so no time is wasted, but
+        #   the surrogate landscape is not corrupted.
         if was_killed:
-            if isinstance(score, (tuple, list)):
-                result = tuple(PENALTY for _ in score)
-            else:
-                result = PENALTY
-            duplicate_eval_cache[config_key] = result
-            return result
+            duplicate_eval_cache[config_key] = "F"
+            return "F"
+            #if isinstance(score, (tuple, list)):
+            #    result = tuple(PENALTY for _ in score)
+            #else:
+            #    result = PENALTY
+            #duplicate_eval_cache[config_key] = result
+            #return result
 
         # Raw → DeepHyper maximization space (per-objective min/max + invalid).
         # float() casts happen inside to_optimizer_score; int64-safe for Pareto/CSV.
@@ -471,7 +514,9 @@ class DeepHyperOptimizer(BaseOptimizer):
             )
             self.simulation_runner.tracker = self.tracker
             if self.verbose:
-                print(f"✓ Simulation tracker enabled (kill at {tracker_kill_multiplier}x threshold)")
+                print(f"✓ Simulation tracker enabled "
+                      f"(kill at {tracker_kill_multiplier}x threshold, "
+                      f"warmup={self.n_initial_points} evals)")
         else:
             self.tracker = None
 
@@ -786,6 +831,14 @@ class DeepHyperOptimizer(BaseOptimizer):
             'periodic_cleanup': self.periodic_cleanup_state,
             'duplicate_eval_cache': self.duplicate_eval_cache,
             'cache_statistics': self.cache_statistics,
+            # Tracker warmup: number of evaluations to run without killing.
+            # During this phase the tracker is detached from the runner so
+            # every initial sample completes, giving the surrogate a full
+            # training set.  The tracker still receives threshold updates so
+            # it has accurate baselines when killing activates.
+            'tracker_warmup': self.n_initial_points if self.enable_tracker else 0,
+            'eval_counter': self._manager.Value('i', 0) if self.enable_tracker else None,
+            'eval_lock': self._manager.Lock() if self.enable_tracker else None,
         }
         
         eval_func = partial(_deephyper_evaluate_wrapper, optimizer_state=optimizer_state)
@@ -830,20 +883,6 @@ class DeepHyperOptimizer(BaseOptimizer):
         config_file_data = []
         
         for idx, row in self.deephyper_results.iterrows():
-            # Skip failed or infeasible evaluations
-            if 'objective' in row:
-                if isinstance(row['objective'], str) and row['objective'] == 'F':
-                    config_file_data.append({})
-                    continue
-            elif 'objective_0' in row:
-                if isinstance(row['objective_0'], str) and row['objective_0'] == 'F':
-                    config_file_data.append({})
-                    continue
-            
-            if 'constraint' in row and not row['constraint']:
-                config_file_data.append({})
-                continue
-            
             # Reconstruct config from row
             config = {name: row[f'p:{name}'] for name in param_names}
             
@@ -1281,11 +1320,48 @@ class DeepHyperOptimizer(BaseOptimizer):
             if self.periodic_cleanup_state is not None:
                 self.periodic_cleanup_state['print_deleted_files'] = self.cleanup_print_deleted_files
             
+            # Guard against DeepHyper versions that call np.asarray_chkfinite
+            # inside compute_pareto_efficiency without first filtering NaN rows
+            # (NaNs come from evaluations that returned "F").  Patch the method
+            # on the live history object so the search never aborts on valid but
+            # failed runs.
+            _history_obj = getattr(self.search, 'history', None)
+            if _history_obj is not None and hasattr(_history_obj, 'compute_pareto_efficiency'):
+                _orig_cpe = _history_obj.compute_pareto_efficiency
+                def _safe_cpe(_orig=_orig_cpe):
+                    try:
+                        _orig()
+                    except ValueError as _e:
+                        if "infs or NaNs" in str(_e):
+                            print(f"⚠️  DeepHyper Pareto post-processing skipped "
+                                  f"(NaN from failed evals, version mismatch): {_e}")
+                        else:
+                            raise
+                _history_obj.compute_pareto_efficiency = _safe_cpe
+
             with self.time_stats.timer("search"):
-                self.deephyper_results = self.search.search(
-                    evaluator=self.evaluator,
-                    max_evals=self.budget,
-                )
+                try:
+                    self.deephyper_results = self.search.search(
+                        evaluator=self.evaluator,
+                        max_evals=self.budget,
+                    )
+                except ValueError as _search_err:
+                    if "infs or NaNs" not in str(_search_err):
+                        raise
+                    # Evaluations are all done; only the Pareto post-processing
+                    # step failed (history patch missed because history was not
+                    # yet initialised before search()).  Recover the raw results
+                    # dataframe directly from the history object.
+                    print(f"⚠️  DeepHyper search() raised ValueError ('{_search_err}'); "
+                          "recovering results from search history …")
+                    _h = getattr(self.search, 'history', None)
+                    if _h is not None:
+                        if hasattr(_h, 'df'):
+                            self.deephyper_results = _h.df
+                        elif isinstance(_h, pd.DataFrame):
+                            self.deephyper_results = _h
+                    if self.deephyper_results is None:
+                        raise  # Cannot recover — re-raise original error
             
             # Final cleanup pass to ensure only top-K artifacts remain.
             if self.periodic_cleanup_state is not None:

@@ -44,9 +44,12 @@ class SimulationTracker:
     
     _DEFAULT_STATE = {
         'threshold': 1e15,
+        'best_raw_exec_time': None,
+        'best_training_time_s': None,  # training time in seconds of the best completed run
         'latest_tick': None,
         'total_checked': 0,
         'total_killed': 0,
+        'pareto_front': [],  # list of complete score vectors from finished simulations
     }
 
     def __init__(
@@ -94,11 +97,12 @@ class SimulationTracker:
         # Primary direction (used as scalar fallback throughout the class).
         self.minimize = directions[0]
 
-        # ── Build correct initial threshold per direction ──────────────────
+        # ── Initial threshold per objective direction ────────────────────────
         # For minimize: worst case is +inf  → start at  +initial_threshold.
         # For maximize: worst case is -inf  → start at  -initial_threshold.
-        # This prevents spurious kills on maximize objectives whose real scores
-        # (e.g. log10(throughput) ≈ 3) are far below a naïve +1e15 initial.
+        # The kill formula is always score × multiplier (minimize) or
+        # score / multiplier (maximize), applied uniformly to the objective
+        # output space whether it is raw, log10, or any other scale.
         magnitude = abs(float(initial_threshold))
         self._initial_threshold = magnitude
         if len(directions) > 1:
@@ -205,15 +209,58 @@ class SimulationTracker:
                 print(f"[Tracker] Error reading {counter_name}: {e}")
             return 0
     
-    def update_threshold(self, score: Any):
+    def update_threshold(self, score: Any, raw_exec_time: Optional[float] = None,
+                         training_time_s: Optional[float] = None):
         """
-        Update threshold with new best score.
-        
-        Uses file-based sharing so all worker processes see the update.
-        
+        Update per-component best observed scores.
+
+        Call after each successful (non-OOM, non-killed) simulation with the
+        full objective score returned by ``objective.compute``.  The stored
+        per-component bests are used to compute kill thresholds for future
+        in-flight simulations.
+
         Args:
-            score: Score from successful simulation.
+            score: Scalar or tuple from ``objective.compute``.
+            raw_exec_time: Raw execution time in native simulation units (same
+                units as the trace ticks read by ``_get_latest_issue_tick``).
+                Used for tick-space kill comparison so that simulations exceeding
+                ``best_exec × kill_multiplier`` ticks are terminated promptly
+                without any log-space confusion.  Pass the value returned by
+                ``evaluate_config_worker`` directly (typically nanoseconds from
+                the AstraSim trace CSV).
+            training_time_s: Training time in seconds as passed to
+                ``objective.compute(exec_time=...)``.  Stored alongside
+                ``raw_exec_time`` so mid-run tick estimates can be scaled back
+                to the correct unit (seconds) before calling objective.compute,
+                avoiding the ~9-order-of-magnitude unit mismatch that would
+                otherwise make the Pareto dominance guard fire on Pareto-
+                efficient configurations.
         """
+        # Track best raw exec time and best training time separately from the
+        # objective-space score.  Keeping both allows mid-run tick estimates to
+        # be scaled back to training-time-seconds (the unit objective.compute
+        # expects) via:  estimate_s = best_training_time_s * (tick / best_raw_ns)
+        if raw_exec_time is not None:
+            try:
+                raw = float(raw_exec_time)
+                if math.isfinite(raw) and raw > 0:
+                    state = self._read_state()
+                    current_best = state.get('best_raw_exec_time')
+                    if current_best is None or raw < float(current_best):
+                        state['best_raw_exec_time'] = raw
+                        # Also store the paired training time if available so
+                        # _tick_to_training_time_estimate can convert correctly.
+                        if training_time_s is not None:
+                            try:
+                                ts = float(training_time_s)
+                                if math.isfinite(ts) and ts > 0:
+                                    state['best_training_time_s'] = ts
+                            except (TypeError, ValueError):
+                                pass
+                        self._write_state(state)
+            except (TypeError, ValueError):
+                pass
+
         score_vector = self._reduce_score(score)
         if score_vector is None:
             return
@@ -225,18 +272,17 @@ class SimulationTracker:
         old_threshold = list(threshold_vector)
         updated = False
         for idx, (value, old_value) in enumerate(zip(score_vector, threshold_vector)):
-            if directions[idx]:
+            if directions[idx]:          # minimize → lower is better
                 if value < old_value:
                     threshold_vector[idx] = value
                     updated = True
-            else:
+            else:                        # maximize → higher is better
                 if value > old_value:
                     threshold_vector[idx] = value
                     updated = True
 
         if updated:
             self.threshold = threshold_vector[0] if len(threshold_vector) == 1 else threshold_vector
-
             if self.verbose:
                 print(
                     f"[Tracker] Threshold updated: {self._format_threshold(old_threshold)} "
@@ -246,15 +292,35 @@ class SimulationTracker:
                     f"          Kill threshold: "
                     f"{self._format_threshold(self.get_kill_score_threshold())}"
                 )
+
+        # Maintain Pareto front for dominance-based kill checks (always, regardless
+        # of whether the per-dim threshold changed).
+        pf_state = self._read_state()
+        current_front = pf_state.get('pareto_front', [])
+        new_front = self._add_to_pareto_front(current_front, score_vector, directions)
+        if new_front is not current_front:  # front was modified
+            pf_state['pareto_front'] = new_front
+            self._write_state(pf_state)
+            if self.verbose:
+                print(
+                    f"[Tracker] Pareto front updated: "
+                    f"{len(current_front)} → {len(new_front)} points"
+                )
     
     def get_kill_score_threshold(self) -> Any:
         """
-        Get current kill threshold in score-space.
+        Get kill threshold(s) in objective-score space.
 
-        Minimize direction: kill if score > threshold * multiplier.
-        Maximize direction: kill if score < threshold / multiplier.
+        The kill formula is applied uniformly regardless of whether the
+        objective output is raw, log10-scaled, or any other transform::
 
-        Returns a list for MOO objectives, a scalar for single-objective.
+            minimize dim i:  kill_i = best_i × kill_multiplier
+            maximize dim i:  kill_i = best_i / kill_multiplier
+
+        This is consistent and comparable across runs — the multiplier adds
+        a proportional safety margin in whatever space the objective uses.
+
+        Returns a list for MOO objectives, a scalar for SOO.
         """
         threshold = self.threshold
         if isinstance(threshold, (list, tuple)):
@@ -263,8 +329,6 @@ class SimulationTracker:
                 float(v) * self.kill_multiplier if is_min else float(v) / self.kill_multiplier
                 for v, is_min in zip(threshold, directions)
             ]
-
-        # Scalar threshold: use the primary direction.
         is_min = self._objective_directions(1)[0]
         if is_min:
             return float(threshold) * self.kill_multiplier
@@ -403,6 +467,89 @@ class SimulationTracker:
             return None
         return [v]
 
+    @staticmethod
+    def _dominates(
+        a: List[float], b: List[float], directions: List[bool]
+    ) -> bool:
+        """
+        Return True if vector *a* Pareto-dominates vector *b*.
+
+        *a* dominates *b* when *a* is at least as good as *b* in every
+        dimension and strictly better in at least one.  Direction convention:
+        ``True`` = minimize (smaller is better), ``False`` = maximize.
+        """
+        at_least_as_good = True
+        strictly_better = False
+        for ai, bi, minimize in zip(a, b, directions):
+            if minimize:
+                if ai > bi:
+                    at_least_as_good = False
+                    break
+                if ai < bi:
+                    strictly_better = True
+            else:
+                if ai < bi:
+                    at_least_as_good = False
+                    break
+                if ai > bi:
+                    strictly_better = True
+        return at_least_as_good and strictly_better
+
+    @staticmethod
+    def _add_to_pareto_front(
+        front: List[List[float]],
+        new_vec: List[float],
+        directions: List[bool],
+    ) -> List[List[float]]:
+        """
+        Return an updated Pareto front after adding *new_vec*.
+
+        If *new_vec* is dominated by any existing point the front is returned
+        unchanged (same object).  Otherwise all points dominated by *new_vec*
+        are removed and *new_vec* is appended.
+        """
+        for pt in front:
+            if SimulationTracker._dominates(pt, new_vec, directions):
+                return front  # new_vec is dominated — no change
+        new_front = [
+            pt for pt in front
+            if not SimulationTracker._dominates(new_vec, pt, directions)
+        ]
+        new_front.append(new_vec)
+        return new_front
+
+    def _tick_to_training_time_estimate(self, latest_tick: float) -> float:
+        """
+        Convert a raw simulation tick (nanoseconds, per-step) to an estimated
+        training time in **seconds** — the unit that ``objective.compute``
+        receives for completed runs.
+
+        Formula::
+
+            estimate_s = best_training_time_s × (latest_tick / best_raw_exec_time_ns)
+
+        This assumes num_steps is similar between the reference (best) run and
+        the in-flight run.  Different batch sizes cause a proportional error,
+        but the result is always in the right magnitude (seconds), whereas
+        passing raw nano-second ticks to ``objective.compute`` produces values
+        ~9 orders of magnitude too large for log10-scaled objectives.
+
+        Falls back to ``latest_tick`` unchanged when no reference run exists yet.
+        """
+        try:
+            state = self._read_state()
+            best_raw = state.get('best_raw_exec_time')
+            best_training = state.get('best_training_time_s')
+            if best_raw is None or best_training is None:
+                return latest_tick  # no reference yet — fallback
+            best_raw_f = float(best_raw)
+            best_training_f = float(best_training)
+            if best_raw_f <= 0 or not math.isfinite(best_training_f) or best_training_f <= 0:
+                return latest_tick
+            return best_training_f * (float(latest_tick) / best_raw_f)
+        except Exception:
+            return latest_tick
+
     def _estimate_running_score(
         self,
         latest_tick: float,
@@ -412,18 +559,30 @@ class SimulationTracker:
         """
         Estimate objective score for an in-flight simulation.
 
-        Uses ``objective.compute`` with the current tick as ``exec_time``.  For
-        multi-objective functions, metrics that are not available until the run
-        finishes (e.g. peak memory, power) often yield non-finite components;
-        those are marked ``nan`` and omitted from the kill decision.  Kill uses
-        only objectives with finite partial estimates; when all components are
-        finite (e.g. latency + bandwidth from tick + config), the rule matches
-        full MOO: kill only if **every** objective is past its kill bound.
+        Uses ``objective.compute`` with an estimated training-time (seconds) so
+        that the estimate is in the same unit/scale as the completed-run scores
+        stored in the Pareto front.  The tick is converted to seconds via
+        ``_tick_to_training_time_estimate``, which scales proportionally from
+        the best known run::
+
+            estimate_s = best_training_time_s × (latest_tick / best_raw_ns)
+
+        Because ``latest_tick ≤ final_exec_time_ns``, the estimate is an
+        **optimistic lower bound** for the final training time (assuming similar
+        num_steps between runs).  If dominance still holds against this
+        optimistic estimate the actual final score is dominated too — safe to
+        kill.
+
+        For multi-objective functions, metrics unavailable mid-run (e.g. peak
+        memory, power) are marked ``nan`` and excluded from the dominance check.
         """
         if self.objective is not None:
             try:
+                # Convert raw NS tick → training-time seconds so that the
+                # estimate is in the same unit as scores in the Pareto front.
+                exec_time_estimate = self._tick_to_training_time_estimate(latest_tick)
                 estimated = self.objective.compute(
-                    exec_time=latest_tick,
+                    exec_time=exec_time_estimate,
                     is_oom=False,
                     metadata=metadata or {},
                     config=config,
@@ -445,90 +604,180 @@ class SimulationTracker:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
-        Check if simulation should be killed based on current progress.
+        Check if a running simulation should be killed based on its tick progress.
 
-        Monitors the trace CSV for issue ticks, builds a partial objective vector
-        via ``objective.compute(exec_time=tick, ...)``, and compares finite
-        components to per-objective kill bounds.  Components that are not
-        finite (unavailable mid-run, e.g. power or peak memory) are skipped.
-        The run is killed only when **every available** objective is worse than
-        its threshold (minimize: above kill line; maximize: below kill line).
+        Kill logic:
+
+        1. **Raw time check** — ``latest_tick > best_exec_time × kill_multiplier``.
+           Computed in raw time space so the answer is correct for every objective
+           type (raw, log-transformed, MOO).  If time has *not* been exceeded,
+           never kill.
+
+        2. **MOO config-derived dims** — for objectives where non-time dims can
+           be estimated mid-run (e.g. network BW or memory from the config), the
+           run is only killed when *every* available dim is also past its kill
+           threshold.  This prevents killing a slow config that might be
+           Pareto-optimal because of a better secondary objective value.
+
+           Kill threshold for score dim *i* (additive formulation, correct for
+           log10-transformed objectives)::
+
+               minimize:  kill_score_i = best_score_i + log10(kill_multiplier)
+               maximize:  kill_score_i = best_score_i − log10(kill_multiplier)
+
+        3. For power/memory objectives that are unavailable mid-run, only the
+           time check (step 1) is applied.
         """
         _ = workload_file  # Reserved for future context-specific logic.
 
-        # Check if trace file exists
         if not os.path.exists(trace_file):
             return False
-        
+
         try:
-            # Get latest issue tick from trace file
             latest_tick = self._get_latest_issue_tick(trace_file)
-            #print(f"Trace file: {trace_file}, Latest tick: {latest_tick}")
             if latest_tick is None:
                 return False
-            
-            # Check against kill threshold and update stats
+
             state = self._read_state()
-            threshold = state.get('threshold', 1e15)
-            kill_threshold = self.get_kill_score_threshold()
             state['total_checked'] = state.get('total_checked', 0) + 1
             state['latest_tick'] = latest_tick
-            estimated_score = self._estimate_running_score(
-                latest_tick=latest_tick,
-                config=config,
-                metadata=metadata,
-            )
 
-            # Debug output every check
+            # ── Step 1: raw time kill check ───────────────────────────────────
+            # Use best_raw_exec_time (same units as trace ticks, typically ns)
+            # for the kill comparison.  Do NOT use threshold[0] which holds the
+            # objective-space score (e.g. log10(exec_time) ≈ 3.5) — comparing
+            # raw ticks (~1e10 ns) against a log10 value (~5.2) would fire on
+            # every simulation immediately after the first baseline is recorded.
+            best_raw = state.get('best_raw_exec_time')
+            if best_raw is None:
+                # No completed simulation yet — cannot establish a kill baseline.
+                self._write_state(state)
+                return False
+            try:
+                best_raw = float(best_raw)
+            except (TypeError, ValueError):
+                self._write_state(state)
+                return False
+            kill_time = best_raw * self.kill_multiplier
+
             if self.verbose and state['total_checked'] % 100 == 0:
                 print(
-                    f"[Tracker Debug] tick={latest_tick:.2e}, estimated_score={estimated_score}, "
-                    f"threshold={self._format_threshold(threshold)}, "
-                    f"kill_at={self._format_threshold(kill_threshold)}"
+                    f"[Tracker Debug] tick={latest_tick:.2e}, "
+                    f"best_exec={best_raw:.2e}, kill_at={kill_time:.2e}"
                 )
 
-            if estimated_score is None:
+            if not (math.isfinite(kill_time) and latest_tick > kill_time):
+                # Time not exceeded — never kill regardless of secondary dims.
                 self._write_state(state)
                 return False
 
-            kill_threshold_vector = self._to_vector(kill_threshold, len(estimated_score))
-            directions = self._objective_directions(len(estimated_score))
-            # Only evaluate objectives with a finite partial estimate.  Metrics
-            # that need a finished simulation (power, peak memory, etc.) often
-            # return non-finite values mid-run — skip those axes until available.
-            # Kill iff every *available* objective is past its kill bound.  When
-            # all objectives are available (e.g. time + config-derived BW), this
-            # matches full MOO: all must be bad to kill.
-            _pen = SimulationTracker._PENALTY_MAGNITUDE
-            bad_flags: List[bool] = []
-            for score_val, kill_val, is_min in zip(
-                estimated_score, kill_threshold_vector, directions
-            ):
-                # Skip unavailable (nan) or penalty-magnitude components.
-                if not math.isfinite(score_val) or abs(score_val) >= _pen:
-                    continue
-                bad_flags.append(
-                    (score_val > kill_val) if is_min else (score_val < kill_val)
-                )
-            should_kill = bool(bad_flags) and all(bad_flags)
+            # ── Step 2: Pareto dominance check ────────────────────────────────
+            # Use the stored Pareto front (built by update_threshold) to decide
+            # whether this in-flight simulation is already Pareto-dominated and
+            # therefore safe to discard.  This is strictly weaker than the old
+            # per-dim ideal-point filter — a config is only killed when there
+            # exists a completed Pareto point that is at least as good on every
+            # objective and strictly better on at least one, so configs that are
+            # Pareto-optimal (or potentially so) are never killed prematurely.
+            score_threshold = state.get('threshold')
+            is_moo = (
+                isinstance(score_threshold, list)
+                and len(score_threshold) > 1
+            )
 
-            if should_kill:
-                print(
-                    f"[Tracker] Killing simulation: score={self._format_threshold(estimated_score)} "
-                    f"vs kill_at={self._format_threshold(kill_threshold)}"
+            if is_moo:
+                estimated = self._estimate_running_score(
+                    latest_tick=latest_tick, config=config, metadata=metadata
                 )
-                state['total_killed'] = state.get('total_killed', 0) + 1
-                self._write_state(state)
-                # Always print kill messages (not just in verbose mode)
-                #print(f"    Current tick: {latest_tick:.2e} > Kill threshold: {kill_threshold:.2e}")
-                if self.verbose:
-                    print(f"    Trace file: {os.path.basename(trace_file)}")
-                return True
-            
+                # objective.compute failed entirely — cannot assess any secondary dim.
+                if estimated is None:
+                    if self.verbose:
+                        print(
+                            f"[Tracker] Keeping alive: secondary objectives unavailable mid-run "
+                            f"(tick={latest_tick:.2e})"
+                        )
+                    self._write_state(state)
+                    return False
+
+                # If ANY dimension is unavailable (nan) mid-run, we cannot fully
+                # assess Pareto dominance.  Objectives such as power or peak memory
+                # are only known after the simulation finishes.  Keep alive to avoid
+                # discarding a potentially Pareto-optimal config on those dims.
+                unavailable = [i for i, v in enumerate(estimated) if not math.isfinite(v)]
+                if unavailable:
+                    if self.verbose:
+                        print(
+                            f"[Tracker] Keeping alive: dims {unavailable} "
+                            f"not available mid-run (tick={latest_tick:.2e})"
+                        )
+                    self._write_state(state)
+                    return False
+
+                # Pareto dominance check: kill only if some completed Pareto point
+                # dominates the estimated score vector on every dimension.
+                # NOTE: estimated[0] uses latest_tick (a lower bound for the final
+                # execution time), so if dominance holds even with this optimistic
+                # time estimate the actual final vector is dominated too — safe to kill.
+                pareto_front = state.get('pareto_front', [])
+                if not pareto_front:
+                    # No reference points yet — cannot confirm dominance.
+                    self._write_state(state)
+                    return False
+
+                directions = self._objective_directions(len(estimated))
+                is_dominated = any(
+                    self._dominates(pt, estimated, directions)
+                    for pt in pareto_front
+                    if len(pt) == len(estimated)
+                )
+                if not is_dominated:
+                    if self.verbose:
+                        print(
+                            f"[Tracker] Keeping alive: estimated score not dominated "
+                            f"by any Pareto point (tick={latest_tick:.2e})"
+                        )
+                    self._write_state(state)
+                    return False
+
+            # ── Kill ──────────────────────────────────────────────────────────
+            # Gather score-space info for the kill log.  For SOO, estimated
+            # was not computed yet (only happens inside the is_moo block above).
+            if not is_moo:
+                estimated = self._estimate_running_score(
+                    latest_tick=latest_tick, config=config, metadata=metadata
+                )
+
+            score_threshold = state.get('threshold')
+
+            # Format score threshold(s) and estimated running score(s).
+            if isinstance(score_threshold, (list, tuple)):
+                thresh_str = "[" + ", ".join(f"{float(v):.4g}" for v in score_threshold) + "]"
+            elif score_threshold is not None:
+                thresh_str = f"{float(score_threshold):.4g}"
+            else:
+                thresh_str = "none"
+
+            if estimated is not None:
+                est_str = "[" + ", ".join(
+                    f"{v:.4g}" if math.isfinite(v) else "n/a"
+                    for v in estimated
+                ) + "]"
+            else:
+                est_str = "n/a"
+
+            print(
+                f"[Tracker] Killing simulation: tick={latest_tick:.2e} "
+                f"> kill_at={kill_time:.2e}  "
+                f"(best_raw={best_raw:.2e} × {self.kill_multiplier}  |  "
+                f"score_threshold={thresh_str}  |  "
+                f"estimated_score={est_str})"
+            )
+            state['total_killed'] = state.get('total_killed', 0) + 1
             self._write_state(state)
-            
-            return False
-            
+            if self.verbose:
+                print(f"    Trace file: {os.path.basename(trace_file)}")
+            return True
+
         except Exception as e:
             if self.verbose:
                 print(f"[Tracker] Error checking simulation: {e}")
