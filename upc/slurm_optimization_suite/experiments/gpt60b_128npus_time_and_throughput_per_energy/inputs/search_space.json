@@ -23,7 +23,7 @@
     "system":{
         "collective-optimization": ["localBWAware", "baseline"],
         "active-chunks-per-dimension": [1, 2, 4, 8],
-        "preferred-dataset-splits": [1, 2]
+        "preferred-dataset-splits": [1, 2, 4]
     },
     "network": {
         "inter-node-bw": [200],
