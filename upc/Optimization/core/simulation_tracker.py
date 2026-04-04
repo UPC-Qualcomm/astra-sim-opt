@@ -518,24 +518,40 @@ class SimulationTracker:
         new_front.append(new_vec)
         return new_front
 
-    def _tick_to_training_time_estimate(self, latest_tick: float) -> float:
+    def _tick_to_training_time_estimate(
+        self, latest_tick: float, num_steps: Optional[float] = None,
+    ) -> float:
         """
         Convert a raw simulation tick (nanoseconds, per-step) to an estimated
         training time in **seconds** — the unit that ``objective.compute``
         receives for completed runs.
 
-        Formula::
+        When *num_steps* for the **current** config is available (passed via
+        metadata from the simulation runner), the conversion is exact::
+
+            estimate_s = num_steps × (latest_tick / 1e9)
+
+        Otherwise falls back to proportional scaling from the best completed
+        run::
 
             estimate_s = best_training_time_s × (latest_tick / best_raw_exec_time_ns)
 
-        This assumes num_steps is similar between the reference (best) run and
-        the in-flight run.  Different batch sizes cause a proportional error,
-        but the result is always in the right magnitude (seconds), whereas
-        passing raw nano-second ticks to ``objective.compute`` produces values
-        ~9 orders of magnitude too large for log10-scaled objectives.
+        The proportional fallback assumes num_steps is similar between the
+        reference (best) run and the in-flight run.  Different ``dp`` values
+        cause a proportional error, so the direct formula is preferred.
 
         Falls back to ``latest_tick`` unchanged when no reference run exists yet.
         """
+        # Direct conversion when the current config's num_steps is known.
+        if num_steps is not None:
+            try:
+                ns = float(num_steps)
+                if ns > 0 and math.isfinite(ns):
+                    return ns * (float(latest_tick) / 1e9)
+            except (TypeError, ValueError):
+                pass
+
+        # Proportional fallback from best completed run.
         try:
             state = self._read_state()
             best_raw = state.get('best_raw_exec_time')
@@ -562,8 +578,13 @@ class SimulationTracker:
         Uses ``objective.compute`` with an estimated training-time (seconds) so
         that the estimate is in the same unit/scale as the completed-run scores
         stored in the Pareto front.  The tick is converted to seconds via
-        ``_tick_to_training_time_estimate``, which scales proportionally from
-        the best known run::
+        ``_tick_to_training_time_estimate``, preferring the current config's
+        ``num_steps`` (from metadata) for an exact conversion::
+
+            estimate_s = num_steps × (latest_tick / 1e9)
+
+        When ``num_steps`` is unavailable, falls back to proportional scaling
+        from the best known run::
 
             estimate_s = best_training_time_s × (latest_tick / best_raw_ns)
 
@@ -580,7 +601,10 @@ class SimulationTracker:
             try:
                 # Convert raw NS tick → training-time seconds so that the
                 # estimate is in the same unit as scores in the Pareto front.
-                exec_time_estimate = self._tick_to_training_time_estimate(latest_tick)
+                num_steps = metadata.get('total_training_steps') if metadata else None
+                exec_time_estimate = self._tick_to_training_time_estimate(
+                    latest_tick, num_steps=num_steps,
+                )
                 estimated = self.objective.compute(
                     exec_time=exec_time_estimate,
                     is_oom=False,
@@ -608,9 +632,11 @@ class SimulationTracker:
 
         Kill logic:
 
-        1. **Raw time check** — ``latest_tick > best_exec_time × kill_multiplier``.
-           Computed in raw time space so the answer is correct for every objective
-           type (raw, log-transformed, MOO).  If time has *not* been exceeded,
+        1. **Training-time check** — convert ``latest_tick`` to estimated training
+           time (seconds) using the current config's ``num_steps`` and compare
+           against ``best_training_time_s × kill_multiplier``.  This operates in
+           the unit we optimise and correctly accounts for different ``dp`` values
+           that change ``num_steps``.  If training time has *not* been exceeded,
            never kill.
 
         2. **MOO config-derived dims** — for objectives where non-time dims can
@@ -642,32 +668,43 @@ class SimulationTracker:
             state['total_checked'] = state.get('total_checked', 0) + 1
             state['latest_tick'] = latest_tick
 
-            # ── Step 1: raw time kill check ───────────────────────────────────
-            # Use best_raw_exec_time (same units as trace ticks, typically ns)
-            # for the kill comparison.  Do NOT use threshold[0] which holds the
-            # objective-space score (e.g. log10(exec_time) ≈ 3.5) — comparing
-            # raw ticks (~1e10 ns) against a log10 value (~5.2) would fire on
-            # every simulation immediately after the first baseline is recorded.
+            # ── Step 1: training-time kill check ─────────────────────────────
+            # Compare in *training-time seconds* (the unit we optimise) rather
+            # than in raw per-step nanosecond ticks.  Different configs may have
+            # different num_steps (because dp changes global batch size), so raw
+            # tick comparison is incorrect — a high-dp config has fewer steps
+            # and thus lower training time even with a higher per-step tick.
+            #
+            # estimated_training = num_steps_current × (latest_tick / 1e9)
+            # kill_training     = best_training_time_s × kill_multiplier
+            best_training_s = state.get('best_training_time_s')
             best_raw = state.get('best_raw_exec_time')
-            if best_raw is None:
+            if best_training_s is None or best_raw is None:
                 # No completed simulation yet — cannot establish a kill baseline.
                 self._write_state(state)
                 return False
             try:
+                best_training_s = float(best_training_s)
                 best_raw = float(best_raw)
             except (TypeError, ValueError):
                 self._write_state(state)
                 return False
-            kill_time = best_raw * self.kill_multiplier
+
+            num_steps = metadata.get('total_training_steps') if metadata else None
+            estimated_training = self._tick_to_training_time_estimate(
+                latest_tick, num_steps=num_steps,
+            )
+            kill_training = best_training_s * self.kill_multiplier
 
             if self.verbose and state['total_checked'] % 100 == 0:
                 print(
                     f"[Tracker Debug] tick={latest_tick:.2e}, "
-                    f"best_exec={best_raw:.2e}, kill_at={kill_time:.2e}"
+                    f"est_training={estimated_training:.2e}, "
+                    f"best_training={best_training_s:.2e}, kill_at={kill_training:.2e}"
                 )
 
-            if not (math.isfinite(kill_time) and latest_tick > kill_time):
-                # Time not exceeded — never kill regardless of secondary dims.
+            if not (math.isfinite(kill_training) and estimated_training > kill_training):
+                # Training time not exceeded — never kill regardless of secondary dims.
                 self._write_state(state)
                 return False
 
@@ -766,9 +803,10 @@ class SimulationTracker:
                 est_str = "n/a"
 
             print(
-                f"[Tracker] Killing simulation: tick={latest_tick:.2e} "
-                f"> kill_at={kill_time:.2e}  "
-                f"(best_raw={best_raw:.2e} × {self.kill_multiplier}  |  "
+                f"[Tracker] Killing simulation: tick={latest_tick:.2e}, "
+                f"est_training={estimated_training:.2e} "
+                f"> kill_training={kill_training:.2e}  "
+                f"(best_training={best_training_s:.2e} × {self.kill_multiplier}  |  "
                 f"score_threshold={thresh_str}  |  "
                 f"estimated_score={est_str})"
             )

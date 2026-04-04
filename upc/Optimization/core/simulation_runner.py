@@ -440,6 +440,14 @@ class SimulationRunner:
         # Run with tracking for early termination
         workload_filename = workload_path.split('/')[-1]
         trace_file = f"{self.output_dir}/{workload_filename}_trace.csv"
+
+        # Pre-compute metadata so the tracker can convert ticks to training
+        # time using the *current* config's num_steps (depends on dp).
+        tracking_metadata = self._get_simulation_metadata()
+        if config is not None:
+            tracking_metadata['total_training_steps'] = self._get_total_steps(
+                config, tracking_metadata,
+            )
         
         # Start simulation - returns immediately with PID
         process, pid, log_path, keep_trace = run_astrasim(
@@ -473,8 +481,10 @@ class SimulationRunner:
         while not result['finished']:
             time.sleep(check_interval)
             
-            # Check if simulation should be killed based on issue ticks
-            if self.tracker.should_kill_simulation(trace_file, config=config):
+            # Check if simulation should be killed based on training time
+            if self.tracker.should_kill_simulation(
+                trace_file, config=config, metadata=tracking_metadata,
+            ):
                 if process.poll() is None:
                     # Process is still running — kill it
                     result['killed'] = True
