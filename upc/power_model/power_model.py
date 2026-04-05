@@ -82,18 +82,18 @@ class PowerModel:
         """
         Calculate MLPerf Power metric: Samples per Joule.
         
-        Samples/J = Total_Samples / E_total
+        Samples/J = samples_per_batch / E_total
         
         Where:
-            Total_Samples = Batch_Size × Iterations
+            samples_per_batch = Batch_Size × Sequence_Length
         
         Returns:
             Samples per Joule
         """
-        total_samples = self.compute_stats.total_samples
+        samples_per_batch = self.compute_stats.samples_per_batch
         energy = self.total_energy()
         
-        return total_samples / energy if energy > 0 else 0.0
+        return samples_per_batch / energy if energy > 0 else 0.0
     
     def throughput_samples_per_sec(self) -> float:
         """
@@ -102,7 +102,7 @@ class PowerModel:
         Returns:
             Samples/second
         """
-        return self.compute_stats.total_samples / \
+        return self.compute_stats.samples_per_batch / \
                self.compute_stats.total_exec_time \
                if self.compute_stats.total_exec_time > 0 else 0.0
     
@@ -141,6 +141,21 @@ class PowerModel:
         """
         compute_breakdown = self.compute_model.get_power_breakdown()
         network_breakdown = self.network_model.get_power_breakdown()
+
+        # Scale energy and timing to the full training run.
+        # The underlying models compute per-step values; iterations carries
+        # the number of training steps set by the caller.
+        n = self.compute_stats.iterations
+        total_energy  = self.total_energy() * n
+        gpu_energy    = compute_breakdown['total_gpu_energy_J'] * n
+        net_energy    = network_breakdown['total_network_energy_J'] * n
+        total_samples = self.compute_stats.samples_per_batch          # batch_size × sequence_length
+        total_time    = self.compute_stats.total_exec_time * n    # full training wall time
+
+        throughput = total_samples / total_time if total_time > 0 else 0.0
+        spj        = total_samples / total_energy if total_energy > 0 else 0.0
+        energy_mj  = total_energy / 1e6
+        sps_per_mj = throughput / energy_mj if energy_mj > 0 else 0.0
         
         return {
             # Mode information
@@ -149,7 +164,7 @@ class PowerModel:
             'comm_lpm': self.config.comm_lpm_enabled,
             
             # Timing  (mean across NPUs; breakdown in compute_breakdown['per_npu'])
-            'total_execution_time_s': self.compute_stats.total_exec_time,
+            'total_execution_time_s': total_time,
             'compute_time_s':         compute_breakdown['mean_compute_time_s'],
             'comm_time_s':            compute_breakdown['mean_comm_time_s'],
 
@@ -168,21 +183,30 @@ class PowerModel:
             'link_power_W': network_breakdown['link_power_W'],
             'total_switch_power_W': network_breakdown['total_switch_power_W'],
             
-            # Energy (Joules)
-            'total_energy_J': self.total_energy(),
-            'gpu_energy_J': compute_breakdown['total_gpu_energy_J'],
-            'network_energy_J': network_breakdown['total_network_energy_J'],
+            # Energy (Joules) — scaled to full training run
+            'total_energy_J': total_energy,
+            'gpu_energy_J': gpu_energy,
+            'network_energy_J': net_energy,
+            # Per-step energy (single simulation step)
+            'total_energy_J_per_step': self.total_energy(),
+            'gpu_energy_J_per_step': compute_breakdown['total_gpu_energy_J'],
+            'network_energy_J_per_step': network_breakdown['total_network_energy_J'],
             
             # Performance
             'batch_size': self.compute_stats.batch_size,
             'iterations': self.compute_stats.iterations,
-            'total_samples': self.compute_stats.total_samples,
-            'throughput_samples_per_sec': self.throughput_samples_per_sec(),
+            'samples_per_batch_per_step': self.compute_stats.samples_per_batch,
+            'throughput_samples_per_sec_per_step': self.throughput_samples_per_sec(),
+            'total_samples': total_samples,
+            'throughput_samples_per_sec': throughput,
             
             # Efficiency Metrics
-            'samples_per_joule':      self.samples_per_joule(),
-            'joules_per_sample':      1.0 / self.samples_per_joule() if self.samples_per_joule() > 0 else float('inf'),
-            'samples_per_sec_per_mj': self.samples_per_sec_per_megajoule(),
+            'samples_per_joule_per_step':      self.samples_per_joule(),
+            'joules_per_sample_per_step':      1.0 / self.samples_per_joule() if self.samples_per_joule() > 0 else float('inf'),
+            'samples_per_sec_per_mj_per_step': self.samples_per_sec_per_megajoule(),
+            'samples_per_joule':      spj,
+            'joules_per_sample':      1.0 / spj if spj > 0 else float('inf'),
+            'samples_per_sec_per_mj': sps_per_mj,
             
             # Hardware counts
             'num_gpus': self.compute_stats.num_npus,

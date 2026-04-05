@@ -23,6 +23,7 @@ def run_power_estimation(
     workload_file: str,
     power_config_path: Optional[str] = None,
     verbose: bool = False,
+    num_steps: int = None
 ) -> Dict:
     """
     Run the power model (Mode D: Full LPM) for a completed g2 simulation.
@@ -122,7 +123,7 @@ def run_power_estimation(
             power_config_path = os.path.join(upc_root, 'power_model', 'a100_config.json')
 
         if verbose:
-            print(f"    ⚡ Running power estimation (Mode D - Full LPM)...")
+            print(f"    ⚡ Running power estimation (Mode A - Full LPM)...")
 
         # Run power model, suppressing its stdout unless verbose
         buf = io.StringIO()
@@ -130,10 +131,11 @@ def run_power_estimation(
             model = analyze_single_mode(
                 log_file,
                 link_traffic,
-                mode='D',
+                mode='A',
                 output_json=output_json,
                 config_path=power_config_path,
                 nodemap_file=nodemap,
+                num_steps=num_steps
             )
 
         if verbose:

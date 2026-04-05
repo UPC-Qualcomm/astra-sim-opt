@@ -168,7 +168,7 @@ def main():
         raise FileNotFoundError(f"Search space file not found: {search_space_path}")
 
     power_config_path = args.power_config_path or os.path.join(
-        os.environ["ASTRA_SIM_ROOT"], "upc", "power_model", "a100_config.json"
+        os.environ["ASTRA_SIM_ROOT"], "upc", "power_model", "h100_config.json"
     )
     
     print("=" * 70)

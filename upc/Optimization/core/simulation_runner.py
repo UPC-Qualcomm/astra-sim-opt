@@ -65,7 +65,7 @@ class SimulationRunner:
         output_dir: Optional[str] = None,
         network_log_dir: Optional[str] = None,
         tracker: Optional[SimulationTracker] = None,
-        total_data_size_tokens: Optional[int] = 300_000_000,  # Default to 300B tokens for total training data size
+        total_data_size_tokens: Optional[int] = 300_000_000_000,  # Default to 300M tokens for total training data size
     ):
         """
         Initialize simulation runner.
@@ -290,6 +290,7 @@ class SimulationRunner:
                     workload_file=workload_file,
                     power_config_path=self.net_sim_config.get('power_config_path'),
                     verbose=self.verbose,
+                    num_steps=num_steps,
                 )
 
             # 6. Return with file paths and metadata if requested
@@ -299,7 +300,7 @@ class SimulationRunner:
                 metadata['was_killed'] = False
                 metadata['sim_failed'] = False
                 metadata['peak_memory_gb'] = peak_memory
-                metadata['num_steps'] = self.num_npus
+                metadata['num_steps'] = num_steps
                 metadata.update(power_metrics)  # Merge power metrics (empty dict if not g2 or failed)
 
                 return training_time , is_oom, file_paths, metadata

@@ -21,14 +21,15 @@ from compute_parser import parse_astrasim_log
 from network_parser import parse_network_statistics_csv
 from power_model import PowerModel, compare_all_modes
 
-
+DATA_SET_SIZE = 300_000_000_000
 def analyze_single_mode(astrasim_log: str,
                         network_csv: str,
                         mode: str = 'A',
                         output_json: str = None,
                         config_path: str = None,
                         nodemap_file: str = None,
-                        topology_file: str = None):
+                        topology_file: str = None,
+                        num_steps: int = None):
     """
     Analyze power for a single LPM mode.
 
@@ -40,6 +41,9 @@ def analyze_single_mode(astrasim_log: str,
         config_path: Optional path to JSON configuration file
         nodemap_file: Optional path to nodemap.json for topology-aware switch modelling
         topology_file: Optional path to NS3 topology file (used with nodemap_file)
+        num_steps: Total training steps. When provided, sets
+                   compute_stats.iterations so sample counts and energy
+                   reflect the full training run.
     """
     print(f"\n🔍 Parsing input files...")
     print(f"  Compute:  {astrasim_log}")
@@ -62,7 +66,11 @@ def analyze_single_mode(astrasim_log: str,
         config = all_modes[mode]
 
     # Parse input files
-    compute_stats = parse_astrasim_log(astrasim_log)
+    compute_stats, batch_size, seq_length = parse_astrasim_log(astrasim_log)
+    if num_steps is not None and num_steps > 0:
+        compute_stats.iterations = int(num_steps)
+    else:
+        compute_stats.iterations = DATA_SET_SIZE // (batch_size * seq_length)
     network_stats = parse_network_statistics_csv(
         network_csv,
         nodemap_file=nodemap_file,
@@ -91,7 +99,8 @@ def compare_modes(astrasim_log: str,
                   output_json: str = None,
                   config_path: str = None,
                   nodemap_file: str = None,
-                  topology_file: str = None):
+                  topology_file: str = None,
+                  num_steps: int = None):
     """
     Compare all 4 LPM modes.
 
@@ -103,6 +112,9 @@ def compare_modes(astrasim_log: str,
         config_path: Optional path to JSON configuration file
         nodemap_file: Optional path to nodemap.json for topology-aware switch modelling
         topology_file: Optional path to NS3 topology file (used with nodemap_file)
+        num_steps: Total training steps. When provided, sets
+                   compute_stats.iterations so sample counts and energy
+                   reflect the full training run.
     """
     print(f"\n🔍 Parsing input files...")
     print(f"  Compute:  {astrasim_log}")
@@ -122,7 +134,11 @@ def compare_modes(astrasim_log: str,
         base_config = PowerConfig.get_all_modes()['A']
 
     # Parse input files
-    compute_stats = parse_astrasim_log(astrasim_log)
+    compute_stats, batch_size, seq_length = parse_astrasim_log(astrasim_log)
+    if num_steps is not None and num_steps > 0:
+        compute_stats.iterations = int(num_steps)
+    else:
+        compute_stats.iterations = DATA_SET_SIZE // (batch_size * seq_length)
     network_stats = parse_network_statistics_csv(
         network_csv,
         nodemap_file=nodemap_file,

@@ -58,12 +58,12 @@ class ComputeStats:
         return 0.0
 
     @property
-    def total_samples(self) -> int:
+    def samples_per_batch(self) -> int:
         """Total samples processed."""
-        return self.batch_size * self.iterations
+        return self.batch_size * self.sequence_length
 
 
-def parse_astrasim_log(log_file_path: str) -> ComputeStats:
+def parse_astrasim_log(log_file_path: str):
     """
     Parse AstraSim log file to extract timing and workload information.
 
@@ -155,7 +155,7 @@ def parse_astrasim_log(log_file_path: str) -> ComputeStats:
         sequence_length=seq_length,
         iterations=1,
         npu_stats=npu_stats,
-    )
+    ), batch_size, seq_length
 
 
 def parse_compute_stats_from_dict(data: Dict) -> ComputeStats:
