@@ -11,7 +11,6 @@ LICENSE file in the root directory of this source tree.
 #include <remote_memory_backend/analytical/AnalyticalRemoteMemory.hh>
 #include "network.h"
 #include <chrono>
-#include <iostream>
 
 using namespace AstraSim;
 using namespace Analytical;
@@ -130,12 +129,12 @@ int main(int argc, char* argv[]) {
     systems.clear();
 
     // terminate simulation
-    AstraSim::LoggerFactory::shutdown();
-
     const auto wall_end = std::chrono::steady_clock::now();
     const double elapsed_s =
         std::chrono::duration<double>(wall_end - wall_start).count();
-    std::cout << "[G2] Total simulation wall time: " << elapsed_s << " s\n";
+    AstraSim::LoggerFactory::get_logger("workload")->info(
+        "[G2] Total simulation wall time: {:.3f} s", elapsed_s);
+    AstraSim::LoggerFactory::shutdown();
 
     return 0;
 }

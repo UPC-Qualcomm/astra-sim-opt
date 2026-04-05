@@ -336,7 +336,9 @@ int main(int argc, char* argv[]) {
     const auto wall_end = std::chrono::steady_clock::now();
     const double elapsed_s =
         std::chrono::duration<double>(wall_end - wall_start).count();
-    cout << "[NS3] Total simulation wall time: " << elapsed_s << " s" << endl;
+    AstraSim::LoggerFactory::get_logger("workload")->info(
+        "[NS3] Total simulation wall time: {:.3f} s", elapsed_s);
+    AstraSim::LoggerFactory::shutdown();
 
     return 0;
 }
