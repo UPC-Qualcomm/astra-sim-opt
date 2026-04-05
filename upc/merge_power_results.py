@@ -50,6 +50,7 @@ POWER_FIELDS = [
     "samples_per_joule",
     "joules_per_sample",
     "samples_per_sec_per_mj",
+    "total_execution_time_s",
 ]
 
 

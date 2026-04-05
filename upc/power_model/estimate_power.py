@@ -73,7 +73,7 @@ def extract_topology_file(network_yml: str) -> str:
 
 def main():
     here           = os.path.dirname(os.path.abspath(__file__))
-    default_config = os.path.join(here, "a100_config.json")
+    default_config = os.path.join(here, "h100_config.json")
 
     p = argparse.ArgumentParser(
         description="Batch power estimation for AstraSim simulation outputs.",
