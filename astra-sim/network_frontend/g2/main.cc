@@ -10,6 +10,8 @@ LICENSE file in the root directory of this source tree.
 #include <common/NetworkParser.h>
 #include <remote_memory_backend/analytical/AnalyticalRemoteMemory.hh>
 #include "network.h"
+#include <chrono>
+#include <iostream>
 
 using namespace AstraSim;
 using namespace Analytical;
@@ -18,6 +20,8 @@ using namespace AstraSimG2;
 using namespace NetworkAnalytical;
 
 int main(int argc, char* argv[]) {
+    const auto wall_start = std::chrono::steady_clock::now();
+
     // Parse command line arguments
     auto cmd_line_parser = CmdLineParser(argv[0]);
     cmd_line_parser.parse(argc, argv);
@@ -127,5 +131,11 @@ int main(int argc, char* argv[]) {
 
     // terminate simulation
     AstraSim::LoggerFactory::shutdown();
+
+    const auto wall_end = std::chrono::steady_clock::now();
+    const double elapsed_s =
+        std::chrono::duration<double>(wall_end - wall_start).count();
+    std::cout << "[G2] Total simulation wall time: " << elapsed_s << " s\n";
+
     return 0;
 }

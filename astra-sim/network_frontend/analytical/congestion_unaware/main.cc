@@ -7,6 +7,8 @@ LICENSE file in the root directory of this source tree.
 #include "astra-sim/workload/Synchronizer.hh"
 #include "common/CmdLineParser.hh"
 #include "congestion_unaware/CongestionUnawareNetworkApi.hh"
+#include <chrono>
+#include <iostream>
 #include <astra-network-analytical/common/EventQueue.h>
 #include <astra-network-analytical/common/NetworkParser.h>
 #include <astra-network-analytical/congestion_unaware/Helper.h>
@@ -20,6 +22,8 @@ using namespace NetworkAnalytical;
 using namespace NetworkAnalyticalCongestionUnaware;
 
 int main(int argc, char* argv[]) {
+    const auto wall_start = std::chrono::steady_clock::now();
+
     // Parse command line arguments
     auto cmd_line_parser = CmdLineParser(argv[0]);
     cmd_line_parser.parse(argc, argv);
@@ -115,5 +119,11 @@ int main(int argc, char* argv[]) {
 
     // terminate simulation
     AstraSim::LoggerFactory::shutdown();
+
+    const auto wall_end = std::chrono::steady_clock::now();
+    const double elapsed_s =
+        std::chrono::duration<double>(wall_end - wall_start).count();
+    std::cout << "[Analytical] Total simulation wall time: " << elapsed_s << " s\n";
+
     return 0;
 }

@@ -115,6 +115,12 @@ def parse_args() -> argparse.Namespace:
             "random exploration phase. Defaults to 0."
         ),
     )
+    parser.add_argument(
+        "--search-type",
+        default="cbo",
+        choices=["cbo", "random"],
+        help="DeepHyper search type: 'cbo' (Bayesian, default) or 'random' (random search).",
+    )
     return parser.parse_args()
 
 
@@ -267,6 +273,7 @@ def main():
         # Early stopping: disabled by default (-1). Enable with --early-stopping-patience.
         early_stopping_patience=EARLY_STOPPING_PATIENCE,
         early_stopping_min_evaluations=EARLY_STOPPING_MIN_EVALUATIONS,
+        search_type=args.search_type,
     )
     print(f"   Using: {optimizer}")
     if optimizer.tracker:

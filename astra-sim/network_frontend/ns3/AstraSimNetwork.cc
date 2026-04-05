@@ -2,6 +2,7 @@
 #include "astra-sim/system/Sys.hh"
 #include "extern/remote_memory_backend/analytical/AnalyticalRemoteMemory.hh"
 #include <json/json.hpp>
+#include <chrono>
 
 // monkey patch, the spdlog include <syslog.h> and define these macros, and
 // break the ns3 log enum keys
@@ -282,6 +283,8 @@ void parse_args(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    const auto wall_start = std::chrono::steady_clock::now();
+
     LogComponentEnable("OnOffApplication", LOG_INFO);
     LogComponentEnable("PacketSink", LOG_INFO);
 
@@ -329,5 +332,11 @@ int main(int argc, char* argv[]) {
     //monitor->SerializeToXmlFile("flowmon-results.xml", true, true);
 
     Simulator::Destroy();
+
+    const auto wall_end = std::chrono::steady_clock::now();
+    const double elapsed_s =
+        std::chrono::duration<double>(wall_end - wall_start).count();
+    cout << "[NS3] Total simulation wall time: " << elapsed_s << " s" << endl;
+
     return 0;
 }
