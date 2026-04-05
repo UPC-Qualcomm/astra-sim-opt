@@ -62,7 +62,6 @@ ACTIVE_EXPERIMENTS=(
   "gpt175b_1024npus_energy_and_time"
   "gpt175b_1024npus_memory_and_time"
   "gpt175b_1024npus_time"
-  "gpt175b_1024npus_time_and_bw"
   "gpt175b_1024npus_latency_network"
   "gpt175b_1024npus_time_and_throughput_per_energy"
   "llama8b_32npus_edp"
@@ -73,6 +72,8 @@ ACTIVE_EXPERIMENTS=(
   "llama8b_32npus_time_and_bw"
   "llama8b_32npus_time_and_throughput_per_energy"
   "llama8b_32npus_latency_network"
+  
+  #"gpt175b_1024npus_time_and_bw"
   # "llama8b_32npus_time"          # Example: uncomment to RUN this experiment
 )
 
