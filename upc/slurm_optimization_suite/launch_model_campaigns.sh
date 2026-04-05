@@ -4,21 +4,15 @@ set -euo pipefail
 ###############################################################################
 # launch_model_campaigns.sh
 #
-# Submits all 6 optimization campaigns for llama8b, llama70b, and gpt60b.
-# Each model is pinned to ONE dedicated SLURM node across all campaigns and
-# all objectives, so the only variable between campaigns is optimizer config.
+# Submits all 7 optimization campaigns for llama8b, llama70b, and gpt60b.
+# At launch time, idle SLURM nodes are discovered via sinfo and each job is
+# dispatched to a randomly selected one, spreading load across the cluster.
+# Override with --nodelist <node> to pin all jobs to a specific node instead.
 #
-# For each model:   6 campaigns × 3 objectives = 18 jobs, all queued to the
-# same node.  SLURM schedules them as resources free up; jobs that require
-# more workers simply wait for earlier jobs to finish on that node.
+# For each model:   7 campaigns × 2 objectives = 14 jobs per model.
 #
 # Objectives run for every model (tracker-compatible subset):
-#   time  |  time_and_bw  |  latency_network
-#
-# Node assignments (chosen from cluster state; edit MODEL_NODE below):
-#   gpt60b   → sert-1907   production  (15 CPUs, ~87 GB free)
-#   llama70b → sert-1908   production  (15 CPUs, ~87 GB free)
-#   llama8b  → sert-1703   production  (12 CPUs, ~87 GB free)
+#   time  |  latency_network
 #
 # Outputs land in the same campaigns/ tree as launch_campaigns.sh so results
 # from both launchers are directly comparable.
@@ -30,6 +24,7 @@ set -euo pipefail
 #   --model <name|all>     Model to launch: gpt60b, llama70b, llama8b, or all.
 #                          Default: all
 #   --campaign <name|all>  Campaign name (see --list), or all. Default: all
+#   --nodelist NODE         Pin ALL jobs to this specific node (skips auto-discovery).
 #   --partition PART        Override SLURM partition for all jobs.
 #   --dry-run              Print sbatch commands without submitting.
 #   --list                 Show configuration and exit.
@@ -45,12 +40,12 @@ TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 LAUNCH_LOG_DIR="$ROOT_DIR/launch_logs/model_campaigns_${TIMESTAMP}"
 mkdir -p "$LAUNCH_LOG_DIR"
 
-# ─── Node range ───────────────────────────────────────────────────────────────
-# SLURM will pick any available node within sert-1401..sert-1440.
-# Change NODE_RANGE here to target a different set of nodes.
-# Override the partition at runtime with --partition.
-NODE_RANGE="sert-1[401-440]"
-NODE_PARTITION="production"  # default; overridden by --partition at runtime
+# ─── Node selection ─────────────────────────────────────────────────────────────
+# Leave NODE_OVERRIDE empty (default): idle nodes are discovered automatically
+# via sinfo at runtime and each job is sent to a randomly chosen one.
+# Set via --nodelist to pin every job to one specific node instead.
+NODE_OVERRIDE=""  # set by --nodelist
+NODE_PARTITION="production"  # default partition; overridden by --partition
 FORCED_PARTITION=""
 
 # Suffix used in experiment directory names, e.g. llama8b_32npus_time
@@ -97,7 +92,12 @@ usage() {
     printf "  %-12s → %s NPUs\n" "$m" "${MODEL_NPUS[$m]}"
   done
   echo
-  echo "Node range: $NODE_RANGE (${FORCED_PARTITION:-$NODE_PARTITION})"
+  if [[ -n "$NODE_OVERRIDE" ]]; then
+    echo "Node pinning: $NODE_OVERRIDE (${FORCED_PARTITION:-$NODE_PARTITION})"
+  else
+    echo "Node selection: random idle node via sinfo"
+    echo "Partition:      ${FORCED_PARTITION:-$NODE_PARTITION}"
+  fi
   echo
   echo "Campaigns:"
   for cdef in "${CAMPAIGN_DEFS[@]}"; do
@@ -116,6 +116,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --model)     SELECTED_MODEL="$2";    shift 2 ;;
     --campaign)  SELECTED_CAMPAIGN="$2"; shift 2 ;;
+    --nodelist)  NODE_OVERRIDE="$2";     shift 2 ;;
     --partition) FORCED_PARTITION="$2";   shift 2 ;;
     --dry-run)   DRY_RUN=1;              shift   ;;
     --list)      usage; exit 0 ;;
@@ -170,6 +171,40 @@ if [[ ! -f "$CAMPAIGN_SCRIPT" ]]; then
   exit 1
 fi
 
+# ─── Seed randomness ────────────────────────────────────────────────────────────
+# Read 2 bytes from /dev/urandom so $RANDOM is truly different on every run.
+RANDOM=$(od -An -N2 -tu2 < /dev/urandom | tr -d ' ')
+
+# ─── Discover idle SLURM nodes ──────────────────────────────────────────────
+IDLE_NODES=()
+if [[ -z "$NODE_OVERRIDE" ]]; then
+  if ! command -v sinfo >/dev/null 2>&1; then
+    echo "Warning: sinfo not available; jobs will submit without --nodelist." >&2
+  else
+    while IFS=' ' read -r n state; do
+      [[ "$state" == "idle" || "$state" == "idle~" ]] || continue
+      IDLE_NODES+=("$n")
+    done < <(sinfo -N -h -o "%N %T" 2>/dev/null)
+
+    if [[ ${#IDLE_NODES[@]} -eq 0 ]]; then
+      echo "Warning: no idle nodes found; jobs will submit without --nodelist." >&2
+    else
+      echo "Discovered ${#IDLE_NODES[@]} idle node(s)."
+    fi
+  fi
+fi
+
+# Returns a random idle node, or the override node, or empty string (no pinning).
+pick_random_node() {
+  if [[ -n "$NODE_OVERRIDE" ]]; then
+    echo "$NODE_OVERRIDE"
+  elif [[ ${#IDLE_NODES[@]} -gt 0 ]]; then
+    echo "${IDLE_NODES[$(( RANDOM % ${#IDLE_NODES[@]} ))]}"
+  else
+    echo ""
+  fi
+}
+
 # ─── Launch ───────────────────────────────────────────────────────────────────
 ASSIGNMENT_CSV="$LAUNCH_LOG_DIR/assignments.csv"
 echo "model,campaign,experiment,node,partition,cpus,mem_per_cpu,job_name,status,job_id" \
@@ -184,14 +219,12 @@ echo "Total jobs to submit: $total_jobs"
 echo
 
 for model in "${MODELS_TO_RUN[@]}"; do
-  node="$NODE_RANGE"
   partition="${FORCED_PARTITION:-$NODE_PARTITION}"
   npus="${MODEL_NPUS[$model]}"
 
   echo "════════════════════════════════════════════════════════════════"
-  echo "Model: $model   →  node range: $node  ($partition)"
-  echo "  All ${#CAMPAIGNS_TO_RUN[@]} campaigns and ${#OBJECTIVES[@]} objectives"
-  echo "  queued to this one node; SLURM schedules them as CPUs free up."
+  echo "Model: $model  (${#CAMPAIGNS_TO_RUN[@]} campaigns × ${#OBJECTIVES[@]} objectives, partition=$partition)"
+  echo "  Each job dispatched to a randomly selected idle node."
   echo "════════════════════════════════════════════════════════════════"
 
   for cdef in "${CAMPAIGNS_TO_RUN[@]}"; do
@@ -219,6 +252,9 @@ for model in "${MODELS_TO_RUN[@]}"; do
       source "$exp_dir/config.env"
       mem_per_cpu="${MEM_PER_CPU_GB_OVERRIDE:-$DEFAULT_MEM_PER_CPU_GB}"
 
+      # Pick a fresh random idle node for each job.
+      node="$(pick_random_node)"
+
       camp_output_dir="$CAMPAIGNS_DIR/${camp_name}/${exp_name}"
       mkdir -p "$camp_output_dir/logs" "$camp_output_dir/outputs"
 
@@ -230,7 +266,6 @@ for model in "${MODELS_TO_RUN[@]}"; do
         sbatch
         --job-name "$job_name"
         --chdir "$exp_dir"
-        --nodelist "$node"
         --partition "$partition"
         --cpus-per-task "$cpus_per_task"
         --mem-per-cpu "${mem_per_cpu}G"
@@ -241,6 +276,7 @@ for model in "${MODELS_TO_RUN[@]}"; do
       )
 
       [[ -n "${SLURM_QOS:-}" ]] && sbatch_cmd+=(--qos "$SLURM_QOS")
+      [[ -n "$node" ]]           && sbatch_cmd+=(--nodelist "$node")
 
       if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "    [DRY-RUN] $exp_name → $node (cpus=$cpus_per_task, mem=${mem_per_cpu}G, search=$camp_search_type)"
@@ -283,9 +319,16 @@ done
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 echo "════════════════════════════════════════════════════════════════"
-echo "Node range: $NODE_RANGE (${FORCED_PARTITION:-$NODE_PARTITION})"
-echo
-echo "Launch summary"
+  if [[ -n "$NODE_OVERRIDE" ]]; then
+    echo "Node pinning:  $NODE_OVERRIDE (${FORCED_PARTITION:-$NODE_PARTITION})"
+  elif [[ ${#IDLE_NODES[@]} -gt 0 ]]; then
+    echo "Idle nodes:    ${#IDLE_NODES[@]} available (randomly selected per job)"
+    echo "Partition:     ${FORCED_PARTITION:-$NODE_PARTITION}"
+  else
+    echo "Partition:     ${FORCED_PARTITION:-$NODE_PARTITION} (no node pinning)"
+  fi
+  echo
+  echo "Launch summary"
 echo "  Models launched:  ${#MODELS_TO_RUN[@]}"
 echo "  Campaigns:        ${#CAMPAIGNS_TO_RUN[@]}"
 echo "  Objectives:       ${#OBJECTIVES[@]}"
