@@ -30,6 +30,7 @@ set -euo pipefail
 #   --model <name|all>     Model to launch: gpt60b, llama70b, llama8b, or all.
 #                          Default: all
 #   --campaign <name|all>  Campaign name (see --list), or all. Default: all
+#   --partition PART        Override SLURM partition for all jobs.
 #   --dry-run              Print sbatch commands without submitting.
 #   --list                 Show configuration and exit.
 #   -h|--help              Show this help.
@@ -44,20 +45,14 @@ TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 LAUNCH_LOG_DIR="$ROOT_DIR/launch_logs/model_campaigns_${TIMESTAMP}"
 mkdir -p "$LAUNCH_LOG_DIR"
 
-# ─── Dedicated node assignment ────────────────────────────────────────────────
-# ALL jobs for a given model go to exactly one node — all 6 campaigns and all
-# 3 objectives.  To move a model to a different node, change the value here.
-# Order in ALL_MODELS controls display order only; it does not affect routing.
-declare -A MODEL_NODE=(
-  [gpt60b]="sert-1907"     # production | 15 CPUs | ~87 GB free
-  [llama70b]="sert-1908"   # production | 15 CPUs | ~87 GB free
-  [llama8b]="sert-1703"    # production | 12 CPUs | ~87 GB free
-)
-declare -A MODEL_PARTITION=(
-  [gpt60b]="production"
-  [llama70b]="production"
-  [llama8b]="production"
-)
+# ─── Node range ───────────────────────────────────────────────────────────────
+# SLURM will pick any available node within sert-1401..sert-1440.
+# Change NODE_RANGE here to target a different set of nodes.
+# Override the partition at runtime with --partition.
+NODE_RANGE="sert-1[401-440]"
+NODE_PARTITION="production"  # default; overridden by --partition at runtime
+FORCED_PARTITION=""
+
 # Suffix used in experiment directory names, e.g. llama8b_32npus_time
 declare -A MODEL_NPUS=(
   [gpt60b]=128
@@ -99,8 +94,10 @@ usage() {
   echo
   echo "Models:"
   for m in "${ALL_MODELS[@]}"; do
-    printf "  %-12s → %s (%s)\n" "$m" "${MODEL_NODE[$m]}" "${MODEL_PARTITION[$m]}"
+    printf "  %-12s → %s NPUs\n" "$m" "${MODEL_NPUS[$m]}"
   done
+  echo
+  echo "Node range: $NODE_RANGE (${FORCED_PARTITION:-$NODE_PARTITION})"
   echo
   echo "Campaigns:"
   for cdef in "${CAMPAIGN_DEFS[@]}"; do
@@ -119,6 +116,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --model)     SELECTED_MODEL="$2";    shift 2 ;;
     --campaign)  SELECTED_CAMPAIGN="$2"; shift 2 ;;
+    --partition) FORCED_PARTITION="$2";   shift 2 ;;
     --dry-run)   DRY_RUN=1;              shift   ;;
     --list)      usage; exit 0 ;;
     -h|--help)   usage; exit 0 ;;
@@ -131,7 +129,7 @@ MODELS_TO_RUN=()
 if [[ "$SELECTED_MODEL" == "all" ]]; then
   MODELS_TO_RUN=("${ALL_MODELS[@]}")
 else
-  if [[ -z "${MODEL_NODE[$SELECTED_MODEL]+_}" ]]; then
+  if [[ -z "${MODEL_NPUS[$SELECTED_MODEL]+_}" ]]; then
     echo "Error: unknown model '$SELECTED_MODEL'. Valid: ${ALL_MODELS[*]}" >&2
     exit 1
   fi
@@ -186,12 +184,12 @@ echo "Total jobs to submit: $total_jobs"
 echo
 
 for model in "${MODELS_TO_RUN[@]}"; do
-  node="${MODEL_NODE[$model]}"
-  partition="${MODEL_PARTITION[$model]}"
+  node="$NODE_RANGE"
+  partition="${FORCED_PARTITION:-$NODE_PARTITION}"
   npus="${MODEL_NPUS[$model]}"
 
   echo "════════════════════════════════════════════════════════════════"
-  echo "Model: $model   →  node: $node  ($partition)"
+  echo "Model: $model   →  node range: $node  ($partition)"
   echo "  All ${#CAMPAIGNS_TO_RUN[@]} campaigns and ${#OBJECTIVES[@]} objectives"
   echo "  queued to this one node; SLURM schedules them as CPUs free up."
   echo "════════════════════════════════════════════════════════════════"
@@ -285,10 +283,7 @@ done
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 echo "════════════════════════════════════════════════════════════════"
-echo "Node assignment map:"
-for m in "${ALL_MODELS[@]}"; do
-  printf "  %-12s → %s\n" "$m" "${MODEL_NODE[$m]}"
-done
+echo "Node range: $NODE_RANGE (${FORCED_PARTITION:-$NODE_PARTITION})"
 echo
 echo "Launch summary"
 echo "  Models launched:  ${#MODELS_TO_RUN[@]}"

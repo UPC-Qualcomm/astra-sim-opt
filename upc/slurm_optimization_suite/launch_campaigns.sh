@@ -59,10 +59,7 @@ if [[ ! -f "$CAMPAIGN_SCRIPT" ]]; then
 fi
 
 # ─── SLURM config ────────────────────────────────────────────────────────────
-NODE_STATES="idle,mix"
-SKIP_NODES=()
 SLURM_QOS="large"
-
 DEFAULT_MEM_PER_CPU_GB=10
 MAX_RETRIES=3
 
@@ -86,21 +83,7 @@ CAMPAIGN_DEFS=(
 # Objectives included in "subset" campaigns (tracker-compatible objectives)
 SUBSET_OBJECTIVES=("time" "time_and_bw" "latency_network")
 
-# ─── Node-tier assignment — maps model group to a node tier index ───────────
-# Tier 0 = most powerful node (NODES is sorted by memory descending).
-# Assignment is based on the experiment NAME, not its position in the list,
-# so subset campaigns and full campaigns always map the same experiment to
-# the same node.  To change which server runs a model group, update the tier
-# number here.  Experiments with the same tier share the node round-robin.
-declare -A EXPERIMENT_NODE_TIER=(
-  [gpt175b]=0    # heaviest: 1024 NPUs → most powerful node
-  [gpt60b]=1     # 128 NPUs
-  [llama70b]=2   # 128 NPUs
-  [llama8b]=3    # lightest: 32 NPUs → least powerful node
-)
-
-# ─── All experiments — used for subset filtering; order does NOT affect node
-#     assignment (that is driven by EXPERIMENT_NODE_TIER above).
+# ─── All experiments — used for subset filtering only ────────────────────────
 # Add or remove lines when experiments are created or deleted.
 ALL_EXPERIMENTS=(
   # ── gpt175b / 1024 NPUs  (heaviest) ─────────────────────────────────────
@@ -195,66 +178,14 @@ else
   fi
 fi
 
-# ─── Discover SLURM nodes ────────────────────────────────────────────────────
-if ! command -v sinfo >/dev/null 2>&1 || ! command -v sbatch >/dev/null 2>&1; then
-  echo "Error: sinfo/sbatch not available. Run on a SLURM login node." >&2
+# ─── Validate SLURM tools ────────────────────────────────────────────────────
+if ! command -v sbatch >/dev/null 2>&1; then
+  echo "Error: sbatch not available. Run on a SLURM login node." >&2
   exit 1
 fi
 
-SINFO_OUT="$LAUNCH_LOG_DIR/sinfo_nodes.txt"
-# Sort by memory (field 5) descending so NODES[0] is the highest-resource node,
-# matching the manual experiment ordering above (heaviest → best node).
-sinfo -N -h -t "$NODE_STATES" -o "%N|%P|%t|%c|%m" | sort -t'|' -k5 -rn > "$SINFO_OUT"
-
-if [[ ! -s "$SINFO_OUT" ]]; then
-  echo "No available nodes in states: $NODE_STATES" >&2
-  exit 1
-fi
-
-NODES=()
-PARTITIONS=()
-
-while IFS='|' read -r node partition state cores mem_mb; do
-  [[ -z "$node" ]] && continue
-  skip=0
-  for excl in "${SKIP_NODES[@]}"; do
-    [[ "$node" == "$excl" ]] && skip=1 && break
-  done
-  [[ $skip -eq 1 ]] && continue
-  partition="${partition%%\**}"
-  NODES+=("$node")
-  PARTITIONS+=("$partition")
-done < "$SINFO_OUT"
-
-if [[ ${#NODES[@]} -eq 0 ]]; then
-  echo "No usable nodes found." >&2
-  exit 1
-fi
-
-echo "Discovered ${#NODES[@]} SLURM node(s)"
 echo "Campaigns to launch: ${#CAMPAIGNS_TO_RUN[@]}"
 echo
-
-# ─── Deterministic node assignment ───────────────────────────────────────────
-# Assignment is derived from the experiment NAME (via model group), so it is
-# identical whether the campaign runs all experiments or a subset.
-get_node_for_experiment() {
-  local exp_name="$1"
-  # Extract model-group prefix: everything before _NNNNpus_
-  local group
-  group=$(echo "$exp_name" | sed 's/_[0-9]*npus_.*//')
-
-  local tier
-  if [[ -v EXPERIMENT_NODE_TIER["$group"] ]]; then
-    tier="${EXPERIMENT_NODE_TIER[$group]}"
-  else
-    # Fallback: stable hash of the full experiment name
-    tier=$(echo -n "$exp_name" | cksum | awk '{print $1}')
-  fi
-
-  # Within a tier, spread experiments across nodes that share that tier slot
-  echo $(( tier % ${#NODES[@]} ))
-}
 
 # ─── Filter experiments for a campaign ────────────────────────────────────────
 get_campaign_experiments() {
@@ -323,17 +254,7 @@ for cdef in "${CAMPAIGNS_TO_RUN[@]}"; do
     source "$exp_dir/config.env"
 
     mem_per_cpu="${MEM_PER_CPU_GB_OVERRIDE:-$DEFAULT_MEM_PER_CPU_GB}"
-
-    # Deterministic node assignment
-    node_idx=$(get_node_for_experiment "$exp_name")
-    node="${NODES[$node_idx]}"
-    partition="${PARTITIONS[$node_idx]}"
-
-    if [[ -n "$FORCED_PARTITION" ]]; then
-      partition="$FORCED_PARTITION"
-    elif [[ -n "${PARTITION_OVERRIDE:-}" ]]; then
-      partition="$PARTITION_OVERRIDE"
-    fi
+    partition="${FORCED_PARTITION:-${PARTITION_OVERRIDE:-production}}"
 
     # Campaign output directory
     camp_output_dir="$CAMPAIGNS_DIR/${camp_name}/${exp_name}"
@@ -351,7 +272,6 @@ for cdef in "${CAMPAIGNS_TO_RUN[@]}"; do
       sbatch
       --job-name "$job_name"
       --chdir "$exp_dir"
-      --nodelist "$node"
       --partition "$partition"
       --cpus-per-task "$cpus_per_task"
       --mem-per-cpu "${mem_per_cpu}G"
@@ -364,8 +284,8 @@ for cdef in "${CAMPAIGNS_TO_RUN[@]}"; do
     [[ -n "${SLURM_QOS:-}" ]] && sbatch_cmd+=(--qos "$SLURM_QOS")
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
-      echo "  [DRY-RUN] $exp_name → $node ($partition, cpus=$cpus_per_task, search=$camp_search_type)"
-      echo "$camp_name,$exp_name,$node,$partition,$cpus_per_task,${mem_per_cpu}G,$job_name,DRY_RUN," >> "$ASSIGNMENT_CSV"
+      echo "  [DRY-RUN] $exp_name ($partition, cpus=$cpus_per_task, search=$camp_search_type)"
+      echo "$camp_name,$exp_name,any,$partition,$cpus_per_task,${mem_per_cpu}G,$job_name,DRY_RUN," >> "$ASSIGNMENT_CSV"
       ((total_submitted++))
     else
       retry=0
@@ -378,8 +298,8 @@ for cdef in "${CAMPAIGNS_TO_RUN[@]}"; do
 
         if [[ $rc -eq 0 ]]; then
           job_id="$(awk '{print $NF}' <<< "$out")"
-          echo "  ✓ $exp_name → $node (job $job_id, cpus=$cpus_per_task, search=$camp_search_type)"
-          echo "$camp_name,$exp_name,$node,$partition,$cpus_per_task,${mem_per_cpu}G,$camp_search_type,$job_name,SUBMITTED,$job_id" >> "$ASSIGNMENT_CSV"
+          echo "  ✓ $exp_name (job $job_id, cpus=$cpus_per_task, search=$camp_search_type)"
+          echo "$camp_name,$exp_name,any,$partition,$cpus_per_task,${mem_per_cpu}G,$camp_search_type,$job_name,SUBMITTED,$job_id" >> "$ASSIGNMENT_CSV"
           ((total_submitted++))
           submitted=1
         else
@@ -390,7 +310,7 @@ for cdef in "${CAMPAIGNS_TO_RUN[@]}"; do
 
       if [[ $submitted -eq 0 ]]; then
         echo "  ✗ FAILED $exp_name after $MAX_RETRIES retries" >&2
-        echo "$camp_name,$exp_name,$node,$partition,$cpus_per_task,${mem_per_cpu}G,$camp_search_type,$job_name,FAILED," >> "$ASSIGNMENT_CSV"
+        echo "$camp_name,$exp_name,any,$partition,$cpus_per_task,${mem_per_cpu}G,$camp_search_type,$job_name,FAILED," >> "$ASSIGNMENT_CSV"
         ((total_failed++))
       fi
     fi
@@ -400,15 +320,8 @@ done
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo "════════════════════════════════════════════════════════════════"
-echo "Node assignment map (experiment → node, consistent across campaigns):"
-echo "────────────────────────────────────────────────────────────────"
-for exp_name in "${ALL_EXPERIMENTS[@]}"; do
-  nidx=$(get_node_for_experiment "$exp_name")
-  printf "  %-50s → %s\n" "$exp_name" "${NODES[$nidx]}"
-done
-
-echo
 echo "Launch summary"
+echo "  Partition:          ${FORCED_PARTITION:-production (default)}"
 echo "  Campaigns launched: ${#CAMPAIGNS_TO_RUN[@]}"
 echo "  Total submitted:    $total_submitted"
 echo "  Total failed:       $total_failed"
