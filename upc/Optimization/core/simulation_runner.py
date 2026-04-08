@@ -271,11 +271,11 @@ class SimulationRunner:
 
 
             metadata = self._get_simulation_metadata()
-            num_steps = self._get_total_steps(config, metadata)
+            num_steps = 1#self._get_total_steps(config, metadata)
             training_time = num_steps * (exec_time / 1e09)
             if self.verbose:
                 print(f"    ✓ Execution time: {exec_time:.2f}ns")
-                print(f"    ✓ Total training time: {training_time:.2f}s")
+                ###print(f"    ✓ Total training time: {training_time:.2f}s")
             # Store the raw per-step exec time (ns) in metadata so the tracker
             # can compare it against trace ticks (also in ns).
             metadata['exec_time_ns'] = exec_time
@@ -290,7 +290,7 @@ class SimulationRunner:
                     workload_file=workload_file,
                     power_config_path=self.net_sim_config.get('power_config_path'),
                     verbose=self.verbose,
-                    num_steps=num_steps,
+                    num_steps=1,
                 )
 
             # 6. Return with file paths and metadata if requested
@@ -300,7 +300,7 @@ class SimulationRunner:
                 metadata['was_killed'] = False
                 metadata['sim_failed'] = False
                 metadata['peak_memory_gb'] = peak_memory
-                metadata['num_steps'] = num_steps
+                metadata['num_steps'] = 1
                 metadata.update(power_metrics)  # Merge power metrics (empty dict if not g2 or failed)
 
                 return training_time , is_oom, file_paths, metadata

@@ -161,7 +161,7 @@ def main():
     multiplier = 30
     EARLY_STOPPING_PATIENCE = multiplier * args.early_stopping_patience if args.early_stopping_patience > 0 else multiplier * N_WORKERS
     EARLY_STOPPING_MIN_EVALUATIONS = args.early_stopping_min_evaluations if args.early_stopping_min_evaluations > 0 else INIT_SAMPLES
-
+    ROUTING_MODE = "ecmp"
     default_search_space_path = os.path.join(
         os.path.dirname(__file__),
         "..",
@@ -190,7 +190,7 @@ def main():
         print("Tracker: Enabled (kill at 1.5x threshold)\n")
     else:
         print("Tracker: Disabled\n")
-
+    print(f"{MODEL_NAME}_{objective_key}_{EARLY_STOPPING_PATIENCE}_{ENABLE_TRACKER}_{N_WORKERS}_{ROUTING_MODE}sweep")
     print("1. Creating search space...")
     search_space = create_search_space(
         search_space_path,
@@ -274,6 +274,7 @@ def main():
         early_stopping_patience=EARLY_STOPPING_PATIENCE,
         early_stopping_min_evaluations=EARLY_STOPPING_MIN_EVALUATIONS,
         search_type=args.search_type,
+        save_dir=os.path.join("./experiments", f"{MODEL_NAME}_{objective_key}_{EARLY_STOPPING_PATIENCE}_{ENABLE_TRACKER}_{N_WORKERS}_{ROUTING_MODE}sweep")
     )
     print(f"   Using: {optimizer}")
     if optimizer.tracker:

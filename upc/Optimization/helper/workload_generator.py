@@ -31,11 +31,15 @@ def generate_workload_with_env(design_point: Dict, model, folder_name, suffix=""
     pp = design_point['pp']
     sharded = design_point['sharded']
     din, dout, dmodel, dff, batch, micro_batch, seq, head, num_stacks = Model.get_model_params(model)
-    batch = [batch[0] * dp]
-    micro_batch = batch[0] * dp
+    #batch = [batch[0] * dp]
+    #micro_batch = batch[0] * dp
+    batch = [batch[0]]
+    micro_batch = batch[0]
     if (design_point.get('batch_size') is not None):
-        batch = [design_point['batch_size'] * dp]
-        micro_batch = design_point['batch_size']  * dp
+        #batch = [design_point['batch_size'] * dp]
+        #micro_batch = design_point['batch_size']  * dp
+        batch = [design_point['batch_size']]
+        micro_batch = design_point['batch_size'] 
         
     model_type = Model.get_model_type(model)
     

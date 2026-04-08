@@ -193,7 +193,7 @@ DEFAULT_G2_NETWORK_CONFIG = {
     "bandwidth_unit": "GB/s",
     "packet_size": 1500,
     "header_size": 48,
-    "routing_mode": "foldedclos_uniform",
+    "routing_mode": "ecmp",
     "ecmp_seed": 42,
     "topology_file": os.environ['ASTRA_SIM_ROOT'] + "/upc/configuration/g2/FoldedClos"
 }
@@ -601,14 +601,26 @@ def generate_g2_network_config(config: Dict[str, Any], net_sim_config: Dict[str,
             # Keep incrementing K until actual_npus is >= num_npus AND is a power of 2
             def is_power_of_2(n):
                 return n > 0 and (n & (n - 1)) == 0
+                        
+            def is_even(n):
+                return n % 2 == 0
             
-            while actual_npus < num_npus or not is_power_of_2(actual_npus):
+            while actual_npus < num_npus or not is_even(actual_npus):
                 K += 1
+                if K % 2 != 0:  # K must be even for a valid folded Clos topology
+                    K += 1
                 actual_nodes = int(K**3 / 4)
                 actual_npus = actual_nodes * npus_per_node
             
             topology_config['K'] = K
         
+        if topology_config['num_npus'] == 32 or topology_config['num_npus'] == 64 or topology_config['num_npus'] == 128:
+            K = 4
+            topology_config['K'] = K
+        else:
+            if topology_config['num_npus'] == 256:
+                K = 6
+                topology_config['K'] = K
         # Map bandwidth parameters
         if 'intra-node-bw' in config:
             bw_config['intra_node'] = config['intra-node-bw']

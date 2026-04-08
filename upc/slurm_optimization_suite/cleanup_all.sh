@@ -49,6 +49,10 @@ ACTIVE_EXPERIMENTS=(
   "llama8b_32npus_time_and_bw"
   "llama8b_32npus_time_and_throughput_per_energy"
   "llama8b_32npus_latency_network"
+  "llama8b_32npus_energy"
+  "gpt60b_128npus_energy"
+  "llama70b_128npus_energy"
+  "gpt175b_1024npus_energy"
   # "llama8b_32npus_time"          # Example: uncomment to KEEP this experiment
 )
 

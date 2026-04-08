@@ -9,7 +9,7 @@ def output_log_parser(log_file):
         import re
         matches_exec = re.findall(r'\[statistics\] \[info\] sys\[(\d+)\], Wall time: (\d+)', content)
         matches_oom = re.findall(r'\[workload\] \[info\] sys\[(\d+)\] is OOM: (\d+)', content)
-        matches_peak_memory = re.findall(r'\[workload\] \[info\] sys\[(\d+)\] Peak memory usage: (\d+)', content)
+        matches_peak_memory = re.findall(r'\[workload\] \[info\] sys\[(\d+)\] peak memory usage: (\d+)', content)
 
         slowest_npu = None
         is_any_oom = None
