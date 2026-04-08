@@ -28,6 +28,7 @@ sys.path.insert(0, os.environ['ASTRA_SIM_ROOT'] + '/upc/Optimization')
 from ..helper import workload_generator, output_parser, config_generator, config_parser
 from .simulation_tracker import SimulationTracker
 from .power_estimator import run_power_estimation
+from .memory_estimator import estimate_training_memory_per_gpu
 
 
 class SimulationRunner:
@@ -66,6 +67,8 @@ class SimulationRunner:
         network_log_dir: Optional[str] = None,
         tracker: Optional[SimulationTracker] = None,
         total_data_size_tokens: Optional[int] = 300_000_000_000,  # Default to 300M tokens for total training data size
+        gpu_memory_gb: float = 80.0,
+        skip_sim: bool = False,
     ):
         """
         Initialize simulation runner.
@@ -96,7 +99,9 @@ class SimulationRunner:
         self.verbose = verbose
         self.tracker = tracker
         self.total_data_size_tokens = total_data_size_tokens
-
+        self.gpu_memory_gb = gpu_memory_gb
+        self.skip_sim = skip_sim
+        
         # Folder names
         self.folder_name = f"{folder_prefix}_{model_name}"
         print(f"Folder name for outputs: {self.folder_name}, Folder prefix: {folder_prefix}, Model name: {model_name}")
@@ -177,6 +182,51 @@ class SimulationRunner:
         try:
             
             sim_start_time = time.time()  # Track wall clock time
+
+            # --- Analytical memory prediction (before trace generation) ---
+            din, _, dmodel, dff, default_batch, _, seq, head, num_stacks = \
+                workload_generator.Model.get_model_params(workload_generator.Model(self.model_num))
+            batch_size_per_gpu = config.get('batch_size', default_batch[0])
+            model_type = workload_generator.Model.get_model_type(workload_generator.Model(self.model_num))
+
+            predicted_memory_gb = estimate_training_memory_per_gpu(
+                vocab_size=din, dmodel=dmodel, dff=dff,
+                num_heads=head, num_layers=num_stacks,
+                batch_size_per_gpu=batch_size_per_gpu, seq_len=seq,
+                dp=dp, tp=mp, pp=pp, sp=sp, fsdp=sharded,
+                model_type=model_type,
+            )
+            predicted_oom = predicted_memory_gb > self.gpu_memory_gb
+
+            if self.verbose:
+                print(f"    Memory estimate: {predicted_memory_gb:.2f} GB / {self.gpu_memory_gb} GB"
+                      f" -> {'OOM' if predicted_oom else 'OK'}")
+
+            if self.skip_sim and predicted_oom:
+                if self.verbose:
+                    print(f"    Predicted OOM — skipping simulation for model\
+                        DP={dp}, MP={mp}, SP={sp}, PP={pp}, Sharded={sharded}\
+                        Batch size per GPU={batch_size_per_gpu}, \n \
+                            Vocab size={din}, \n\
+                                Seq len={seq},  \n\
+                                    dmodel={dmodel},  \n\
+                                        dff={dff},  \n\
+                                            heads={head},  \n\
+                                                layers={num_stacks},  \n\
+                                                    Model type={model_type} \n\
+                                                        Predicted memory={predicted_memory_gb:.2f} GB, GPU memory={self.gpu_memory_gb} GB")
+                metadata = {
+                    'predicted_memory_gb': predicted_memory_gb,
+                    'gpu_memory_gb': self.gpu_memory_gb,
+                    'sim_skipped_oom': True,
+                    'was_killed': False,
+                    'sim_failed': False,
+                }
+                if return_paths:
+                    return float('inf'), True, {}, metadata
+                else:
+                    return float('inf'), True
+
             # 0. Generate config files (ALWAYS, using config_generator)
             self.system_config, self.network_config, self.memory_config = \
                 config_generator.generate_all_configs(config, net_sim_config=self.net_sim_config)
@@ -254,8 +304,10 @@ class SimulationRunner:
             # 4. Extract execution time
             if self.verbose:
                 print(f"    Parsing output log...")
-            exec_time, is_oom, peak_memory = self._output_log_parser(workload_file, suffix=suffix)
-            
+            exec_time, _parser_oom, peak_memory = self._output_log_parser(workload_file, suffix=suffix)
+            # Override parser OOM with analytical memory prediction
+            is_oom = predicted_oom
+            peak_memory = predicted_memory_gb
             if exec_time is None:
                 if self.verbose:
                     print("    ⚠️  Could not extract execution time", result)
@@ -279,6 +331,7 @@ class SimulationRunner:
             # Store the raw per-step exec time (ns) in metadata so the tracker
             # can compare it against trace ticks (also in ns).
             metadata['exec_time_ns'] = exec_time
+            metadata['predicted_memory_gb'] = predicted_memory_gb
 
             # 5. Run power estimation when explicitly requested (estimate_power=1, Mode D)
             power_metrics = {}

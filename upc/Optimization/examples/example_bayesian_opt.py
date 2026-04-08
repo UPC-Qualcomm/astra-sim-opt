@@ -32,14 +32,15 @@ def main():
     NETWORK_NAME = "FoldedClos"
     BUDGET = 30
     INIT_SAMPLES = 5
-    
+    SKIP_SIM = True  # Set to True to skip actual simulation for testing purposes
     print("="*70)
     print("EXAMPLE: Bayesian Optimization")
     print("="*70)
     print(f"Model: {MODEL_NAME}")
     print(f"NPUs: {NUM_NPUS}")
     print(f"Network: {NETWORK_NAME}")
-    print(f"Budget: {BUDGET} evaluations\n")
+    print(f"Budget: {BUDGET} evaluations")
+    print(f"Skip Simulation: {SKIP_SIM}\n")
     
     # 1. Setup search space
     print("1. Creating search space...")
@@ -69,7 +70,8 @@ def main():
         num_npus=NUM_NPUS,
         network_name=NETWORK_NAME,
         folder_prefix="EXAMPLE_BO",
-        verbose=True  # Enable verbose to see detailed error messages
+        verbose=True,  # Enable verbose to see detailed error messages
+        skip_sim=SKIP_SIM  # Skip actual simulation for testing
     )
     print(f"   Using: {sim_runner}")
     

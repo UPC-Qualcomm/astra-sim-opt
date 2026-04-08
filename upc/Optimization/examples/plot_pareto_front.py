@@ -261,8 +261,8 @@ def plot_pareto_front_static(
         print("❌ Matplotlib not available. Install with: pip install matplotlib")
         return None
     
-    # Create plot — single-column A4/A* paper: 3.5 × 2.8 in at 300 dpi
-    fig, ax = plt.subplots(figsize=(3.5, 2.8))
+    # Create plot — single-column A4/A* paper: 3.5 × 1.8 in at 300 dpi
+    fig, ax = plt.subplots(figsize=(3.5, 1.8))
     fig.subplots_adjust(left=0.16, right=0.97, top=0.93, bottom=0.15)
 
     # DeepHyper negates minimized objectives internally (converts to maximize).
