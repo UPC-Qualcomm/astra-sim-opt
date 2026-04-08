@@ -271,11 +271,11 @@ class SimulationRunner:
 
 
             metadata = self._get_simulation_metadata()
-            num_steps = 1#self._get_total_steps(config, metadata)
+            num_steps = self._get_total_steps(config, metadata)
             training_time = num_steps * (exec_time / 1e09)
             if self.verbose:
                 print(f"    ✓ Execution time: {exec_time:.2f}ns")
-                ###print(f"    ✓ Total training time: {training_time:.2f}s")
+                print(f"    ✓ Total training time: {training_time:.2f}s")
             # Store the raw per-step exec time (ns) in metadata so the tracker
             # can compare it against trace ticks (also in ns).
             metadata['exec_time_ns'] = exec_time
@@ -290,7 +290,7 @@ class SimulationRunner:
                     workload_file=workload_file,
                     power_config_path=self.net_sim_config.get('power_config_path'),
                     verbose=self.verbose,
-                    num_steps=1,
+                    num_steps=num_steps,
                 )
 
             # 6. Return with file paths and metadata if requested
@@ -300,7 +300,7 @@ class SimulationRunner:
                 metadata['was_killed'] = False
                 metadata['sim_failed'] = False
                 metadata['peak_memory_gb'] = peak_memory
-                metadata['num_steps'] = 1
+                metadata['num_steps'] = num_steps
                 metadata.update(power_metrics)  # Merge power metrics (empty dict if not g2 or failed)
 
                 return training_time , is_oom, file_paths, metadata
@@ -393,9 +393,10 @@ class SimulationRunner:
         Returns:
             Estimated total number of steps for the full training run
         """
-        global_batch_size = config['dp'] * metadata['batch_size']
+        global_batch_size = config['dp'] * config['batch_size']
         tokens_per_step = global_batch_size * metadata['sequence_length']
         total_num_steps = self.total_data_size_tokens / tokens_per_step
+        #print(f"    Estimated total steps: {total_num_steps:.2f}, global_batch_size={global_batch_size}, sequence_length={metadata['sequence_length']})")
         return total_num_steps
             
     def _run_astrasim(

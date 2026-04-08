@@ -193,7 +193,7 @@ DEFAULT_G2_NETWORK_CONFIG = {
     "bandwidth_unit": "GB/s",
     "packet_size": 1500,
     "header_size": 48,
-    "routing_mode": "ecmp",
+    "routing_mode": "foldedclos_uniform",
     "ecmp_seed": 42,
     "topology_file": os.environ['ASTRA_SIM_ROOT'] + "/upc/configuration/g2/FoldedClos"
 }

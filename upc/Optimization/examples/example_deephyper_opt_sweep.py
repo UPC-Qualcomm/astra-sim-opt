@@ -161,7 +161,7 @@ def main():
     multiplier = 30
     EARLY_STOPPING_PATIENCE = multiplier * args.early_stopping_patience if args.early_stopping_patience > 0 else multiplier * N_WORKERS
     EARLY_STOPPING_MIN_EVALUATIONS = args.early_stopping_min_evaluations if args.early_stopping_min_evaluations > 0 else INIT_SAMPLES
-    ROUTING_MODE = "ecmp"
+    ROUTING_MODE = "foldedclos_uniform"
     default_search_space_path = os.path.join(
         os.path.dirname(__file__),
         "..",

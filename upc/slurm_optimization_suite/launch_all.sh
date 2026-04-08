@@ -32,7 +32,7 @@ MAX_RETRIES_PER_EXPERIMENT=3
 
 # Global defaults (can be overridden per experiment in config.env)
 DEFAULT_CORES_PERCENT=32
-DEFAULT_MEM_PER_CORE_GB=10
+DEFAULT_MEM_PER_CORE_GB=4
 MAX_CPUS_PER_EXPERIMENT=1
 MIN_CPUS_PER_EXPERIMENT=1   # Never schedule fewer than this many CPUs; skip node if memory can't fit even this many
 
@@ -42,13 +42,13 @@ MIN_CPUS_PER_EXPERIMENT=1   # Never schedule fewer than this many CPUs; skip nod
 #################################################################################
 ACTIVE_EXPERIMENTS=(
   "llama70b_128npus_time"
-  "llama70b_128npus_time_and_bw"
+  #"llama70b_128npus_time_and_bw"
   "llama70b_128npus_latency_network"
   "gpt60b_128npus_time"
-  "gpt60b_128npus_time_and_bw"
+  #"gpt60b_128npus_time_and_bw"
   "gpt60b_128npus_latency_network"
   "llama8b_32npus_time"
-  "llama8b_32npus_time_and_bw"
+  #"llama8b_32npus_time_and_bw"
   "llama8b_32npus_latency_network"
   "llama70b_128npus_energy"
   "llama70b_128npus_edp"
