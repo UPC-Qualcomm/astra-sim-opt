@@ -48,7 +48,7 @@ NUM_NPUS             = 64
 NETWORK_NAME         = "FoldedClos"
 FOLDER_PREFIX        = "BRUTEFORCE"
 OBJECTIVE_TYPE       = "latency_network"   # any key accepted by create_objective()
-N_WORKERS            = 11         # Number of parallel worker processes
+N_WORKERS            = 10         # Number of parallel worker processes
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ def main():
         "routing_mode": "foldedclos_uniform",
         "estimate_power": 1,
         "power_config_path": os.path.join(
-            os.environ["ASTRA_SIM_ROOT"], "upc", "power_model", "a100_config.json"
+            os.environ["ASTRA_SIM_ROOT"], "upc", "power_model", "h100_config.json"
         ),
         "topology_config": {
             "num_npus": search_space.num_npus,

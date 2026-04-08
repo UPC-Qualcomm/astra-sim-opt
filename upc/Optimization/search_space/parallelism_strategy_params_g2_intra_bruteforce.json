@@ -9,20 +9,20 @@
         "dp": [1, 2, 4, 8, 16, 32],
         "mp": [1, 2, 4, 8, 16, 32],
         "sp": [1, 2, 4, 8, 16, 32],
-        "pp": [1, 2, 4],
-        "FSDP": [1]
+        "pp": [1, 2, 4, 8, 16, 32],
+        "FSDP": [1, 0]
     },
     "system":{
         "collective-optimization": ["localBWAware", "baseline"],
-        "active-chunks-per-dimension": [1, 2],
+        "active-chunks-per-dimension": [1, 2, 4, 8],
         "preferred-dataset-splits": [1]
     },
     "network": {
-        "inter-node-bw": [200, 100],
-        "intra-node-bw": [900, 600]
+        "inter-node-bw": [200],
+        "intra-node-bw": [900]
     },
     "model": {
-        "batch_size": {"min": 8, "max": 24, "step": 8}
+        "batch_size": {"min": 1, "max": 16, "step": 1}
     },
     "constraints": {
         "parallelism_strategy": "dp * mp * sp * pp = npu_count",
