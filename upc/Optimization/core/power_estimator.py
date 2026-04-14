@@ -123,7 +123,7 @@ def run_power_estimation(
             power_config_path = os.path.join(upc_root, 'power_model', 'a100_config.json')
 
         if verbose:
-            print(f"    ⚡ Running power estimation (Mode A - Full LPM)...")
+            print(f"    ⚡ Running power estimation (Mode D - Full LPM)...")
 
         # Run power model, suppressing its stdout unless verbose
         buf = io.StringIO()
@@ -131,7 +131,7 @@ def run_power_estimation(
             model = analyze_single_mode(
                 log_file,
                 link_traffic,
-                mode='A',
+                mode='D',
                 output_json=output_json,
                 config_path=power_config_path,
                 nodemap_file=nodemap,
