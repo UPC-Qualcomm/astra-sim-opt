@@ -1,6 +1,0 @@
-topology: [ Switch, FullyConnected ]
-npus_count: [ 8, 8 ]
-bandwidth: [ 900, 200.0 ]  # GB/s
-latency: [ 500.0, 500.0 ]  # ns
-packet_size: 1500  # in bytes
-header_size: 48   # in bytes

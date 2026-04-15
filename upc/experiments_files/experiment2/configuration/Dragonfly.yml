@@ -1,9 +1,0 @@
-topology: [ Switch, Switch ]
-npus_count: [ 4, 4 ]
-bandwidth: [ 25.0, 25.0 ]  # GB/s
-latency: [ 666, 666 ]  # ns
-packet_size: 9000  # in bytes
-header_size: 36   # in bytes
-ecmp_seed: 42     # random seed for ECMP path selection
-bandwidth_unit: GB/s
-topology_file: "/app/astra-sim/upc/configuration/g2/topologies/G2_Dragonfly_16.0_topology0.json"
