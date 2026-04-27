@@ -38,21 +38,21 @@ runs
 astraenv/
 astraenv39/
 
-upc/comparison_run/
-upc_xavi/
-upc/output/
-upc/workload/
-upc/log/
-upc/results/
-upc/network_log/
-upc/streamlit/temp
-upc/comparing_networks/workload/
-upc/Optimization/histogram/data/
-upc/Optimization/temp/config/
-upc/configuration/ns3/output/
+optimos/comparison_run/
+optimos_xavi/
+optimos/output/
+optimos/workload/
+optimos/log/
+optimos/results/
+optimos/network_log/
+optimos/streamlit/temp
+optimos/comparing_networks/workload/
+optimos/Optimization/histogram/data/
+optimos/Optimization/temp/config/
+optimos/configuration/ns3/output/
 
 ## Deadlock analysis
-upc/zz_analyze_error_analysis
+optimos/zz_analyze_error_analysis
 
 **/*/__pycache__
 
@@ -61,17 +61,17 @@ upc/zz_analyze_error_analysis
 our_examples/
 stg_generated_examples/
 
-upc/Optimization/examples/experiments
-upc/create_topology_old
-upc/Optimization_new
-upc/order_comparison
-upc/aggregated_results
-upc/scaling_analysis
-upc/prediction_analysis
-upc/ml_model/network*
-upc/ml_model/evaluation*
-upc/ml_model/oom_analysis
-upc/ml_model/output
-upc/ml_model/trained*
-upc/create_topology/topologies
-upc/configuration/topologies
+optimos/Optimization/examples/experiments
+optimos/create_topology_old
+optimos/Optimization_new
+optimos/order_comparison
+optimos/aggregated_results
+optimos/scaling_analysis
+optimos/prediction_analysis
+optimos/ml_model/network*
+optimos/ml_model/evaluation*
+optimos/ml_model/oom_analysis
+optimos/ml_model/output
+optimos/ml_model/trained*
+optimos/create_topology/topologies
+optimos/configuration/topologies

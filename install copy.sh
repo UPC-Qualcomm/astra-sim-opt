@@ -26,30 +26,16 @@ git submodule update --init --recursive
 # the install remains self-contained and does not depend on a separate repo fix.
 python3 - <<'PY'
 from pathlib import Path
+import re
 
 header = Path('extern/graph_frontend/chakra/src/feeder_v3/et_feeder_node.h')
-lines = header.read_text().splitlines(keepends=True)
-
-target_idx = -1
-for i, line in enumerate(lines):
-    if 'get_chakra_node() const;' in line and 'shared_ptr' in line:
-        target_idx = i
-        break
-
-if target_idx == -1:
-    raise SystemExit('Failed to find ETFeederNode::get_chakra_node() declaration')
-
-# If the nearest previous non-empty line is already "public:", nothing to do.
-prev_non_empty = target_idx - 1
-while prev_non_empty >= 0 and lines[prev_non_empty].strip() == '':
-    prev_non_empty -= 1
-
-if prev_non_empty >= 0 and lines[prev_non_empty].strip() == 'public:':
-    raise SystemExit(0)
-
-indent = lines[target_idx][: len(lines[target_idx]) - len(lines[target_idx].lstrip())]
-lines.insert(target_idx, f'{indent}public:\n')
-header.write_text(''.join(lines))
+text = header.read_text()
+pattern = r'(\n\s*)private:\n(\s*)std::shared_ptr<const ChakraNode> get_chakra_node\(\) const;\n'
+replacement = r'\1public:\n\2std::shared_ptr<const ChakraNode> get_chakra_node() const;\n'
+updated_text, count = re.subn(pattern, replacement, text, count=1)
+if count == 0:
+    raise SystemExit('Failed to patch ETFeederNode::get_chakra_node() access level')
+header.write_text(updated_text)
 PY
 
 ./build/astra_analytical/build.sh
@@ -62,7 +48,7 @@ G2_SIM_BIN=${ASTRA_SIM}/build/astra_g2/build/bin/AstraSim_G2_congestion
 echo "export G2_SIM_BIN=${G2_SIM_BIN}" >> "${HOME}/.bashrc"
 
 echo "export ASTRA_SIM_ROOT=${ASTRA_SIM}" >> "${HOME}/.bashrc"
-ASTRA_SIM_PYTHON=$(realpath ../astraenv/bin/python)
+ASTRA_SIM_PYTHON=$(realpath ../astraenv39/bin/python)
 echo "export ASTRA_SIM_PYTHON=${ASTRA_SIM_PYTHON}" >> "${HOME}/.bashrc"
 
 ./build/astra_ns3/build.sh -c
