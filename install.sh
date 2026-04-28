@@ -1,7 +1,31 @@
 #!/bin/bash
 
+set -euo pipefail
 
-python3 -m venv astraenv
+# Phase 1: Ensure pyenv + Python 3.11.11 are available and use that exact
+# interpreter to create the astraenv virtual environment.
+PYENV_ROOT="${HOME}/.pyenv"
+if [ ! -x "${PYENV_ROOT}/bin/pyenv" ]; then
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL https://pyenv.run | bash
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- https://pyenv.run | bash
+    else
+        echo "Error: need curl or wget to install pyenv" >&2
+        exit 1
+    fi
+fi
+
+export PYENV_ROOT
+export PATH="${PYENV_ROOT}/bin:${PATH}"
+eval "$(pyenv init - bash)"
+
+if ! pyenv versions --bare | grep -qx "3.11.11"; then
+    pyenv install 3.11.11
+fi
+
+PY311="${PYENV_ROOT}/versions/3.11.11/bin/python3.11"
+"${PY311}" -m venv astraenv
 
 source astraenv/bin/activate
 
@@ -20,6 +44,35 @@ ASTRA_SIM=$(realpath ./astra-sim)
 cd ${ASTRA_SIM}
 
 git submodule update --init --recursive
+
+ASTRA_SIM_BIN_AWARE=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware
+ASTRA_SIM_BIN_UNAWARE=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware
+ASTRA_SIM_PYTHON=${ASTRA_SIM}/astraenv/bin/python
+
+upsert_bashrc_export() {
+    local key="$1"
+    local value="$2"
+    local bashrc_file="${HOME}/.bashrc"
+
+    if grep -q "^export ${key}=" "${bashrc_file}"; then
+        sed -i "s|^export ${key}=.*|export ${key}=${value}|" "${bashrc_file}"
+    else
+        echo "export ${key}=${value}" >> "${bashrc_file}"
+    fi
+}
+
+upsert_bashrc_export "PYENV_ROOT" '"$HOME/.pyenv"'
+upsert_bashrc_export "ASTRA_SIM_BIN_AWARE" "${ASTRA_SIM_BIN_AWARE}"
+upsert_bashrc_export "ASTRA_SIM_BIN_UNAWARE" "${ASTRA_SIM_BIN_UNAWARE}"
+upsert_bashrc_export "ASTRA_SIM_ROOT" "${ASTRA_SIM}"
+upsert_bashrc_export "ASTRA_SIM_PYTHON" "${ASTRA_SIM_PYTHON}"
+
+if ! grep -q 'pyenv init - bash' "${HOME}/.bashrc"; then
+    {
+        echo '[[ -d "$PYENV_ROOT/bin" ]] && export PATH="$PYENV_ROOT/bin:$PATH"'
+        echo 'eval "$(pyenv init - bash)"'
+    } >> "${HOME}/.bashrc"
+fi
 
 # Chakra's ETFeederNode::get_chakra_node() is kept private upstream, but
 # AstraSim's workload code needs to call it during the build; patch it here so
@@ -53,15 +106,6 @@ header.write_text(''.join(lines))
 PY
 
 ./build/astra_analytical/build.sh
-
-ASTRA_SIM_BIN_AWARE=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware
-echo "export ASTRA_SIM_BIN_AWARE=${ASTRA_SIM_BIN_AWARE}" >> "${HOME}/.bashrc"
-ASTRA_SIM_BIN_UNAWARE=${ASTRA_SIM}/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware
-echo "export ASTRA_SIM_BIN_UNAWARE=${ASTRA_SIM_BIN_UNAWARE}" >> "${HOME}/.bashrc"
-
-echo "export ASTRA_SIM_ROOT=${ASTRA_SIM}" >> "${HOME}/.bashrc"
-ASTRA_SIM_PYTHON=$(realpath ../astraenv/bin/python)
-echo "export ASTRA_SIM_PYTHON=${ASTRA_SIM_PYTHON}" >> "${HOME}/.bashrc"
 
 ./build/astra_ns3/build.sh -c
 
