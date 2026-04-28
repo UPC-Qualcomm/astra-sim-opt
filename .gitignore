@@ -62,17 +62,7 @@ our_examples/
 stg_generated_examples/
 
 optimos/Optimization/examples/experiments
-optimos/create_topology_old
-optimos/Optimization_new
 optimos/order_comparison
-optimos/aggregated_results
-optimos/scaling_analysis
-optimos/prediction_analysis
-optimos/ml_model/network*
-optimos/ml_model/evaluation*
-optimos/ml_model/oom_analysis
-optimos/ml_model/output
-optimos/ml_model/trained*
 optimos/create_topology/topologies
 optimos/configuration/topologies
 optimos/optimization_suite/experiments/*/logs/
