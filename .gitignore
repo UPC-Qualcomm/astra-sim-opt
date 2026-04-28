@@ -75,6 +75,6 @@ optimos/ml_model/output
 optimos/ml_model/trained*
 optimos/create_topology/topologies
 optimos/configuration/topologies
-optimos/slurm_optimization_suite/experiments/*/logs/
-optimos/slurm_optimization_suite/experiments/*/experiments/
-optimos/slurm_optimization_suite/launch_logs/
+optimos/optimization_suite/experiments/*/logs/
+optimos/optimization_suite/experiments/*/experiments/
+optimos/optimization_suite/launch_logs/
