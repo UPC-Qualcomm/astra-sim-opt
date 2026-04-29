@@ -16,9 +16,9 @@
 [submodule "extern/network_backend/analytical"]
 	path = extern/network_backend/analytical
 	url = git@github.com:UPC-Qualcomm/astra-network-analytical-opt.git
-[submodule "extern/symbolic_tensor_graph-opt"]
-	path = extern/symbolic_tensor_graph-opt
-	url = git@github.com:UPC-Qualcomm/symbolic_tensor_graph-opt.git
 [submodule "extern/network_backend/ns-3"]
 	path = extern/network_backend/ns-3
 	url = git@github.com:UPC-Qualcomm/astra-network-ns3.git
+[submodule "extern/symbolic_tensor_graph"]
+	path = extern/symbolic_tensor_graph
+	url = git@github.com:UPC-Qualcomm/symbolic_tensor_graph-opt.git
