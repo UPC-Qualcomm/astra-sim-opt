@@ -12,15 +12,27 @@ LICENSE file in the root directory of this source tree.
 
 #include "astra-sim/system/Callable.hh"
 #include "astra-sim/system/CommunicatorGroup.hh"
+#include "astra-sim/workload/Synchronizer.hh"
+#include "astra-sim/workload/CollCommSynchronizer.hh"
+#include "astra-sim/workload/CollectiveOrderEnforcer.hh"
 #include "astra-sim/workload/HardwareResource.hh"
-#include "astra-sim/workload/Statistics.hh"
 #include "astra-sim/workload/LocalMemUsageTracker.hh"
+#include "astra-sim/workload/Statistics.hh"
 #include "extern/graph_frontend/chakra/src/feeder_v3/et_feeder.h"
 
 namespace AstraSim {
 
 class Sys;
 class DataSet;
+class CollectiveOrderEnforcer;
+
+// Synchronization mode for collective communications
+enum class CollectiveSyncMode {
+    BARRIER,          // Full barrier synchronization (high overhead)
+    ORDER_INJECTION,  // Lightweight dependency injection (low overhead)
+    ASTRASIM_BARRIER,
+    DISABLED          // No synchronization (for testing only)
+};
 
 class Workload : public Callable {
   public:
@@ -45,6 +57,8 @@ class Workload : public Callable {
     void issue_comp(std::shared_ptr<Chakra::FeederV3::ETFeederNode> node);
     void issue_comm(std::shared_ptr<Chakra::FeederV3::ETFeederNode> node);
     void issue_coll_comm(std::shared_ptr<Chakra::FeederV3::ETFeederNode> node);
+    void dispatch_coll_comm(
+        std::shared_ptr<Chakra::FeederV3::ETFeederNode> node);
     void issue_send_comm(std::shared_ptr<Chakra::FeederV3::ETFeederNode> node);
     void issue_recv_comm(std::shared_ptr<Chakra::FeederV3::ETFeederNode> node);
     void skip_invalid(std::shared_ptr<Chakra::FeederV3::ETFeederNode> node);
@@ -59,9 +73,14 @@ class Workload : public Callable {
     HardwareResource* hw_resource;
     Sys* sys;
     Statistics* stats;
+    std::shared_ptr<Synchronizer> synchronizer;
+    std::shared_ptr<CollCommSynchronizer> coll_comm_synchronizer;
+    std::unique_ptr<CollectiveOrderEnforcer> order_enforcer;
+    CollectiveSyncMode sync_mode;
     std::unique_ptr<LocalMemUsageTracker> local_mem_usage_tracker;
     std::unordered_map<int, uint64_t> collective_comm_node_id_map;
     std::unordered_map<int, DataSet*> collective_comm_wrapper_map;
+    std::unordered_map<uint64_t, uint64_t> tensor_size_cache;
     bool is_finished;
 
   private:

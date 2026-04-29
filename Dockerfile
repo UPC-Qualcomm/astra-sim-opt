@@ -21,11 +21,16 @@ RUN apt -y install \
     make cmake \
     libboost-dev libboost-program-options-dev \
     openmpi-bin openmpi-doc libopenmpi-dev \
-    python3.11 python3-pip python3-venv \
+    software-properties-common \
     graphviz
 
-## Create Python venv: Required for Python 3.11
-RUN python3 -m venv /opt/venv/astra-sim
+## Install Python 3.9 from deadsnakes PPA
+RUN add-apt-repository ppa:deadsnakes/ppa -y
+RUN apt -y update
+RUN apt -y install python3.11 python3.11-venv python3.11-dev python3-pip
+
+## Create Python venv with Python 3.11
+RUN python3.11 -m venv /opt/venv/astra-sim
 ENV PATH="/opt/venv/astra-sim/bin:$PATH"
 RUN pip3 install --upgrade pip
 
@@ -85,10 +90,31 @@ RUN pip3 install protobuf==5.${PROTOBUF_VER}
 
 # Set the environment variable
 ENV PROTOBUF_FROM_SOURCE=True
-### ======================================================
+
+
+### ========= Python Dependencies Installation ===========
+RUN pip3 install graphviz pydot sympy tqdm seaborn matplotlib
+RUN pip3 install scikit-learn altair scipy umap-learn xgboost intervaltree ipykernel
+
+
+### ============= ASTRA-SIM Setup ========================
+## Create directory for mounting ASTRA-SIM
+RUN mkdir -p /app/astra-sim
+
+## Set environment variables for ASTRA-SIM binaries
+ENV ASTRA_SIM_BIN_AWARE=/app/astra-sim/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Aware
+ENV ASTRA_SIM_BIN_UNAWARE=/app/astra-sim/build/astra_analytical/build/bin/AstraSim_Analytical_Congestion_Unaware
+ENV G2_SIM_BIN=/app/astra-sim/build/astra_g2/build/bin/AstraSim_G2_congestion
+
+## Set path environment variables for portability
+ENV ASTRA_SIM_ROOT=/app/astra-sim
+ENV ASTRA_SIM_PYTHON=/opt/venv/astra-sim/bin/python
 
 
 ### ================== Finalize ==========================
 ## Move to the application directory
 WORKDIR /app/astra-sim
+
+## Default command: start a bash shell
+CMD ["/bin/bash"]
 ### ======================================================

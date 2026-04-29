@@ -246,8 +246,8 @@ void qp_finish_print_log(FILE *fout, Ptr<RdmaQueuePair> q) {
                                         // required (with header but no INT)
   uint64_t standalone_fct = base_rtt + total_bytes * 8000000000lu / b;
   // sip, dip, sport, dport, size (B), start_time, fct (ns), standalone_fct (ns)
-  fprintf(fout, "%08x %08x %u %u %lu %lu %lu %lu\n", q->sip.Get(), q->dip.Get(),
-          q->sport, q->dport, q->m_size, q->startTime.GetTimeStep(),
+  fprintf(fout, "%08x %08x %u %u %lu %lu %lu %lu %lu\n", q->sip.Get(), q->dip.Get(),
+          q->sport, q->dport, q->m_size, total_bytes, q->startTime.GetTimeStep(),
           (Simulator::Now() - q->startTime).GetTimeStep(), standalone_fct);
   fflush(fout);
 }
@@ -281,16 +281,16 @@ void qp_finish(FILE *fout, Ptr<RdmaQueuePair> q) {
   notify_receiver_receive_data(sid, did, q->m_size, tag);
 }
 
-int setup_ns3_simulation(string network_configuration) {
+Ptr<FlowMonitor> setup_ns3_simulation(string network_configuration) {
   if (!ReadConf(network_configuration))
-    return -1;
+    return nullptr;
 
   SetConfig();
 
-  if (!SetupNetwork(qp_finish)) {
-    return -1;
+  Ptr<FlowMonitor> monitor = SetupNetwork(qp_finish);
+  if (monitor == nullptr) {
+    return nullptr;
   }
 
-  return 0;
-
+  return monitor;
 }

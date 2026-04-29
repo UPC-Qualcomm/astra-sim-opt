@@ -2,6 +2,7 @@
 #include "astra-sim/system/Sys.hh"
 #include "extern/remote_memory_backend/analytical/AnalyticalRemoteMemory.hh"
 #include <json/json.hpp>
+#include <chrono>
 
 // monkey patch, the spdlog include <syslog.h> and define these macros, and
 // break the ns3 log enum keys
@@ -61,8 +62,6 @@ class NS3BackendCompletionTracker {
                 "All ranks have finished. Exiting simulation.");
             // cout << "All ranks have finished. Exiting simulation.\n";
             Simulator::Stop();
-            Simulator::Destroy();
-            exit(0);
         }
     }
 
@@ -124,6 +123,7 @@ class ASTRASimNetwork : public AstraSim::AstraNetworkAPI {
                          int type,
                          int dst_id,
                          int tag,
+                         uint64_t workload_node_id,
                          AstraSim::sim_request* request,
                          void (*msg_handler)(void* fun_arg),
                          void* fun_arg) {
@@ -190,6 +190,14 @@ class ASTRASimNetwork : public AstraSim::AstraNetworkAPI {
         return 0;
     }
 
+    void log_network(std::string str) {
+        return;
+    }
+
+    void init_logger(std::string str, bool enable_network_logger) {
+        return;
+    }
+
   private:
     NS3BackendCompletionTracker* completion_tracker_;
 };
@@ -202,6 +210,7 @@ string memory_configuration;
 string comm_group_configuration = "empty";
 string logical_topology_configuration;
 string logging_configuration = "empty";
+string logging_folder = "empty";
 int num_queues_per_dim = 1;
 double comm_scale = 1;
 double injection_scale = 1;
@@ -260,6 +269,8 @@ void parse_args(int argc, char* argv[]) {
                  logical_topology_configuration);
     cmd.AddValue("logging-configuration", "Logging configuration file",
                  logging_configuration);
+    cmd.AddValue("logging-folder", "Logging folder",
+                 logging_folder);
 
     cmd.AddValue("num-queues-per-dim", "Number of queues per each dimension",
                  num_queues_per_dim);
@@ -272,6 +283,8 @@ void parse_args(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    const auto wall_start = std::chrono::steady_clock::now();
+
     LogComponentEnable("OnOffApplication", LOG_INFO);
     LogComponentEnable("PacketSink", LOG_INFO);
 
@@ -279,7 +292,7 @@ int main(int argc, char* argv[]) {
 
     // Read network config and find logical dims.
     parse_args(argc, argv);
-    AstraSim::LoggerFactory::init(logging_configuration);
+    AstraSim::LoggerFactory::init(logging_configuration, logging_folder);
     read_logical_topo_config(logical_topology_configuration, logical_dims);
 
     // Setup network & System layer.
@@ -299,10 +312,14 @@ int main(int argc, char* argv[]) {
     }
 
     // Initialize ns3 simulation.
-    if (auto ok = setup_ns3_simulation(network_configuration); ok == -1) {
+    Ptr<FlowMonitor> monitor = setup_ns3_simulation(network_configuration);
+    if (monitor == nullptr) {
         std::cerr << "Fail to setup ns3 simulation." << std::endl;
         return -1;
     }
+
+    // Manually start the monitor before firing workload events.
+    monitor->Start(Seconds(0.0));
 
     // Tell workload layer to schedule first events.
     for (int i = 0; i < num_npus; i++) {
@@ -311,5 +328,17 @@ int main(int argc, char* argv[]) {
 
     // Run the simulation by triggering the ns3 event queue.
     Simulator::Run();
+
+    //monitor->SerializeToXmlFile("flowmon-results.xml", true, true);
+
+    Simulator::Destroy();
+
+    const auto wall_end = std::chrono::steady_clock::now();
+    const double elapsed_s =
+        std::chrono::duration<double>(wall_end - wall_start).count();
+    AstraSim::LoggerFactory::get_logger("workload")->info(
+        "[NS3] Total simulation wall time: {:.3f} s", elapsed_s);
+    AstraSim::LoggerFactory::shutdown();
+
     return 0;
 }

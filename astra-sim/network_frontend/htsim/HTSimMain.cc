@@ -31,13 +31,18 @@ int main(int argc, char* argv[]) {
         cmd_line_parser.get<std::string>("remote-memory-configuration");
     const auto network_configuration = cmd_line_parser.get<std::string>("network-configuration");
     const auto logging_configuration = cmd_line_parser.get<std::string>("logging-configuration");
+    const auto logging_folder =
+        cmd_line_parser.get<std::string>("logging-folder");
     const auto num_queues_per_dim = cmd_line_parser.get<int>("num-queues-per-dim");
     const auto comm_scale = cmd_line_parser.get<double>("comm-scale");
     const auto injection_scale = cmd_line_parser.get<double>("injection-scale");
     const auto rendezvous_protocol = cmd_line_parser.get<bool>("rendezvous-protocol");
     const auto proto = cmd_line_parser.get<HTSimProto>("htsim-proto");
+    // Log Networking information
+    const auto network_log = cmd_line_parser.get<std::string>("network-log");
 
-    AstraSim::LoggerFactory::init(logging_configuration);
+    AstraSim::LoggerFactory::init(logging_configuration, logging_folder);
+
 
     // Generate topology
     const auto network_parser = NetworkParser(network_configuration);

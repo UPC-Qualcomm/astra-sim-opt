@@ -4,6 +4,8 @@ LICENSE file in the root directory of this source tree.
 *******************************************************************************/
 
 #include "congestion_unaware/CongestionUnawareNetworkApi.hh"
+#include "astra-sim/common/Logging.hh"
+#include "astra-sim/system/Sys.hh"
 #include <cassert>
 
 using namespace AstraSim;
@@ -38,6 +40,7 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
                                           const int type,
                                           const int dst,
                                           const int tag,
+                                          uint64_t workload_node_id,
                                           sim_request* const request,
                                           void (*msg_handler)(void*),
                                           void* const fun_arg) {
@@ -67,10 +70,30 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
     auto arg = std::make_unique<decltype(chunk_arrival_arg)>(chunk_arrival_arg);
     const auto arg_ptr = static_cast<void*>(arg.release());
 
+    // create log data
+    std::map<std::string, std::string> log_data;
+    if (AstraNetworkAPI::network_enabled_log) {
+        log_data["tag"] = std::to_string(tag);
+    }
+
     // compute send communication delay (in AstraSim format)
-    const auto send_delay_ns = topology->send(src, dst, count);
+    const auto send_delay_ns = topology->send(
+        src, dst, count,
+        AstraNetworkAPI::network_enabled_log ? &log_data : nullptr);
     const auto send_delay = static_cast<double>(send_delay_ns);
     const auto delta = timespec_t({NS, send_delay});
+
+    if (AstraNetworkAPI::network_enabled_log && workload_node_id != -1) {
+        LoggerFactory::get_network_logger()->info(
+            ",send,{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}", src, dst, src,
+            dst, count, tag, workload_node_id, chunk_id, Sys::boostedTick(),
+            log_data["bandwidth"], log_data["dims_count"], log_data["topology"],
+            log_data["hops"], log_data["latency"], log_data["delay"],0);
+    }
+
+    // Log Network Info
+    // LogNetwork::getInstance().write(std::to_string(src) + ","+
+    // std::to_string(dst) + ",");
 
     // register chunk arrival event after send communication delay
     sim_schedule(delta, CongestionUnawareNetworkApi::process_chunk_arrival,
@@ -78,4 +101,16 @@ int CongestionUnawareNetworkApi::sim_send(void* const buffer,
 
     // return
     return 0;
+}
+
+void CongestionUnawareNetworkApi::log_network(std::string str) {
+
+    if (this->enable_network_logger) {
+        NetworkLogger::getInstance().write(str);
+    }
+}
+
+void CongestionUnawareNetworkApi::init_logger(std::string str,
+                                              bool enable_network_logger) {
+    NetworkLogger::getInstance().init(str, enable_network_logger);
 }
