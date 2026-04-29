@@ -1,9 +1,6 @@
 [submodule "extern/graph_frontend/chakra"]
 	path = extern/graph_frontend/chakra
 	url = https://github.com/astra-sim/chakra.git
-[submodule "extern/network_backend/analytical"]
-	path = extern/network_backend/analytical
-	url = https://github.com/astra-sim/astra-network-analytical.git
 [submodule "extern/remote_memory_backend/analytical"]
 	path = extern/remote_memory_backend/analytical
 	url = https://github.com/astra-sim/astra-memory-analytical.git
@@ -13,9 +10,15 @@
 [submodule "extern/helper/spdlog"]
 	path = extern/helper/spdlog
 	url = https://github.com/gabime/spdlog.git
-[submodule "extern/network_backend/ns-3"]
-	path = extern/network_backend/ns-3
-	url = https://github.com/astra-sim/astra-network-ns3.git
 [submodule "extern/network_backend/csg-htsim"]
 	path = extern/network_backend/csg-htsim
 	url = https://github.com/Broadcom/csg-htsim.git
+[submodule "extern/network_backend/analytical"]
+	path = extern/network_backend/analytical
+	url = git@github.com:UPC-Qualcomm/astra-network-analytical-opt.git
+[submodule "extern/symbolic_tensor_graph-opt"]
+	path = extern/symbolic_tensor_graph-opt
+	url = git@github.com:UPC-Qualcomm/symbolic_tensor_graph-opt.git
+[submodule "extern/network_backend/ns-3"]
+	path = extern/network_backend/ns-3
+	url = git@github.com:UPC-Qualcomm/astra-network-ns3.git
